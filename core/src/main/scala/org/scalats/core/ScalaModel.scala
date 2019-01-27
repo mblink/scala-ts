@@ -15,8 +15,7 @@ object ScalaModel {
 
   case class CaseObject(
     name: String,
-    values: ListSet[TypeMember]
-  ) extends TypeDef
+    values: ListSet[TypeMember]) extends TypeDef
 
   case class SealedUnion(
     name: String,

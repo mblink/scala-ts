@@ -1,17 +1,29 @@
 package org.scalats.core
 
 /**
-  * Created by Milosz on 09.06.2016.
-  */
+ * Created by Milosz on 09.06.2016.
+ */
 
 import scala.collection.immutable.ListSet
 
-import scala.reflect.runtime.universe._
+import scala.reflect.api.Universe
 
 // TODO: Keep namespace using fullName from the Type
-final class ScalaParser(logger: Logger) {
+final class ScalaParser[U <: Universe](universe: U, logger: Logger) {
+  import universe.{
+    ClassSymbol,
+    MethodSymbol,
+    ModuleSymbol,
+    NoSymbol,
+    NullaryMethodType,
+    SingleTypeApi,
+    Symbol,
+    Type,
+    TypeRef,
+    typeOf
+  }
 
-  import ScalaModel._
+  import ScalaModel.{ TypeRef => ScalaTypeRef, _ }
 
   def parseTypes(types: List[Type]): ListSet[TypeDef] =
     parse(types, ListSet.empty[Type], ListSet.empty[TypeDef])
@@ -22,7 +34,7 @@ final class ScalaParser(logger: Logger) {
     case _: SingleTypeApi =>
       parseObject(tpe)
 
-    case _ if (tpe.getClass.getName contains "ModuleType"/*Workaround*/) =>
+    case _ if (tpe.getClass.getName contains "ModuleType" /*Workaround*/ ) =>
       parseObject(tpe)
 
     case _ if tpe.typeSymbol.isClass => {
@@ -46,17 +58,17 @@ final class ScalaParser(logger: Logger) {
   private object Field {
     def unapply(m: MethodSymbol): Option[MethodSymbol] = m match {
       case m: MethodSymbol if (!m.isAbstract && m.isPublic && !m.isImplicit &&
-          m.paramLists.forall(_.isEmpty) &&
-          {
-            val n = m.name.toString
-            !(n.contains("$") || n.startsWith("<"))
-          } && 
-          m.overrides.forall { o =>
-            val declaring = o.owner.fullName
+        m.paramLists.forall(_.isEmpty) &&
+        {
+          val n = m.name.toString
+          !(n.contains("$") || n.startsWith("<"))
+        } &&
+        m.overrides.forall { o =>
+          val declaring = o.owner.fullName
 
-            !declaring.startsWith("java.") &&
+          !declaring.startsWith("java.") &&
             !declaring.startsWith("scala.")
-          }) => Some(m)
+        }) => Some(m)
 
       case _ => None
     }
@@ -78,11 +90,11 @@ final class ScalaParser(logger: Logger) {
     // Members
     val members = tpe.decls.collect {
       case m: MethodSymbol if (m.isAbstract && m.isPublic && !m.isImplicit &&
-          !m.name.toString.endsWith("$")) => member(m, List.empty)
+        !m.name.toString.endsWith("$")) => member(m, List.empty)
     }
 
     directKnownSubclasses(tpe) match {
-      case possibilities @ (_ :: _ ) =>
+      case possibilities @ (_ :: _) =>
         Some(SealedUnion(
           tpe.typeSymbol.name.toString,
           ListSet.empty ++ members,
@@ -111,14 +123,13 @@ final class ScalaParser(logger: Logger) {
       caseClassType.typeSymbol.name.toString,
       ListSet.empty ++ members,
       ListSet.empty ++ values,
-      ListSet.empty ++ typeParams
-    ))
+      ListSet.empty ++ typeParams))
   }
 
   @inline private def member(
-    sym: MethodSymbol, typeParams: List[String]
-  ) = TypeMember(sym.name.toString, getTypeRef(
-    sym.returnType.map(_.dealias), typeParams.toSet))
+    sym: MethodSymbol, typeParams: List[String]) = TypeMember(
+    sym.name.toString, scalaTypeRef(
+      sym.returnType.map(_.dealias), typeParams.toSet))
 
   @annotation.tailrec
   private def parse(types: List[Type], examined: ListSet[Type], parsed: ListSet[TypeDef]): ListSet[TypeDef] = types match {
@@ -137,7 +148,7 @@ final class ScalaParser(logger: Logger) {
           })
 
         val typeArgs = scalaType match {
-          case t: scala.reflect.runtime.universe.TypeRef =>
+          case t: TypeRef =>
             t.args
 
           case _ => List.empty[Type]
@@ -157,7 +168,7 @@ final class ScalaParser(logger: Logger) {
   }
 
   // TODO: resolve from implicit (typeclass)
-  private def getTypeRef(scalaType: Type, typeParams: Set[String]): TypeRef = {
+  private def scalaTypeRef(scalaType: Type, typeParams: Set[String]): ScalaTypeRef = {
     scalaType.typeSymbol.name.toString match {
       case "Int" | "Byte" | "Short" =>
         IntRef
@@ -170,11 +181,11 @@ final class ScalaParser(logger: Logger) {
       case "String" =>
         StringRef
       case "List" | "Seq" | "Set" => // TODO: Traversable
-        val innerType = scalaType.asInstanceOf[scala.reflect.runtime.universe.TypeRef].args.head
-        SeqRef(getTypeRef(innerType, typeParams))
+        val innerType = scalaType.asInstanceOf[TypeRef].args.head
+        SeqRef(scalaTypeRef(innerType, typeParams))
       case "Option" =>
-        val innerType = scalaType.asInstanceOf[scala.reflect.runtime.universe.TypeRef].args.head
-        OptionRef(getTypeRef(innerType, typeParams))
+        val innerType = scalaType.asInstanceOf[TypeRef].args.head
+        OptionRef(scalaTypeRef(innerType, typeParams))
       case "LocalDate" =>
         DateRef
       case "Instant" | "Timestamp" | "LocalDateTime" | "ZonedDateTime" =>
@@ -182,27 +193,27 @@ final class ScalaParser(logger: Logger) {
       case typeParam if typeParams.contains(typeParam) =>
         TypeParamRef(typeParam)
       case _ if isAnyValChild(scalaType) =>
-        getTypeRef(scalaType.members.filter(!_.isMethod).map(_.typeSignature).head, Set())
+        scalaTypeRef(scalaType.members.filter(!_.isMethod).map(_.typeSignature).head, Set())
       case _ if isCaseClass(scalaType) =>
         val caseClassName = scalaType.typeSymbol.name.toString
-        val typeArgs = scalaType.asInstanceOf[scala.reflect.runtime.universe.TypeRef].args
-        val typeArgRefs = typeArgs.map(getTypeRef(_, typeParams))
+        val typeArgs = scalaType.asInstanceOf[TypeRef].args
+        val typeArgRefs = typeArgs.map(scalaTypeRef(_, typeParams))
 
         CaseClassRef(caseClassName, ListSet.empty ++ typeArgRefs)
 
       case "Either" => {
-        val innerTypeL = scalaType.asInstanceOf[scala.reflect.runtime.universe.TypeRef].args.head
-        val innerTypeR = scalaType.asInstanceOf[scala.reflect.runtime.universe.TypeRef].args.last
+        val innerTypeL = scalaType.asInstanceOf[TypeRef].args.head
+        val innerTypeR = scalaType.asInstanceOf[TypeRef].args.last
 
         UnionRef(ListSet(
-          getTypeRef(innerTypeL, typeParams),
-          getTypeRef(innerTypeR, typeParams)))
+          scalaTypeRef(innerTypeL, typeParams),
+          scalaTypeRef(innerTypeR, typeParams)))
       }
 
       case "Map" =>
-        val keyType = scalaType.asInstanceOf[scala.reflect.runtime.universe.TypeRef].args.head
-        val valueType = scalaType.asInstanceOf[scala.reflect.runtime.universe.TypeRef].args.last
-        MapRef(getTypeRef(keyType, typeParams), getTypeRef(valueType, typeParams))
+        val keyType = scalaType.asInstanceOf[TypeRef].args.head
+        val valueType = scalaType.asInstanceOf[TypeRef].args.last
+        MapRef(scalaTypeRef(keyType, typeParams), scalaTypeRef(valueType, typeParams))
       case unknown =>
         //println(s"type ref $typeName umkown")
         UnknownTypeRef(unknown)
@@ -236,7 +247,7 @@ final class ScalaParser(logger: Logger) {
 
       case Some(o: ModuleSymbol) if (
         o.companion == NoSymbol && // not a companion object
-          o.typeSignature.baseClasses.contains(tpeSym)) =>
+        o.typeSignature.baseClasses.contains(tpeSym)) =>
         allSubclasses(path.tail, subclasses + o.typeSignature)
 
       case Some(o: ModuleSymbol) if (
