@@ -6,11 +6,14 @@ object Scalac {
   lazy val settings = Seq(
     scalacOptions ++= {
       val opts = Seq(
+        "-deprecation",
         "-encoding", "UTF-8",
+        "-explaintypes",
+        "-feature",
+        "-g:vars",
         "-target:jvm-1.8",
         "-unchecked",
-        "-deprecation",
-        "-feature",
+        "-Xcheckinit",
         "-Xfatal-warnings",
         "-Xlint",
         "-Ywarn-numeric-widen",
@@ -20,15 +23,14 @@ object Scalac {
         "-Ywarn-inaccessible",
         "-Ywarn-nullary-override",
         "-Ywarn-nullary-unit",
-        "-g:vars"
       )
 
       if (scalaBinaryVersion.value == "2.12") {
         opts ++ Seq(
-          "-Ywarn-unused",
-          "-Ywarn-unused-import",
+          "-Ywarn-extra-implicit",
           "-Ywarn-infer-any",
-          "-Ywarn-extra-implicit"
+          "-Ywarn-macros:after",
+          "-Ywarn-unused:_",
         )
       } else {
         opts
