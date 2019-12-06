@@ -35,12 +35,6 @@ object Scalac {
       } else {
         opts
       }
-    },
-    scalacOptions in (Compile, console) ~= {
-      _.filterNot { opt => opt.startsWith("-X") || opt.startsWith("-Y") }
-    },
-    scalacOptions in (Test, console) ~= {
-      _.filterNot { opt => opt.startsWith("-X") || opt.startsWith("-Y") }
     }
   )
 }
