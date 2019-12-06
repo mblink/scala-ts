@@ -1,0 +1,8 @@
+-Xms512M
+-Xmx2G
+-Xss10M
+-XX:MaxInlineLevel=18
+-XX:+UseParallelGC
+-XX:+UseNUMA
+-XX:+UseAdaptiveSizePolicy
+-XX:+AggressiveOpts
