@@ -8,12 +8,9 @@ import com.mpc.scalats.configuration.{ Config, FieldNaming }
 
 // TODO: Emit Option (space-lift?)
 // TODO: Use a template engine (velocity?)
-final class TypeScriptEmitter(val config: Config) {
+final class TypeScriptEmitter(val config: Config) extends Emitter {
   import TypeScriptModel._
   import Internals.list
-
-  val indent = config.typescriptIndent
-  def indent(num: Int) = config.typescriptIndent * num
 
   // TODO: If for ClassDeclaration or SingletonDeclaration there is values
   // implementing the superInterface, then do not 'implements'
@@ -189,7 +186,7 @@ final class TypeScriptEmitter(val config: Config) {
     out: PrintStream): Unit = {
 
     val ClassDeclaration(name, ClassConstructor(parameters),
-      values, typeParams, _/*superInterface*/) = decl
+      values, typeParams, _) = decl
 
     val tparams = typeParameters(typeParams)
 
@@ -320,10 +317,7 @@ final class TypeScriptEmitter(val config: Config) {
     }
   }
 
-  @inline private def typeParameters(params: ListSet[String]): String =
-    if (params.isEmpty) "" else params.mkString("<", ", ", ">")
-
-  private def getTypeRefString(typeRef: TypeRef): String = typeRef match {
+  def getTypeRefString(typeRef: TypeRef): String = typeRef match {
     case NumberRef => "number"
     case BooleanRef => "boolean"
     case StringRef => "string"

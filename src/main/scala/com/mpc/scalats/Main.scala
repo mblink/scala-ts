@@ -10,5 +10,6 @@ object Main {
       org.slf4j.LoggerFactory getLogger TypeScriptGenerator.getClass)
 
     TypeScriptGenerator.generateFromClassNames(args.toList, logger)(Config())
+    TypeScriptGenerator.generateFromClassNames(args.toList, logger)(Config(emitIoTs = true))
   }
 }

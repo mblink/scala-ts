@@ -14,7 +14,8 @@ case class Config(
     prependIPrefix: Boolean = true,
     typescriptIndent: String = "\t",
     emitCodecs: Boolean = true,
-    fieldNaming: FieldNaming = FieldNaming.Identity
+    fieldNaming: FieldNaming = FieldNaming.Identity,
+    emitIoTs: Boolean = false
 )
 
 // TODO: nullable as function setting (gathering optionToNullable/optionToUndefined)

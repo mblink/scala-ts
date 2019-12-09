@@ -1,7 +1,6 @@
 package com.mpc.scalats.core
 
 import com.mpc.scalats.configuration.Config
-
 import scala.reflect.runtime.universe._
 
 /**
@@ -9,29 +8,48 @@ import scala.reflect.runtime.universe._
   */
 object TypeScriptGenerator {
 
+  private def updateConfig(implicit c: Config): Config = {
+    if (c.emitIoTs) {
+      c.copy(
+        emitClasses = false,
+        emitInterfaces = true,
+        prependIPrefix = false)
+    } else {
+      c
+    }
+  }
+
   def generateFromClassNames(
     classNames: List[String],
     logger: Logger,
     classLoader: ClassLoader = getClass.getClassLoader
-  )(implicit config: Config) = {
+  )(c: Config) = {
     implicit val mirror = runtimeMirror(classLoader)
     val types = classNames.map { className =>
       println(s"className = $className")
       mirror.staticClass(className).toType
     }
 
-    generate(types, logger)
+    generate(types, logger)(updateConfig(c))
   }
 
-  def generate(caseClasses: List[Type], logger: Logger)(
-    implicit config: Config) = {
+  def generate(caseClasses: List[Type], logger: Logger)(c: Config) = {
+    implicit val config: Config = updateConfig(c)
     val outputStream = config.outputStream.getOrElse(Console.out)
     val scalaParser = new ScalaParser(logger)
     val scalaTypes = scalaParser.parseTypes(caseClasses)
     val typeScriptInterfaces = Compiler.compile(scalaTypes)
 
-    val emiter = new TypeScriptEmitter(config)
+    val emitter: Emitter = if (config.emitIoTs) {
+      new IoTsEmitter(config.copy(
+        emitClasses = true,
+        emitInterfaces = false,
+        prependIPrefix = false
+      ))
+    } else {
+      new TypeScriptEmitter(config)
+    }
 
-    emiter.emit(typeScriptInterfaces, outputStream)
+    emitter.emit(typeScriptInterfaces, outputStream)
   }
 }

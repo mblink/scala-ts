@@ -285,12 +285,12 @@ export interface IFamily {
   def emit(
     decls: ListSet[Declaration],
     config: Config = defaultConfig): String = {
-    val emiter = new TypeScriptEmitter(config)
+    val emitter = new TypeScriptEmitter(config)
     val buf = new java.io.ByteArrayOutputStream()
     lazy val out = new java.io.PrintStream(buf)
 
     try {
-      emiter.emit(decls, out)
+      emitter.emit(decls, out)
       out.flush()
       buf.toString
     } finally {

@@ -22,13 +22,14 @@ object TypeScriptGeneratorPlugin extends AutoPlugin {
     val typescriptIndent = settingKey[String]("Characters used as TypeScript indentation (e.g. \\t)")
     val emitCodecs = settingKey[Boolean]("Generate the codec functions fromData/toData for TypeScript classes")
     val fieldNaming = settingKey[FieldNaming]("Conversions for the field names if emitCodecs (default: FieldNaming.Identity)")
+    val emitIoTs = settingKey[Boolean]("Generate IO-TS validations and interfaces. Sets `emitInterfaces = true`, `emitClasses = false`, `prependIPrefix = false`")
   }
 
   import autoImport._
 
   override lazy val projectSettings = Seq(
     generateTypeScript := {
-      implicit val config = Config(
+      val config = Config(
         (emitInterfaces in generateTypeScript).value,
         (emitClasses in generateTypeScript).value,
         (optionToNullable in generateTypeScript).value,
@@ -37,7 +38,8 @@ object TypeScriptGeneratorPlugin extends AutoPlugin {
         (prependIPrefix in generateTypeScript).value,
         (typescriptIndent in generateTypeScript).value,
         (emitCodecs in generateTypeScript).value,
-        (fieldNaming in generateTypeScript).value
+        (fieldNaming in generateTypeScript).value,
+        (emitIoTs in generateTypeScript).value
       )
 
       val args = spaceDelimited("").parsed
@@ -46,7 +48,7 @@ object TypeScriptGeneratorPlugin extends AutoPlugin {
       val cl = new URLClassLoader(cpUrls, ClassLoader.getSystemClassLoader)
 
       TypeScriptGenerator.generateFromClassNames(
-        args.toList, logger(streams.value.log), cl)
+        args.toList, logger(streams.value.log), cl)(config)
     },
     emitInterfaces in generateTypeScript := true,
     emitClasses in generateTypeScript := false,
@@ -56,7 +58,8 @@ object TypeScriptGeneratorPlugin extends AutoPlugin {
     prependIPrefix := false,
     typescriptIndent in generateTypeScript := "\t",
     emitCodecs in generateTypeScript := true,
-    fieldNaming in generateTypeScript := FieldNaming.Identity
+    fieldNaming in generateTypeScript := FieldNaming.Identity,
+    emitIoTs in generateTypeScript := false
   )
 
   // ---
