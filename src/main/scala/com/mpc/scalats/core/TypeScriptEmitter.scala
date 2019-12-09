@@ -11,7 +11,9 @@ import com.mpc.scalats.configuration.{ Config, FieldNaming }
 final class TypeScriptEmitter(val config: Config) {
   import TypeScriptModel._
   import Internals.list
-  import config.{ typescriptIndent => indent }
+
+  val indent = config.typescriptIndent
+  def indent(num: Int) = config.typescriptIndent * num
 
   // TODO: If for ClassDeclaration or SingletonDeclaration there is values
   // implementing the superInterface, then do not 'implements'
@@ -57,17 +59,17 @@ final class TypeScriptEmitter(val config: Config) {
 
       // Decoder factory: MyClass.fromData({..})
       out.println(s"\n${indent}public static fromData(data: any): ${name} {")
-      out.println(s"${indent}${indent}switch (data.${discriminatorName}) {")
+      out.println(s"${indent(2)}switch (data.${discriminatorName}) {")
 
       children.foreach { sub =>
         val clazz = if (sub.name startsWith "I") sub.name.drop(1) else sub.name
 
-        out.println(s"""${indent}${indent}${indent}case "${naming(sub.name)}": {""")
-        out.println(s"${indent}${indent}${indent}${indent}return ${clazz}.fromData(data);")
-        out.println(s"${indent}${indent}${indent}}")
+        out.println(s"""${indent(3)}case "${naming(sub.name)}": {""")
+        out.println(s"${indent(4)}return ${clazz}.fromData(data);")
+        out.println(s"${indent(3)}}")
       }
 
-      out.println(s"${indent}${indent}}")
+      out.println(s"${indent(2)}}")
       out.println(s"${indent}}")
 
       // Encoder
@@ -75,7 +77,7 @@ final class TypeScriptEmitter(val config: Config) {
 
       children.zipWithIndex.foreach {
         case (sub, index) =>
-          out.print(s"${indent}${indent}")
+          out.print(s"${indent(2)}")
 
           if (index > 0) {
             out.print("} else ")
@@ -85,12 +87,12 @@ final class TypeScriptEmitter(val config: Config) {
             if (sub.name startsWith "I") sub.name.drop(1) else sub.name
 
           out.println(s"if (instance instanceof ${sub.name}) {")
-          out.println(s"${indent}${indent}${indent}const data = ${clazz}.toData(instance);")
-          out.println(s"""${indent}${indent}${indent}data['$discriminatorName'] = "${naming(sub.name)}";""")
-          out.println(s"${indent}${indent}${indent}return data;")
+          out.println(s"${indent(3)}const data = ${clazz}.toData(instance);")
+          out.println(s"""${indent(3)}data['$discriminatorName'] = "${naming(sub.name)}";""")
+          out.println(s"${indent(3)}return data;")
       }
 
-      out.println(s"${indent}${indent}}")
+      out.println(s"${indent(2)}}")
       out.println(s"${indent}}")
     }
 
@@ -141,21 +143,21 @@ final class TypeScriptEmitter(val config: Config) {
 
     out.println(s"${indent}private constructor() {}\n")
     out.println(s"${indent}public static getInstance() {")
-    out.println(s"${indent}${indent}if (!${name}.instance) {")
-    out.println(s"${indent}${indent}${indent}${name}.instance = new ${name}();")
-    out.println(s"${indent}${indent}}\n")
-    out.println(s"${indent}${indent}return ${name}.instance;")
+    out.println(s"${indent(2)}if (!${name}.instance) {")
+    out.println(s"${indent(3)}${name}.instance = new ${name}();")
+    out.println(s"${indent(2)}}\n")
+    out.println(s"${indent(2)}return ${name}.instance;")
     out.println(s"${indent}}")
 
     if (config.emitCodecs) {
       // Decoder factory: MyClass.fromData({..})
       out.println(s"\n${indent}public static fromData(data: any): ${name} {")
-      out.println(s"${indent}${indent}return ${name}.instance;")
+      out.println(s"${indent(2)}return ${name}.instance;")
       out.println(s"${indent}}")
 
       // Encoder
       out.println(s"\n${indent}public static toData(instance: ${name}): any {")
-      out.println(s"${indent}${indent}return instance;")
+      out.println(s"${indent(2)}return instance;")
       out.println(s"${indent}}")
     }
 
@@ -239,7 +241,7 @@ final class TypeScriptEmitter(val config: Config) {
           out.println("")
         }
 
-        out.print(s"${indent}${indent}")
+        out.print(s"${indent(2)}")
 
         if (config.emitInterfaces) {
           out.print("public ")
@@ -251,7 +253,7 @@ final class TypeScriptEmitter(val config: Config) {
     out.println(s"\n${indent}) {")
 
     params.foreach { parameter =>
-      out.println(s"${indent}${indent}this.${parameter.name} = ${parameter.name};")
+      out.println(s"${indent(2)}this.${parameter.name} = ${parameter.name};")
     }
     out.println(s"${indent}}")
 
@@ -274,17 +276,17 @@ final class TypeScriptEmitter(val config: Config) {
 
       // Decoder factory: MyClass.fromData({..})
       out.println(s"\n${indent}public static fromData${tparams}(data: any): ${name}${tparams} {")
-      out.println(s"${indent}${indent}return <${name}${tparams}>(data);")
+      out.println(s"${indent(2)}return <${name}${tparams}>(data);")
       out.println(s"${indent}}")
 
       // Encoder
       out.println(s"\n${indent}public static toData${tparams}(instance: ${name}${tparams}): any {")
-      out.println(s"${indent}${indent}return instance;")
+      out.println(s"${indent(2)}return instance;")
       out.println(s"${indent}}")
     } else {
       // Decoder factory: MyClass.fromData({..})
       out.println(s"\n${indent}public static fromData${tparams}(data: any): ${name}${tparams} {")
-      out.print(s"${indent}${indent}return new ${name}${tparams}(")
+      out.print(s"${indent(2)}return new ${name}${tparams}(")
 
       val params = list(parameters).zipWithIndex
 
@@ -302,7 +304,7 @@ final class TypeScriptEmitter(val config: Config) {
 
       // Encoder
       out.println(s"\n${indent}public static toData${tparams}(instance: ${name}${tparams}): any {")
-      out.println(s"${indent}${indent}return {")
+      out.println(s"${indent(2)}return {")
 
       params.foreach {
         case (parameter, index) =>
@@ -310,10 +312,10 @@ final class TypeScriptEmitter(val config: Config) {
 
           if (index > 0) out.print(",\n")
 
-          out.print(s"${indent}${indent}${indent}${encoded}: instance.${parameter.name}")
+          out.print(s"${indent(3)}${encoded}: instance.${parameter.name}")
       }
 
-      out.println(s"\n${indent}${indent}};")
+      out.println(s"\n${indent(2)}};")
       out.println(s"${indent}}")
     }
   }
