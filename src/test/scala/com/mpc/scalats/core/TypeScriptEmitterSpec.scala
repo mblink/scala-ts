@@ -37,6 +37,15 @@ final class TypeScriptEmitterSpec extends AnyFlatSpec with Matchers {
 """)
   }
 
+  it should "emit TypeScript interface for a class with two primitive members in the correct order" in {
+    emit(ListSet(interface1a)) should equal("""export interface ITestClass1a {
+	name: string;
+	age: number;
+}
+""")
+  }
+
+
   it should "emit TypeScript class for a class with generic member" in {
     emit(ListSet(clazz2)) should equal("""export class TestClass2<T> implements ITestClass2<T> {
 	constructor(

@@ -23,6 +23,11 @@ final class ScalaParserSpec extends AnyFlatSpec with Matchers {
     parsed should contain(caseClass1)
   }
 
+  it should "parse case class with two primitive members in the correct order" in {
+    val parsed = scalaParser.parseTypes(List(ScalaFixtures.TestClass1aType))
+    parsed should contain(caseClass1a)
+  }
+
   it should "parse generic case class with one member" in {
     val parsed = scalaParser.parseTypes(List(ScalaFixtures.TestClass2Type))
     parsed should contain(caseClass2)
@@ -85,6 +90,7 @@ object ScalaFixtures {
   import universe.typeOf
 
   val TestClass1Type = typeOf[TestClass1]
+  val TestClass1aType = typeOf[TestClass1a]
   val TestClass2Type = typeOf[TestClass2[_]]
   val TestClass3Type = typeOf[TestClass3[_]]
   val TestClass5Type = typeOf[TestClass5[_]]
@@ -97,6 +103,8 @@ object ScalaFixtures {
   val FamilyType = typeOf[Family]
 
   case class TestClass1(name: String)
+
+  case class TestClass1a(name: String, age: Int)
 
   case class TestClass1B(foo: String)
 
@@ -146,6 +154,12 @@ object ScalaParserResults {
   val caseClass1 = CaseClass(
     name = "TestClass1",
     fields = ListSet(TypeMember("name", StringRef)),
+    values = ListSet.empty,
+    typeArgs = ListSet.empty)
+
+  val caseClass1a = CaseClass(
+    name = "TestClass1a",
+    fields = ListSet(TypeMember("name", StringRef), TypeMember("age", IntRef)),
     values = ListSet.empty,
     typeArgs = ListSet.empty)
 

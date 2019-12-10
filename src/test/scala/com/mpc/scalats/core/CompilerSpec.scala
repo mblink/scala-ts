@@ -23,6 +23,14 @@ final class CompilerSpec extends AnyFlatSpec with Matchers {
     result should contain(clazz1)
   }
 
+  it should "compile a case class with two primitive members in the correct order" in {
+    val result = Compiler.compile(ListSet(caseClass1a))
+
+    result.size should equal(2)
+    result should contain(interface1a)
+    result should contain(clazz1a)
+  }
+
   it should "compile a generic class with one member" in {
     val result = Compiler.compile(ListSet(caseClass2))
 
@@ -96,8 +104,19 @@ object CompilerResults {
   val interface1 = InterfaceDeclaration("ITestClass1",
     ListSet(Member("name",StringRef)), ListSet.empty, Option.empty)
 
+  val interface1a = InterfaceDeclaration("ITestClass1a",
+    ListSet(Member("name",StringRef), Member("age",NumberRef)), ListSet.empty, Option.empty)
+
   val clazz1 = ClassDeclaration("TestClass1",
     ClassConstructor(ListSet(ClassConstructorParameter("name", StringRef))),
+    ListSet.empty,
+    ListSet.empty,
+    Option.empty)
+
+  val clazz1a = ClassDeclaration("TestClass1a",
+    ClassConstructor(ListSet(
+      ClassConstructorParameter("name", StringRef),
+      ClassConstructorParameter("age", NumberRef))),
     ListSet.empty,
     ListSet.empty,
     Option.empty)
