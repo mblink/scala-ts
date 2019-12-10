@@ -35,9 +35,9 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     if (typeParams.isEmpty) {
       out.println(s"export const ${typeVal} = t.type({")
     } else {
-      val params = typeParams.map(p => s"$p extends t.Mixed")
-      val args = typeParams.map(p => s"${typeAsValArg(p)}: $p")
-      out.println(s"export const ${typeVal} = ${params.mkString("<", ", ", ">")}${args.mkString("(", ", ", ")")} = t.type({")
+      val params = typeParams.map(p => s"${p} extends t.Mixed").mkString("<", ", ", ">")
+      val args = typeParams.map(p => s"${typeAsValArg(p)}: $p").mkString("(", ", ", ")")
+      out.println(s"export const ${typeVal} = ${params}${args} => t.type({")
     }
 
     list(fields).foreach { v =>
@@ -45,7 +45,9 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     }
 
     out.println("});")
-    out.println(s"export type ${name} = t.TypeOf<typeof ${typeVal}>;")
+    if (typeParams.isEmpty) {
+      out.println(s"export type ${name} = t.TypeOf<typeof ${typeVal}>;")
+    }
     out.println()
   }
 

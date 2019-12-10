@@ -117,6 +117,11 @@ object CompilerResults {
     ClassConstructorParameter("name", ArrayRef(SimpleTypeRef("T"))))),
     ListSet.empty, ListSet("T"), Option.empty)
 
+  val interface4 = InterfaceDeclaration("ITestClass4",
+    ListSet(Member("name", CustomTypeRef("ITestClass3",
+      ListSet(SimpleTypeRef("T"))))),
+    ListSet("T"), Option.empty)
+
   val interface5 = InterfaceDeclaration("ITestClass5", ListSet(
     Member("name", UnionType(ListSet(SimpleTypeRef("T"), NullRef)))),
     ListSet("T"), Option.empty)
