@@ -30,8 +30,6 @@ final class TypeScriptEmitter(val config: Config) extends Emitter {
           emitUnionDeclaration(
             name, fields, possibilities, superInterface, out)
       }
-
-      println()
     }
   }
 
