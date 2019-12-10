@@ -55,11 +55,11 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case NumberRef => "t.number"
     case BooleanRef => "t.boolean"
     case StringRef => "t.string"
-    case DateRef | DateTimeRef => "Date"
+    case DateRef | DateTimeRef => "DateFromISOString"
     case ArrayRef(innerType) => s"t.array(${getTypeRefString(innerType)})"
     case CustomTypeRef(name, params) if params.isEmpty => typeAsVal(name)
     case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"${typeAsVal(name)}${params.map(p => typeAsValArg(p.toString)).mkString("(", ", ", ")")}"
+      s"${typeAsVal(name)}${params.map(getTypeRefString).mkString("(", ", ", ")")}"
     case UnknownTypeRef(_) => "t.unknown"
     case SimpleTypeRef(param) => typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getTypeRefString).mkString("[", ", ", "]")})"

@@ -13,6 +13,8 @@ object TypeScriptGenerator {
       c.copy(
         emitClasses = false,
         emitInterfaces = true,
+        optionToNullable = false,
+        optionToUndefined = false,
         prependIPrefix = false)
     } else {
       c

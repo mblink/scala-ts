@@ -169,6 +169,10 @@ object Compiler {
         compileTypeRef(innerType, inInterfaceContext),
         NullRef))
 
+    case ScalaModel.OptionRef(innerType) if config.emitIoTs =>
+      TypeScriptModel.CustomTypeRef("optionFromNullable", ListSet(
+        compileTypeRef(innerType, inInterfaceContext)))
+
     case ScalaModel.MapRef(kT, vT) => TypeScriptModel.MapType(
       compileTypeRef(kT, inInterfaceContext),
       compileTypeRef(vT, inInterfaceContext))
