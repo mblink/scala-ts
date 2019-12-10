@@ -10,7 +10,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
   import TypeScriptModel._
   import Internals.list
 
-  def lowercaseFirstChar(s: String) = Character.toLowerCase(s.charAt(0)) + s.substring(1)
+  def typeAsVal(s: String): String = Character.toLowerCase(s.charAt(0)) + s.substring(1)
+  def typeAsValArg(s: String): String = s"_${s}val"
 
   def emit(declaration: ListSet[Declaration], out: PrintStream): Unit = {
     out.println("""import * as t from "io-ts";""")
@@ -26,19 +27,25 @@ final class IoTsEmitter(val config: Config) extends Emitter {
                                 decl: InterfaceDeclaration,
                                 out: PrintStream): Unit = {
 
-    val InterfaceDeclaration(name, fields, _, _) = decl
+    val InterfaceDeclaration(name, fields, typeParams, _) = decl
 
-    val lcName = lowercaseFirstChar(name);
+    val typeVal = typeAsVal(name);
 
     // Class definition
-    out.println(s"export const ${lcName} = t.type({")
+    if (typeParams.isEmpty) {
+      out.println(s"export const ${typeVal} = t.type({")
+    } else {
+      val params = typeParams.map(p => s"$p extends t.Mixed")
+      val args = typeParams.map(p => s"${typeAsValArg(p)}: $p")
+      out.println(s"export const ${typeVal} = ${params.mkString("<", ", ", ">")}${args.mkString("(", ", ", ")")} = t.type({")
+    }
 
     list(fields).foreach { v =>
       out.println(s"${indent}${v.name}: ${getTypeRefString(v.typeRef)},")
     }
 
     out.println("});")
-    out.println(s"export type ${name} = t.TypeOf<typeof ${lcName}>;")
+    out.println(s"export type ${name} = t.TypeOf<typeof ${typeVal}>;")
     out.println()
   }
 
@@ -48,11 +55,11 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case StringRef => "t.string"
     case DateRef | DateTimeRef => "Date"
     case ArrayRef(innerType) => s"t.array(${getTypeRefString(innerType)})"
-    case CustomTypeRef(name, params) if params.isEmpty => name
+    case CustomTypeRef(name, params) if params.isEmpty => typeAsVal(name)
     case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"$name<${params.map(getTypeRefString).mkString(", ")}>"
-    case UnknownTypeRef(typeName) => typeName
-    case SimpleTypeRef(param) => param
+      s"${typeAsVal(name)}${params.map(p => typeAsValArg(p.toString)).mkString("(", ", ", ")")}"
+    case UnknownTypeRef(_) => "t.unknown"
+    case SimpleTypeRef(param) => typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getTypeRefString).mkString("[", ", ", "]")})"
     case MapType(keyType, valueType) => s"t.record(${getTypeRefString(keyType)}, ${getTypeRefString(valueType)})"
     case NullRef => "t.null"
