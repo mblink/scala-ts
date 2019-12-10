@@ -32,8 +32,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     if (typeParams.isEmpty) {
       out.println(s"export const ${typeVal} = t.type({")
     } else {
-      val params = typeParams.map(p => s"${p} extends t.Mixed").mkString("<", ", ", ">")
-      val args = typeParams.map(p => s"${typeAsValArg(p)}: $p").mkString("(", ", ", ")")
+      val params = list(typeParams).map(p => s"${p} extends t.Mixed").mkString("<", ", ", ">")
+      val args = list(typeParams).map(p => s"${typeAsValArg(p)}: $p").mkString("(", ", ", ")")
       out.println(s"export const ${typeVal} = ${params}${args} => t.type({")
     }
 
