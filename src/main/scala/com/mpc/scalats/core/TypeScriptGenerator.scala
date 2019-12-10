@@ -43,6 +43,11 @@ object TypeScriptGenerator {
     val typeScriptInterfaces = Compiler.compile(scalaTypes)
 
     val emitter: Emitter = if (config.emitIoTs) {
+      outputStream.println("""import * as t from "io-ts";""")
+      outputStream.println("""import { optionFromNullable } from "io-ts-types/lib/optionFromNullable";""")
+      outputStream.println("""import { DateFromISOString } from "io-ts-types/lib/DateFromISOString";""".stripMargin)
+      outputStream.println()
+
       new IoTsEmitter(config.copy(
         emitClasses = true,
         emitInterfaces = false,

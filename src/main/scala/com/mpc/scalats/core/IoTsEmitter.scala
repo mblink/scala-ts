@@ -14,9 +14,6 @@ final class IoTsEmitter(val config: Config) extends Emitter {
   def typeAsValArg(s: String): String = s"_${s}val"
 
   def emit(declaration: ListSet[Declaration], out: PrintStream): Unit = {
-    out.println("""import * as t from "io-ts";""")
-    out.println()
-
     list(declaration).foreach {
       case decl: InterfaceDeclaration => emitInterfaceDeclaration(decl, out)
       case _ => ()
