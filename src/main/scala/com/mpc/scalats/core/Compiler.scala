@@ -50,7 +50,8 @@ object Compiler {
         case ScalaModel.CaseObject(name, members) => {
           val values = members.map { scalaMember =>
             Member(scalaMember.name,
-              compileTypeRef(scalaMember.typeRef, false))
+              compileTypeRef(scalaMember.typeRef, false),
+              scalaMember.value)
           }
 
           ListSet[Declaration](
@@ -60,7 +61,8 @@ object Compiler {
         case ScalaModel.SealedUnion(name, fields, possibilities) => {
           val ifaceFields = fields.map { scalaMember =>
             Member(scalaMember.name,
-              compileTypeRef(scalaMember.typeRef, false))
+              compileTypeRef(scalaMember.typeRef, false),
+              scalaMember.value)
           }
 
           val unionRef = InterfaceDeclaration(
@@ -94,7 +96,8 @@ object Compiler {
     scalaClass.fields.map { scalaMember =>
       TypeScriptModel.Member(
         scalaMember.name,
-        compileTypeRef(scalaMember.typeRef, inInterfaceContext = true)
+        compileTypeRef(scalaMember.typeRef, inInterfaceContext = true),
+        scalaMember.value
       )
     },
     typeParams = scalaClass.typeArgs,
@@ -119,7 +122,7 @@ object Compiler {
         }
       ),
       values = scalaClass.values.map { v =>
-        TypeScriptModel.Member(v.name, compileTypeRef(v.typeRef, false))
+        TypeScriptModel.Member(v.name, compileTypeRef(v.typeRef, false), v.value)
       },
       typeParams = scalaClass.typeArgs,
       superInterface

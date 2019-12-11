@@ -118,7 +118,7 @@ final class TypeScriptEmitter(val config: Config) extends Emitter {
 
     if (members.nonEmpty) {
       def mkString = members.map {
-        case Member(nme, tpe) => s"$nme ($tpe)"
+        case Member(nme, tpe, _) => s"$nme ($tpe)"
       }.mkString(", ")
 
       throw new IllegalStateException(
@@ -190,7 +190,7 @@ final class TypeScriptEmitter(val config: Config) extends Emitter {
 
     if (values.nonEmpty) {
       def mkString = values.map {
-        case Member(nme, tpe) => s"$nme ($tpe)"
+        case Member(nme, tpe, _) => s"$nme ($tpe)"
       }.mkString(", ")
 
       throw new IllegalStateException(

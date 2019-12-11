@@ -63,7 +63,20 @@ final class ScalaParser(logger: Logger) {
   }
 
   private def parseObject(tpe: Type): Option[CaseObject] = {
+    val rm = runtimeMirror(getClass.getClassLoader)
+
     val members = tpe.decls.collect {
+      case t: TermSymbol if t.isVal && t.isStable => {
+        println("is stable val")
+        println(tpe)
+        println(t.name)
+
+        val sm = rm.staticModule(tpe.typeSymbol.fullName.stripSuffix(".type"))
+        val v = rm.reflect(rm.reflectModule(sm).instance).reflectField(t).get
+        val tp = (if (t.isClass) t.info.typeSymbol.asClass.typeParams else List[Symbol]()).map(_.name.toString)
+        println(tp)
+        TypeMember(t.name.toString, getTypeRef(t.info, tp.toSet), Some(v))
+      }
       case Field(m) => member(m, List.empty)
     }
 

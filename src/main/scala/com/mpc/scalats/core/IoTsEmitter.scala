@@ -16,6 +16,10 @@ final class IoTsEmitter(val config: Config) extends Emitter {
   def emit(declaration: ListSet[Declaration], out: PrintStream): Unit = {
     list(declaration).foreach {
       case decl: InterfaceDeclaration => emitInterfaceDeclaration(decl, out)
+      case UnionDeclaration(name, fields, possibilities, superInterface) =>
+        emitUnionDeclaration(name, fields, possibilities, superInterface, out)
+      case SingletonDeclaration(name, members, superInterface) =>
+        emitSingletonDeclaration(name, members, superInterface, out)
       case _ => ()
     }
   }
@@ -48,6 +52,58 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     out.println()
   }
 
+  private def emitUnionDeclaration(
+                                    name: String,
+                                    fields: ListSet[Member],
+                                    possibilities: ListSet[CustomTypeRef],
+                                    superInterface: Option[InterfaceDeclaration],
+                                    out: PrintStream): Unit = {
+
+    // Namespace and union type
+    out.println(s"""type $name = ${list(possibilities).map(_.name).mkString(" | ")};""")
+
+//    val discriminatorName = "_type"
+//    val children = list(possibilities)
+
+    // Union interface
+    out.print(s"\nexport interface ${name}")
+
+    superInterface.foreach { iface =>
+      out.print(s" extends ${iface.name}")
+    }
+
+    out.println(" {")
+
+    // Abstract fields - common to all the subtypes
+    list(fields).foreach { member =>
+      out.println(s"${indent}${member.name}: ${getTypeRefString(member.typeRef)};")
+    }
+
+    out.println("}")
+  }
+
+  private def emitSingletonDeclaration(
+                                        name: String,
+                                        members: ListSet[Member],
+                                        superInterface: Option[InterfaceDeclaration],
+                                        out: PrintStream): Unit = {
+
+    // Class definition
+    out.print(s"export const $name")
+
+    superInterface.filter(_ => members.isEmpty).foreach { i =>
+      out.print(s" implements ${i.name}")
+    }
+
+    out.println(" {")
+
+    members.foreach(m => println(
+      m.value.fold(s"${indent}${m.name}: ${getTypeRefString(m.typeRef)};")
+                  (v => s"${indent}${m.name}= ${getTypeWrappedVal(v, m.typeRef)};")))
+
+    out.println("}")
+  }
+
   def getTypeRefString(typeRef: TypeRef): String = typeRef match {
     case NumberRef => "t.number"
     case BooleanRef => "t.boolean"
@@ -63,6 +119,23 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case MapType(keyType, valueType) => s"t.record(${getTypeRefString(keyType)}, ${getTypeRefString(valueType)})"
     case NullRef => "t.null"
     case UndefinedRef => "t.undefined"
+  }
+
+  def getTypeWrappedVal(value: Any, typeRef: TypeRef): String = typeRef match {
+    case NumberRef => value.toString
+    case BooleanRef => value.toString
+    case StringRef => s""""${value}""""
+    case DateRef | DateTimeRef => s""""${value}""""
+    case ArrayRef(_) => s"[${value}]"
+    case CustomTypeRef(name, params) if params.isEmpty => typeAsVal(name)
+    case CustomTypeRef(name, params) if params.nonEmpty =>
+      s"${typeAsVal(name)}${params.map(getTypeRefString).mkString("(", ", ", ")")}"
+    case UnknownTypeRef(_) => "unknown"
+    case SimpleTypeRef(param) => typeAsValArg(param)
+    case UnionType(possibilities) => s"t.union(${possibilities.map(getTypeRefString).mkString("[", ", ", "]")})"
+    case MapType(keyType, valueType) => s"t.record(${getTypeRefString(keyType)}, ${getTypeRefString(valueType)})"
+    case NullRef => "null"
+    case UndefinedRef => "undefined"
   }
 
 }

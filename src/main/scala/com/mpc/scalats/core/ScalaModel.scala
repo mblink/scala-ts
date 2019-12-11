@@ -39,7 +39,7 @@ object ScalaModel {
 
   case class SeqRef(innerType: TypeRef) extends TypeRef
 
-  case class TypeMember(name: String, typeRef: TypeRef)
+  case class TypeMember(name: String, typeRef: TypeRef, value: Option[Any] = None)
 
   case class UnknownTypeRef(name: String) extends TypeRef
 
