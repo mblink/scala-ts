@@ -22,7 +22,7 @@ object TypeScriptGeneratorPlugin extends AutoPlugin {
     val typescriptIndent = settingKey[String]("Characters used as TypeScript indentation (e.g. \\t)")
     val emitCodecs = settingKey[Boolean]("Generate the codec functions fromData/toData for TypeScript classes")
     val fieldNaming = settingKey[FieldNaming]("Conversions for the field names if emitCodecs (default: FieldNaming.Identity)")
-    val emitIoTs = settingKey[Boolean]("Generate IO-TS validations and interfaces. Sets `emitInterfaces = true`, `emitClasses = false`, `prependIPrefix = false`")
+    val emitIoTs = settingKey[Boolean]("Generate IO-TS validations and interfaces")
   }
 
   import autoImport._

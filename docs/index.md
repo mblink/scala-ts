@@ -12,6 +12,8 @@ layout: default
 
 *New version 0.4.0* - added support for SBT 1.0, Either and Map.
 
+*New version 0.5.0* - added support for emitting io-ts models.
+
 ## Usage
 
 *scala-ts* can be used either standalone or as a sbt plugin.
@@ -40,7 +42,7 @@ Now you can use the `generateTypeScript` command in SBT. For example:
 
 ### Configuration
 
-Starting from release 0.3.0, it's possible to specify some configuration options:
+It's possible to specify some configuration options:
 
 * `emitInterfaces` - generate interface declarations (`true` by default)
 * `emitClasses` - generate class declarations (`false` by default)
@@ -50,6 +52,8 @@ Starting from release 0.3.0, it's possible to specify some configuration options
 * `outputStream` - the stream to which the code should be emitted; it defaults to console
 * `typescriptIndent` - the characters used as TypeScript indentation (default: <tab>)
 * `fieldNaming` - the conversions for the field names if emitCodecs (default: FieldNaming.Identity)
+* `emitIoTs` - Generate IO-TS validations and interfaces (`false` by default) 
+  * Enabling `emitIoTs` sets `emitInterfaces = true`, `emitClasses = false`, `prependIPrefix = false`, `optionToNullable = false`, `optionToUndefined = false`
 
 Usage example in `build.sbt`:
 
