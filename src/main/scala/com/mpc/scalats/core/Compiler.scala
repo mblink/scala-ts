@@ -66,7 +66,7 @@ object Compiler {
           }
 
           val unionRef = InterfaceDeclaration(
-            s"I${name}", ifaceFields, ListSet.empty[String], superInterface)
+            if (config.prependIPrefix) s"I${name}" else name, ifaceFields, ListSet.empty[String], superInterface)
 
           compile(possibilities, Some(unionRef)) + UnionDeclaration(
             name,
@@ -76,7 +76,7 @@ object Compiler {
                 CustomTypeRef(nme, ListSet.empty)
 
               case ScalaModel.CaseClass(n, _, _, tpeArgs) => {
-                val nme = if (config.emitInterfaces) s"I${n}" else n
+                val nme = if (config.prependIPrefix) s"I${n}" else n
                 CustomTypeRef(nme, tpeArgs.map { SimpleTypeRef(_) })
               }
 

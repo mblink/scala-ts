@@ -60,26 +60,28 @@ final class IoTsEmitter(val config: Config) extends Emitter {
                                     out: PrintStream): Unit = {
 
     // Namespace and union type
-    out.println(s"""type $name = ${list(possibilities).map(_.name).mkString(" | ")};""")
-
+    out.println(s"""export type $name = ${list(possibilities).map(_.name).mkString(" | ")};""")
+    out.println()
 //    val discriminatorName = "_type"
 //    val children = list(possibilities)
 
     // Union interface
-    out.print(s"\nexport interface ${name}")
+    if (config.emitInterfaces) {
+      out.print(s"export interface ${if (config.prependIPrefix) s"I${name}" else name}")
 
-    superInterface.foreach { iface =>
-      out.print(s" extends ${iface.name}")
+      superInterface.foreach { iface =>
+        out.print(s" extends ${iface.name}")
+      }
+
+      out.println(" {")
+
+      // Abstract fields - common to all the subtypes
+      list(fields).foreach { member =>
+        out.println(s"${indent}${member.name}: ${getTypeRefString(member.typeRef)};")
+      }
+
+      out.println("}")
     }
-
-    out.println(" {")
-
-    // Abstract fields - common to all the subtypes
-    list(fields).foreach { member =>
-      out.println(s"${indent}${member.name}: ${getTypeRefString(member.typeRef)};")
-    }
-
-    out.println("}")
   }
 
   private def emitSingletonDeclaration(
@@ -91,11 +93,11 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     // Class definition
     out.print(s"export const $name")
 
-    superInterface.filter(_ => members.isEmpty).foreach { i =>
-      out.print(s" implements ${i.name}")
+    superInterface.foreach { i =>
+      out.print(s": ${i.name}")
     }
 
-    out.println(" {")
+    out.println(" = {")
 
     members.foreach(m => println(
       m.value.fold(s"${indent}${m.name}: ${getTypeRefString(m.typeRef)};")
