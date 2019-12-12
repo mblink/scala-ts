@@ -9,7 +9,7 @@ import scala.collection.immutable.ListSet
 import scala.reflect.runtime.universe._
 
 // TODO: Keep namespace using fullName from the Type
-final class ScalaParser(logger: Logger) {
+final class ScalaParser(logger: Logger, mirror: Mirror) {
 
   import ScalaModel._
 
@@ -63,12 +63,10 @@ final class ScalaParser(logger: Logger) {
   }
 
   private def parseObject(tpe: Type): Option[CaseObject] = {
-    val rm = runtimeMirror(getClass.getClassLoader)
-
     val members = tpe.decls.collect {
       case t: TermSymbol if t.isVal && t.isStable && t.isStatic => {
-        val sm = rm.staticModule(tpe.typeSymbol.fullName.stripSuffix(".type"))
-        val v = rm.reflect(rm.reflectModule(sm).instance).reflectField(t).get
+        val sm = mirror.staticModule(tpe.typeSymbol.fullName.stripSuffix(".type"))
+        val v = mirror.reflect(mirror.reflectModule(sm).instance).reflectField(t).get
         val tp = (if (t.isClass) t.info.typeSymbol.asClass.typeParams else List[Symbol]()).map(_.name.toString)
         TypeMember(t.name.toString, getTypeRef(t.info, tp.toSet), Some(v))
       }
