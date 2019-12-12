@@ -96,7 +96,7 @@ final class ScalaParser(logger: Logger) {
         Some(SealedUnion(
           tpe.typeSymbol.name.toString,
           ListSet.empty ++ members,
-          parseTypes(possibilities)))
+          parseTypes(possibilities.reverse)))
 
       case _ => Option.empty[SealedUnion]
     }
