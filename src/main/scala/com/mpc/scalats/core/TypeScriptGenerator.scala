@@ -14,8 +14,7 @@ object TypeScriptGenerator {
         emitClasses = false,
         emitInterfaces = true,
         optionToNullable = false,
-        optionToUndefined = false,
-        prependIPrefix = false)
+        optionToUndefined = false)
     } else {
       c
     }
