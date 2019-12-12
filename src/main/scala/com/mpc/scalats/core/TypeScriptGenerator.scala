@@ -47,11 +47,7 @@ object TypeScriptGenerator {
       outputStream.println("""import { DateFromISOString } from "io-ts-types/lib/DateFromISOString";""".stripMargin)
       outputStream.println()
 
-      new IoTsEmitter(config.copy(
-        emitClasses = true,
-        emitInterfaces = false,
-        prependIPrefix = false
-      ))
+      new IoTsEmitter(config)
     } else {
       new TypeScriptEmitter(config)
     }
