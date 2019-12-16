@@ -12,10 +12,18 @@ case class Config(
     optionToUndefined: Boolean = false,
     outputStream: Option[PrintStream] = None,
     prependIPrefix: Boolean = true,
+    tsNamingConvention: Boolean = true,
     typescriptIndent: String = "\t",
     emitCodecs: Boolean = true,
     fieldNaming: FieldNaming = FieldNaming.Identity,
-    emitIoTs: Boolean = false
+    emitIoTs: Boolean = false,
+    tsImports: TsImports = TsImports(),
+)
+
+case class TsImports(
+  iots: Boolean = false,
+  iotsDate: Boolean = false,
+  iotsOption: Boolean = false,
 )
 
 // TODO: nullable as function setting (gathering optionToNullable/optionToUndefined)

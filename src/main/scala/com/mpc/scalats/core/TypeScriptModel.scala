@@ -4,7 +4,10 @@ import scala.collection.immutable.ListSet
 
 object TypeScriptModel {
 
-  sealed trait Declaration
+  sealed trait Declaration {
+    val name: String
+    val superInterface: Option[InterfaceDeclaration]
+  }
 
   sealed trait TypeRef
 
@@ -18,7 +21,7 @@ object TypeScriptModel {
   case class InterfaceDeclaration(name: String, fields: ListSet[Member], typeParams: ListSet[String], superInterface: Option[InterfaceDeclaration]) extends Declaration
   // TODO: Support mapping of typeParams with superInterface
 
-  case class Member(name: String, typeRef: TypeRef)
+  case class Member(name: String, typeRef: TypeRef, value: Option[Any])
 
   case class ClassDeclaration(
     name: String,

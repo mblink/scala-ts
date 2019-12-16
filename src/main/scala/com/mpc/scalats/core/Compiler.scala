@@ -50,7 +50,8 @@ object Compiler {
         case ScalaModel.CaseObject(name, members) => {
           val values = members.map { scalaMember =>
             Member(scalaMember.name,
-              compileTypeRef(scalaMember.typeRef, false))
+              compileTypeRef(scalaMember.typeRef, false),
+              scalaMember.value)
           }
 
           ListSet[Declaration](
@@ -60,11 +61,12 @@ object Compiler {
         case ScalaModel.SealedUnion(name, fields, possibilities) => {
           val ifaceFields = fields.map { scalaMember =>
             Member(scalaMember.name,
-              compileTypeRef(scalaMember.typeRef, false))
+              compileTypeRef(scalaMember.typeRef, false),
+              scalaMember.value)
           }
 
           val unionRef = InterfaceDeclaration(
-            s"I${name}", ifaceFields, ListSet.empty[String], superInterface)
+            buildInterfaceName(name), ifaceFields, ListSet.empty[String], superInterface)
 
           compile(possibilities, Some(unionRef)) + UnionDeclaration(
             name,
@@ -73,10 +75,8 @@ object Compiler {
               case ScalaModel.CaseObject(nme, _) =>
                 CustomTypeRef(nme, ListSet.empty)
 
-              case ScalaModel.CaseClass(n, _, _, tpeArgs) => {
-                val nme = if (config.emitInterfaces) s"I${n}" else n
-                CustomTypeRef(nme, tpeArgs.map { SimpleTypeRef(_) })
-              }
+              case ScalaModel.CaseClass(n, _, _, tpeArgs) =>
+                CustomTypeRef(buildInterfaceName(n), tpeArgs.map { SimpleTypeRef(_) })
 
               case m =>
                 CustomTypeRef(buildInterfaceName(m.name), ListSet.empty)
@@ -94,7 +94,8 @@ object Compiler {
     scalaClass.fields.map { scalaMember =>
       TypeScriptModel.Member(
         scalaMember.name,
-        compileTypeRef(scalaMember.typeRef, inInterfaceContext = true)
+        compileTypeRef(scalaMember.typeRef, inInterfaceContext = true),
+        scalaMember.value
       )
     },
     typeParams = scalaClass.typeArgs,
@@ -102,8 +103,7 @@ object Compiler {
   )
 
   private def buildInterfaceName(name: String)(implicit config: Config) = {
-    val prefix = if (config.prependIPrefix) "I" else ""
-    s"${prefix}${name}"
+    if (config.prependIPrefix) s"I${name}" else name
   }
 
   private def compileClass(
@@ -119,7 +119,7 @@ object Compiler {
         }
       ),
       values = scalaClass.values.map { v =>
-        TypeScriptModel.Member(v.name, compileTypeRef(v.typeRef, false))
+        TypeScriptModel.Member(v.name, compileTypeRef(v.typeRef, false), v.value)
       },
       typeParams = scalaClass.typeArgs,
       superInterface
@@ -187,7 +187,7 @@ object Compiler {
         compileTypeRef(innerType, inInterfaceContext),
         UndefinedRef))
 
-    case ScalaModel.UnknownTypeRef(_) =>
-      TypeScriptModel.StringRef
+    case ScalaModel.UnknownTypeRef(u) =>
+      TypeScriptModel.UnknownTypeRef(u)
   }
 }
