@@ -88,7 +88,6 @@ final class IoTsEmitter(val config: Config) extends Emitter {
                                     superInterface: Option[InterfaceDeclaration],
                                     out: PrintStream): Unit = {
 
-    // Namespace and union type
     out.println(s"""export type ${name}U = ${list(possibilities).map(p => interfaceName(p.name)).mkString(" | ")};""")
     out.println()
     emitInterfaceDeclaration(name, members, superInterface, out)
@@ -99,6 +98,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
                                         members: ListSet[Member],
                                         superInterface: Option[InterfaceDeclaration],
                                         out: PrintStream): Unit = {
+
     emitInterfaceDeclaration(name, members, superInterface, out)
 
     out.println(s"export const ${objectName(name)}: ${interfaceName(name)} = {")
@@ -137,8 +137,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
   def getTypeWrappedVal(value: Any, typeRef: TypeRef, interfaceContext: Boolean): String = typeRef match {
     case NumberRef => value.toString
     case BooleanRef => value.toString
-    case StringRef => s""""${value}""""
-    case DateRef | DateTimeRef => s""""${value}""""
+    case StringRef => s"`${value.toString.trim}`"
+    case DateRef | DateTimeRef => s"`${value.toString.trim}`"
     case ArrayRef(_) => s"[${value}]"
     case CustomTypeRef(name, params) if params.isEmpty => if (interfaceContext) interfaceName(name) else objectName(name)
     case CustomTypeRef(name, params) if params.nonEmpty =>
