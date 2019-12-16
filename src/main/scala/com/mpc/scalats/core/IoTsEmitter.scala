@@ -13,15 +13,22 @@ final class IoTsEmitter(val config: Config) extends Emitter {
   def typeAsValArg(s: String): String = s"_${s}val"
 
   def emit(declaration: ListSet[Declaration], out: PrintStream): Unit = {
-    list(declaration).foreach {
-      case decl: InterfaceDeclaration =>
-        emitIoTsInterfaceDeclaration(decl, out)
-      case UnionDeclaration(name, members, possibilities, superInterface) =>
-        emitUnionDeclaration(name, members, possibilities, superInterface, out)
-      case SingletonDeclaration(name, members, superInterface) =>
-        emitSingletonDeclaration(name, members, superInterface, out)
-      case _ => ()
-    }
+    list(declaration).groupBy(d => d.superInterface.fold(d.name)(_.name)).foreach(g => {
+      out.println(s"/**************************************")
+      out.println(s" * ${g._1.toUpperCase}")
+      out.println(s" *************************************/")
+      g._2.foreach {
+        case decl: InterfaceDeclaration =>
+          emitIoTsInterfaceDeclaration(decl, out)
+        case UnionDeclaration(name, members, possibilities, superInterface) =>
+          emitUnionDeclaration(name, members, possibilities, superInterface, out)
+        case SingletonDeclaration(name, members, superInterface) =>
+          emitSingletonDeclaration(name, members, superInterface, out)
+        case _ => ()
+      }
+      out.println()
+      out.println()
+    })
   }
 
   def emitIoTsInterfaceDeclaration(

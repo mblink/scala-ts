@@ -4,7 +4,10 @@ import scala.collection.immutable.ListSet
 
 object TypeScriptModel {
 
-  sealed trait Declaration
+  sealed trait Declaration {
+    val name: String
+    val superInterface: Option[InterfaceDeclaration]
+  }
 
   sealed trait TypeRef
 
