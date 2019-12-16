@@ -8,7 +8,7 @@ import scala.reflect.runtime.universe._
   */
 object TypeScriptGenerator {
 
-  private def updateConfig(implicit c: Config): Config = {
+  private def updateConfig(c: Config): Config = {
     if (c.emitIoTs) {
       c.copy(
         emitClasses = false,
