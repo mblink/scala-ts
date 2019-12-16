@@ -187,7 +187,7 @@ object Compiler {
         compileTypeRef(innerType, inInterfaceContext),
         UndefinedRef))
 
-    case ScalaModel.UnknownTypeRef(_) =>
-      TypeScriptModel.StringRef
+    case ScalaModel.UnknownTypeRef(u) =>
+      TypeScriptModel.UnknownTypeRef(u)
   }
 }

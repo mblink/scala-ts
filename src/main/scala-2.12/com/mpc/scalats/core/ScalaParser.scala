@@ -148,7 +148,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror) {
         !scalaType.typeSymbol.isParameter) {
 
         val relevantMemberSymbols = scalaType.members.collect {
-          case m: MethodSymbol if m.isCaseAccessor => m
+          case m: MethodSymbol if isValidMethod(m) => m
         }
 
         val memberTypes = relevantMemberSymbols.map(
@@ -228,9 +228,6 @@ final class ScalaParser(logger: Logger, mirror: Mirror) {
         UnknownTypeRef(unknown)
     }
   }
-
-//  @inline private def isCaseObject(scalaType: Type): Boolean =
-//    scalaType.typeSymbol.isModule
 
   @inline private def isCaseClass(scalaType: Type): Boolean =
     scalaType.typeSymbol.isClass && scalaType.typeSymbol.asClass.isCaseClass
