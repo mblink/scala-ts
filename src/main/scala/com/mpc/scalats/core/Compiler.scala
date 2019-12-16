@@ -66,7 +66,7 @@ object Compiler {
           }
 
           val unionRef = InterfaceDeclaration(
-            if (config.prependIPrefix) s"I${name}" else name, ifaceFields, ListSet.empty[String], superInterface)
+            buildInterfaceName(name), ifaceFields, ListSet.empty[String], superInterface)
 
           compile(possibilities, Some(unionRef)) + UnionDeclaration(
             name,
@@ -75,10 +75,8 @@ object Compiler {
               case ScalaModel.CaseObject(nme, _) =>
                 CustomTypeRef(nme, ListSet.empty)
 
-              case ScalaModel.CaseClass(n, _, _, tpeArgs) => {
-                val nme = if (config.prependIPrefix) s"I${n}" else n
-                CustomTypeRef(nme, tpeArgs.map { SimpleTypeRef(_) })
-              }
+              case ScalaModel.CaseClass(n, _, _, tpeArgs) =>
+                CustomTypeRef(buildInterfaceName(n), tpeArgs.map { SimpleTypeRef(_) })
 
               case m =>
                 CustomTypeRef(buildInterfaceName(m.name), ListSet.empty)
@@ -105,8 +103,7 @@ object Compiler {
   )
 
   private def buildInterfaceName(name: String)(implicit config: Config) = {
-    val prefix = if (config.prependIPrefix) "I" else ""
-    s"${prefix}${name}"
+    if (config.prependIPrefix) s"I${name}" else name
   }
 
   private def compileClass(

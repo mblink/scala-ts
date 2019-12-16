@@ -42,7 +42,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     }
 
     list(fields).foreach { v =>
-      out.println(s"${indent}${v.name}: ${getTypeRefString(v.typeRef)},")
+      out.println(s"${indent}${v.name}: ${getTypeIoTsString(v.typeRef)},")
     }
 
     out.println("});")
@@ -52,22 +52,13 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     out.println()
   }
 
-  private def emitUnionDeclaration(
-                                    name: String,
-                                    fields: ListSet[Member],
-                                    possibilities: ListSet[CustomTypeRef],
-                                    superInterface: Option[InterfaceDeclaration],
-                                    out: PrintStream): Unit = {
-
-    // Namespace and union type
-    out.println(s"""export type $name = ${list(possibilities).map(_.name).mkString(" | ")};""")
-    out.println()
-//    val discriminatorName = "_type"
-//    val children = list(possibilities)
-
-    // Union interface
+  private def emitInterfaceDeclaration(
+                                        name: String,
+                                        members: ListSet[Member],
+                                        superInterface: Option[InterfaceDeclaration],
+                                        out: PrintStream): Unit = {
     if (config.emitInterfaces) {
-      out.print(s"export interface ${if (config.prependIPrefix) s"I${name}" else name}")
+      out.print(s"export interface ${interfaceName(name)}")
 
       superInterface.foreach { iface =>
         out.print(s" extends ${iface.name}")
@@ -76,12 +67,24 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       out.println(" {")
 
       // Abstract fields - common to all the subtypes
-      list(fields).foreach { member =>
-        out.println(s"${indent}${member.name}: ${getTypeRefString(member.typeRef)};")
-      }
+      emitMembers(members, out)
 
       out.println("}")
+      out.println()
     }
+  }
+
+  private def emitUnionDeclaration(
+                                    name: String,
+                                    members: ListSet[Member],
+                                    possibilities: ListSet[CustomTypeRef],
+                                    superInterface: Option[InterfaceDeclaration],
+                                    out: PrintStream): Unit = {
+
+    // Namespace and union type
+    out.println(s"""export type ${name}U = ${list(possibilities).map(p => interfaceName(p.name)).mkString(" | ")};""")
+    out.println()
+    emitInterfaceDeclaration(name, members, superInterface, out)
   }
 
   private def emitSingletonDeclaration(
@@ -89,36 +92,37 @@ final class IoTsEmitter(val config: Config) extends Emitter {
                                         members: ListSet[Member],
                                         superInterface: Option[InterfaceDeclaration],
                                         out: PrintStream): Unit = {
+    emitInterfaceDeclaration(name, members, superInterface, out)
 
-    // Class definition
-    out.print(s"export const $name")
+    out.println(s"export const ${objectName(name)}: ${interfaceName(name)} = {")
 
-    superInterface.foreach { i =>
-      out.print(s": ${i.name}")
-    }
+    emitMembers(members, out)
 
-    out.println(" = {")
-
-    members.foreach(m => println(
-      m.value.fold(s"${indent}${m.name}: ${getTypeRefString(m.typeRef)};")
-                  (v => s"${indent}${m.name}= ${getTypeWrappedVal(v, m.typeRef)};")))
-
-    out.println("}")
+    out.println("};")
+    out.println()
   }
 
-  def getTypeRefString(typeRef: TypeRef): String = typeRef match {
+  def emitMembers(members: ListSet[Member], out: PrintStream): Unit = {
+    members.foreach(m =>
+      out.println(
+        m.value.fold(s"${indent}${m.name.trim}: ${getTypeRefString(m.typeRef)};")
+        (v => s"${indent}${m.name.trim}: ${getTypeWrappedVal(v, m.typeRef)},"))
+    )
+  }
+
+  def getTypeIoTsString(typeRef: TypeRef): String = typeRef match {
     case NumberRef => "t.number"
     case BooleanRef => "t.boolean"
     case StringRef => "t.string"
     case DateRef | DateTimeRef => "DateFromISOString"
-    case ArrayRef(innerType) => s"t.array(${getTypeRefString(innerType)})"
+    case ArrayRef(innerType) => s"t.array(${getTypeIoTsString(innerType)})"
     case CustomTypeRef(name, params) if params.isEmpty => typeAsVal(name)
     case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"${typeAsVal(name)}${params.map(getTypeRefString).mkString("(", ", ", ")")}"
+      s"${typeAsVal(name)}${params.map(getTypeIoTsString).mkString("(", ", ", ")")}"
     case UnknownTypeRef(_) => "t.unknown"
     case SimpleTypeRef(param) => typeAsValArg(param)
-    case UnionType(possibilities) => s"t.union(${possibilities.map(getTypeRefString).mkString("[", ", ", "]")})"
-    case MapType(keyType, valueType) => s"t.record(${getTypeRefString(keyType)}, ${getTypeRefString(valueType)})"
+    case UnionType(possibilities) => s"t.union(${possibilities.map(getTypeIoTsString).mkString("[", ", ", "]")})"
+    case MapType(keyType, valueType) => s"t.record(${getTypeIoTsString(keyType)}, ${getTypeIoTsString(valueType)})"
     case NullRef => "t.null"
     case UndefinedRef => "t.undefined"
   }
@@ -131,11 +135,11 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case ArrayRef(_) => s"[${value}]"
     case CustomTypeRef(name, params) if params.isEmpty => typeAsVal(name)
     case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"${typeAsVal(name)}${params.map(getTypeRefString).mkString("(", ", ", ")")}"
+      s"${typeAsVal(name)}${params.map(getTypeIoTsString).mkString("(", ", ", ")")}"
     case UnknownTypeRef(_) => "unknown"
     case SimpleTypeRef(param) => typeAsValArg(param)
-    case UnionType(possibilities) => s"t.union(${possibilities.map(getTypeRefString).mkString("[", ", ", "]")})"
-    case MapType(keyType, valueType) => s"t.record(${getTypeRefString(keyType)}, ${getTypeRefString(valueType)})"
+    case UnionType(possibilities) => s"t.union(${possibilities.map(getTypeIoTsString).mkString("[", ", ", "]")})"
+    case MapType(keyType, valueType) => s"t.record(${getTypeIoTsString(keyType)}, ${getTypeIoTsString(valueType)})"
     case NullRef => "null"
     case UndefinedRef => "undefined"
   }

@@ -314,26 +314,4 @@ final class TypeScriptEmitter(val config: Config) extends Emitter {
       out.println(s"${indent}}")
     }
   }
-
-  def getTypeRefString(typeRef: TypeRef): String = typeRef match {
-    case NumberRef => "number"
-    case BooleanRef => "boolean"
-    case StringRef => "string"
-    case DateRef | DateTimeRef => "Date"
-    case ArrayRef(innerType) => s"${getTypeRefString(innerType)}[]"
-    case CustomTypeRef(name, params) if params.isEmpty => name
-    case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"$name<${params.map(getTypeRefString).mkString(", ")}>"
-    case UnknownTypeRef(typeName) => typeName
-    case SimpleTypeRef(param) => param
-
-    case UnionType(possibilities) =>
-      possibilities.map(getTypeRefString).mkString("(", " | ", ")")
-
-    case MapType(keyType, valueType) => s"{ [key: ${getTypeRefString(keyType)}]: ${getTypeRefString(valueType)} }"
-
-    case NullRef => "null"
-    case UndefinedRef => "undefined"
-  }
-
 }
