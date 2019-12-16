@@ -15,16 +15,17 @@ final class IoTsEmitter(val config: Config) extends Emitter {
 
   def emit(declaration: ListSet[Declaration], out: PrintStream): Unit = {
     list(declaration).foreach {
-      case decl: InterfaceDeclaration => emitInterfaceDeclaration(decl, out)
-      case UnionDeclaration(name, fields, possibilities, superInterface) =>
-        emitUnionDeclaration(name, fields, possibilities, superInterface, out)
+      case decl: InterfaceDeclaration =>
+        emitIoTsInterfaceDeclaration(decl, out)
+      case UnionDeclaration(name, members, possibilities, superInterface) =>
+        emitUnionDeclaration(name, members, possibilities, superInterface, out)
       case SingletonDeclaration(name, members, superInterface) =>
         emitSingletonDeclaration(name, members, superInterface, out)
       case _ => ()
     }
   }
 
-  def emitInterfaceDeclaration(
+  def emitIoTsInterfaceDeclaration(
                                 decl: InterfaceDeclaration,
                                 out: PrintStream): Unit = {
 
