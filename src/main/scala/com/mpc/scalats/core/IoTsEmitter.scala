@@ -10,7 +10,6 @@ final class IoTsEmitter(val config: Config) extends Emitter {
   import TypeScriptModel._
   import Internals.list
 
-  def typeAsVal(s: String): String = Character.toLowerCase(s.charAt(0)) + s.substring(1)
   def typeAsValArg(s: String): String = s"_${s}val"
 
   def emit(declaration: ListSet[Declaration], out: PrintStream): Unit = {
@@ -31,7 +30,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
 
     val InterfaceDeclaration(name, fields, typeParams, _) = decl
 
-    val typeVal = typeAsVal(name);
+    val typeVal = objectName(name);
 
     // Class definition
     if (typeParams.isEmpty) {
@@ -68,7 +67,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       out.println(" {")
 
       // Abstract fields - common to all the subtypes
-      emitMembers(members, out)
+      emitMembers(members, true, out)
 
       out.println("}")
       out.println()
@@ -97,17 +96,17 @@ final class IoTsEmitter(val config: Config) extends Emitter {
 
     out.println(s"export const ${objectName(name)}: ${interfaceName(name)} = {")
 
-    emitMembers(members, out)
+    emitMembers(members, false, out)
 
     out.println("};")
     out.println()
   }
 
-  def emitMembers(members: ListSet[Member], out: PrintStream): Unit = {
+  def emitMembers(members: ListSet[Member], interfaceContext: Boolean, out: PrintStream): Unit = {
     members.foreach(m =>
       out.println(
         m.value.fold(s"${indent}${m.name.trim}: ${getTypeRefString(m.typeRef)};")
-        (v => s"${indent}${m.name.trim}: ${getTypeWrappedVal(v, m.typeRef)},"))
+        (v => s"${indent}${m.name.trim}: ${getTypeWrappedVal(v, m.typeRef, interfaceContext)},"))
     )
   }
 
@@ -117,10 +116,10 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case StringRef => "t.string"
     case DateRef | DateTimeRef => "DateFromISOString"
     case ArrayRef(innerType) => s"t.array(${getTypeIoTsString(innerType)})"
-    case CustomTypeRef(name, params) if params.isEmpty => typeAsVal(name)
+    case CustomTypeRef(name, params) if params.isEmpty => objectName(name)
     case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"${typeAsVal(name)}${params.map(getTypeIoTsString).mkString("(", ", ", ")")}"
-    case UnknownTypeRef(_) => "t.unknown"
+      s"${objectName(name)}${params.map(getTypeIoTsString).mkString("(", ", ", ")")}"
+    case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getTypeIoTsString).mkString("[", ", ", "]")})"
     case MapType(keyType, valueType) => s"t.record(${getTypeIoTsString(keyType)}, ${getTypeIoTsString(valueType)})"
@@ -128,17 +127,17 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case UndefinedRef => "t.undefined"
   }
 
-  def getTypeWrappedVal(value: Any, typeRef: TypeRef): String = typeRef match {
+  def getTypeWrappedVal(value: Any, typeRef: TypeRef, interfaceContext: Boolean): String = typeRef match {
     case NumberRef => value.toString
     case BooleanRef => value.toString
     case StringRef => s""""${value}""""
     case DateRef | DateTimeRef => s""""${value}""""
     case ArrayRef(_) => s"[${value}]"
-    case CustomTypeRef(name, params) if params.isEmpty => typeAsVal(name)
+    case CustomTypeRef(name, params) if params.isEmpty => if (interfaceContext) interfaceName(name) else objectName(name)
     case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"${typeAsVal(name)}${params.map(getTypeIoTsString).mkString("(", ", ", ")")}"
-    case UnknownTypeRef(_) => "unknown"
-    case SimpleTypeRef(param) => typeAsValArg(param)
+      s"${if (interfaceContext) interfaceName(name) else objectName(name)}${params.map(getTypeIoTsString).mkString("(", ", ", ")")}"
+    case UnknownTypeRef(unknown) => unknown
+    case SimpleTypeRef(param) => if (interfaceContext) param else typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getTypeIoTsString).mkString("[", ", ", "]")})"
     case MapType(keyType, valueType) => s"t.record(${getTypeIoTsString(keyType)}, ${getTypeIoTsString(valueType)})"
     case NullRef => "null"
