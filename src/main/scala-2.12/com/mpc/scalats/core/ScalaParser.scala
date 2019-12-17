@@ -207,7 +207,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         OptionRef(getTypeRef(innerType, typeParams))
       case "LocalDate" =>
         DateRef
-      case "Instant" | "Timestamp" | "LocalDateTime" | "ZonedDateTime" =>
+      case "Instant" | "Timestamp" | "LocalDateTime" | "ZonedDateTime" | "DateTime" =>
         DateTimeRef
       case typeParam if typeParams.contains(typeParam) =>
         TypeParamRef(typeParam)
