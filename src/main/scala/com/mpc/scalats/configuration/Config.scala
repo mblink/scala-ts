@@ -25,6 +25,7 @@ case class TsImports(
   iotsDate: Boolean = false,
   iotsNonEmptyArray: Boolean = false,
   iotsOption: Boolean = false,
+  customImports: List[String] = List()
 )
 
 // TODO: nullable as function setting (gathering optionToNullable/optionToUndefined)

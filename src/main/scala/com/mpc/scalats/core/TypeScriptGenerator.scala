@@ -70,6 +70,8 @@ object TypeScriptGenerator {
       if (config.tsImports.iotsOption) {
         outputStream.println("""import { optionFromNullable } from "io-ts-types/lib/optionFromNullable";""")
       }
+      config.tsImports.customImports.foreach(outputStream.println)
+
       outputStream.println()
 
       new IoTsEmitter(config)
