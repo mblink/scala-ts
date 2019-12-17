@@ -1,7 +1,7 @@
 package com.mpc.scalats.core
 
 import com.mpc.scalats.configuration.Config
-import com.mpc.scalats.core.TypeScriptModel.{ArrayRef, BooleanRef, CustomTypeRef, DateRef, DateTimeRef, Declaration, MapType, NullRef, NumberRef, SimpleTypeRef, StringRef, TypeRef, UndefinedRef, UnionType, UnknownTypeRef}
+import com.mpc.scalats.core.TypeScriptModel._
 import java.io.PrintStream
 import scala.collection.immutable.ListSet
 
@@ -36,6 +36,7 @@ trait Emitter {
     case StringRef => "string"
     case DateRef | DateTimeRef => "Date"
     case ArrayRef(innerType) => s"${getTypeRefString(innerType)}[]"
+    case NonEmptyArrayRef(innerType) => s"NonEmptyArray<${getTypeRefString(innerType)}>"
     case CustomTypeRef(name, params) if params.isEmpty => name
     case CustomTypeRef(name, params) if params.nonEmpty =>
       s"$name<${params.map(getTypeRefString).mkString(", ")}>"

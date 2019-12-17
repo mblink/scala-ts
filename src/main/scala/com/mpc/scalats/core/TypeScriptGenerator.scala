@@ -20,24 +20,33 @@ object TypeScriptGenerator {
     }
   }
 
+  def getClassNames(mirror: Mirror)(className: String) = {
+    mirror.staticClass(className).toType
+  }
+
   def generateFromClassNames(
     classNames: List[String],
+    excludeClassNames: List[String],
     logger: Logger,
     classLoader: ClassLoader = getClass.getClassLoader
   )(c: Config) = {
     val mirror = runtimeMirror(classLoader)
-    val types = classNames.map { className =>
-      println(s"className = $className")
-      mirror.staticClass(className).toType
-    }
+    val types = classNames.map(cn => {
+      println(s"className = $cn")
+      getClassNames(mirror)(cn)
+    })
+    val excludeTypes = excludeClassNames.map(cn => {
+      println(s"exclude className = $cn")
+      getClassNames(mirror)(cn)
+    })
 
-    generate(types, logger, mirror)(updateConfig(c))
+    generate(types, excludeTypes, logger, mirror)(updateConfig(c))
   }
 
-  def generate(caseClasses: List[Type], logger: Logger, mirror: Mirror)(c: Config) = {
+  def generate(caseClasses: List[Type], excludeCaseClasses: List[Type], logger: Logger, mirror: Mirror)(c: Config) = {
     implicit val config: Config = updateConfig(c)
     val outputStream = config.outputStream.getOrElse(Console.out)
-    val scalaParser = new ScalaParser(logger, mirror)
+    val scalaParser = new ScalaParser(logger, mirror, excludeCaseClasses)
     val scalaTypes = scalaParser.parseTypes(caseClasses)
     val typeScriptInterfaces = Compiler.compile(scalaTypes)
 
@@ -54,6 +63,9 @@ object TypeScriptGenerator {
       }
       if (config.tsImports.iotsDate) {
         outputStream.println("""import { DateFromISOString } from "io-ts-types/lib/DateFromISOString";""".stripMargin)
+      }
+      if (config.tsImports.iotsNonEmptyArray) {
+        outputStream.println("""import { nonEmptyArray } from "io-ts-types/lib/NonEmptyArray";""")
       }
       if (config.tsImports.iotsOption) {
         outputStream.println("""import { optionFromNullable } from "io-ts-types/lib/optionFromNullable";""")

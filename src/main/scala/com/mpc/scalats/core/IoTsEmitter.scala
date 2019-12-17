@@ -120,9 +120,10 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case StringRef => "t.string"
     case DateRef | DateTimeRef => "DateFromISOString"
     case ArrayRef(innerType) => s"t.array(${getTypeIoTsString(innerType)})"
-    case CustomTypeRef(name, params) if params.isEmpty => objectName(name)
+    case NonEmptyArrayRef(innerType) => s"nonEmptyArray(${getTypeIoTsString(innerType)})"
+    case CustomTypeRef(name, params) if params.isEmpty => customIoTsTypes(name)
     case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"${objectName(name)}${params.map(getTypeIoTsString).mkString("(", ", ", ")")}"
+      s"${customIoTsTypes(name)}${params.map(getTypeIoTsString).mkString("(", ", ", ")")}"
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getTypeIoTsString).mkString("[", ", ", "]")})"
@@ -131,12 +132,18 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case UndefinedRef => "t.undefined"
   }
 
+  def customIoTsTypes(name: String): String = name match {
+    case "NonEmptyList" => "nonEmptyArray"
+    case _ => objectName(name)
+  }
+
   def getTypeWrappedVal(value: Any, typeRef: TypeRef, interfaceContext: Boolean): String = typeRef match {
     case NumberRef => value.toString
     case BooleanRef => value.toString
     case StringRef => s"`${value.toString.trim}`"
     case DateRef | DateTimeRef => s"`${value.toString.trim}`"
     case ArrayRef(_) => s"[${value}]"
+    case NonEmptyArrayRef(_) => s"nonEmptyArray.of([${value}])"
     case CustomTypeRef(name, params) if params.isEmpty => if (interfaceContext) interfaceName(name) else objectName(name)
     case CustomTypeRef(name, params) if params.nonEmpty =>
       s"${if (interfaceContext) interfaceName(name) else objectName(name)}${params.map(getTypeIoTsString).mkString("(", ", ", ")")}"

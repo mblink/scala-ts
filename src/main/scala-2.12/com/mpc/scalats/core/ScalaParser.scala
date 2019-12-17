@@ -9,37 +9,43 @@ import scala.collection.immutable.ListSet
 import scala.reflect.runtime.universe._
 
 // TODO: Keep namespace using fullName from the Type
-final class ScalaParser(logger: Logger, mirror: Mirror) {
+final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]) {
 
   import ScalaModel._
 
   def parseTypes(types: List[Type]): ListSet[TypeDef] =
-    parse(types, ListSet.empty[Type], ListSet.empty[TypeDef])
+    parse(types, ListSet[Type](), ListSet.empty[TypeDef])
 
   // ---
 
-  private def parseType(tpe: Type): Option[TypeDef] = tpe match {
-    case _: SingleTypeApi =>
-      parseObject(tpe)
+  private def parseType(tpe: Type): Option[TypeDef] = {
+    if (!excludeTypes.contains(tpe)) {
+      tpe match {
+        case _: SingleTypeApi =>
+          parseObject(tpe)
 
-    case _ if (tpe.getClass.getName contains "ModuleType"/*Workaround*/) =>
-      parseObject(tpe)
+        case _ if (tpe.getClass.getName contains "ModuleType" /*Workaround*/) =>
+          parseObject(tpe)
 
-    case _ if tpe.typeSymbol.isClass => {
-      val classSym = tpe.typeSymbol.asClass
+        case _ if tpe.typeSymbol.isClass && !tpe.typeSymbol.name.toString.contains("NonEmptyList") => {
+          val classSym = tpe.typeSymbol.asClass
 
-      if (classSym.isTrait && classSym.isSealed && tpe.typeParams.isEmpty) {
-        parseSealedUnion(tpe)
-      } else if (isCaseClass(tpe) && !isAnyValChild(tpe)) {
-        parseCaseClass(tpe)
-      } else {
-        Option.empty[TypeDef]
+          if (classSym.isTrait && classSym.isSealed && tpe.typeParams.isEmpty) {
+            parseSealedUnion(tpe)
+          } else if (isCaseClass(tpe) && !isAnyValChild(tpe)) {
+            parseCaseClass(tpe)
+          } else {
+            Option.empty[TypeDef]
+          }
+        }
+
+        case _ => {
+          logger.warning(s"Unsupported Scala type: $tpe")
+          Option.empty[TypeDef]
+        }
       }
-    }
-
-    case _ => {
-      logger.warning(s"Unsupported Scala type: $tpe")
-      Option.empty[TypeDef]
+    } else{
+      None
     }
   }
 
@@ -193,6 +199,9 @@ final class ScalaParser(logger: Logger, mirror: Mirror) {
       case "List" | "Seq" | "Set" => // TODO: Traversable
         val innerType = scalaType.typeArgs.head
         SeqRef(getTypeRef(innerType, typeParams))
+      case "NonEmptyList" =>
+        val innerType = scalaType.typeArgs.head
+        NonEmptySeqRef(getTypeRef(innerType, typeParams))
       case "Option" =>
         val innerType = scalaType.typeArgs.head
         OptionRef(getTypeRef(innerType, typeParams))

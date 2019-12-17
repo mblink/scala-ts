@@ -18,6 +18,8 @@ object TypeScriptModel {
 
   case class ArrayRef(innerType: TypeRef) extends TypeRef
 
+  case class NonEmptyArrayRef(innerType: TypeRef) extends TypeRef
+
   case class InterfaceDeclaration(name: String, fields: ListSet[Member], typeParams: ListSet[String], superInterface: Option[InterfaceDeclaration]) extends Declaration
   // TODO: Support mapping of typeParams with superInterface
 

@@ -23,6 +23,7 @@ case class Config(
 case class TsImports(
   iots: Boolean = false,
   iotsDate: Boolean = false,
+  iotsNonEmptyArray: Boolean = false,
   iotsOption: Boolean = false,
 )
 

@@ -9,7 +9,7 @@ object Main {
     val logger = Logger(
       org.slf4j.LoggerFactory getLogger TypeScriptGenerator.getClass)
 
-    TypeScriptGenerator.generateFromClassNames(args.toList, logger)(Config())
-    TypeScriptGenerator.generateFromClassNames(args.toList, logger)(Config(emitIoTs = true))
+    TypeScriptGenerator.generateFromClassNames(args.toList, List(), logger)(Config())
+    TypeScriptGenerator.generateFromClassNames(args.toList, List(), logger)(Config(emitIoTs = true))
   }
 }

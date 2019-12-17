@@ -142,6 +142,8 @@ object Compiler {
       TypeScriptModel.StringRef
     case ScalaModel.SeqRef(innerType) =>
       TypeScriptModel.ArrayRef(compileTypeRef(innerType, inInterfaceContext))
+    case ScalaModel.NonEmptySeqRef(innerType) =>
+      TypeScriptModel.NonEmptyArrayRef(compileTypeRef(innerType, inInterfaceContext))
 
     case ScalaModel.CaseClassRef(name, typeArgs) => {
       val actualName = if (inInterfaceContext) buildInterfaceName(name) else name
