@@ -255,16 +255,16 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     val tpeSym = tpe.typeSymbol.asClass
 
     @annotation.tailrec
-    def allSubclasses(path: Traversable[Symbol], subclasses: Set[Type]): Set[Type] = path.headOption match {
+    def allSubclasses(path: Traversable[Symbol], subclasses: ListSet[Type]): ListSet[Type] = path.headOption match {
       case Some(cls: ClassSymbol) if (
         tpeSym != cls && cls.selfType.baseClasses.contains(tpeSym)) => {
-        val newSub: Set[Type] = if (!cls.isCaseClass) {
+        val newSub: ListSet[Type] = if (!cls.isCaseClass) {
           logger.warning(s"cannot handle class ${cls.fullName}: no case accessor")
-          Set.empty
+          ListSet.empty
         } else if (cls.typeParams.nonEmpty) {
           logger.warning(s"cannot handle class ${cls.fullName}: type parameter not supported")
-          Set.empty
-        } else Set(cls.selfType)
+          ListSet.empty
+        } else ListSet(cls.selfType)
 
         allSubclasses(path.tail, subclasses ++ newSub)
       }
@@ -284,7 +284,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     }
 
     if (tpeSym.isSealed && tpeSym.isAbstract) {
-      allSubclasses(tpeSym.owner.typeSignature.decls, Set.empty).toList
+      allSubclasses(tpeSym.owner.typeSignature.decls.sorted, ListSet.empty).toList.reverse
     } else List.empty
   }
 }
