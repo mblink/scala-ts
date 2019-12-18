@@ -117,12 +117,12 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
       dealias.typeParams.map(_.name.decodedName.toString)
 
     // Members
-    val members = caseClassType.members.collect {
+    val members = caseClassType.members.sorted.collect {
       case Field(m) if m.isCaseAccessor =>
         member(m, typeParams)
     }.toList
 
-    val values = caseClassType.decls.collect {
+    val values = caseClassType.decls.sorted.collect {
       case Field(m) =>
         member(m, typeParams)
     }.filterNot(members.contains)
@@ -276,7 +276,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     }
 
     if (tpeSym.isSealed && tpeSym.isAbstract) {
-      allSubclasses(tpeSym.owner.typeSignature.decls.sorted, ListSet.empty).toList.reverse
+      allSubclasses(tpeSym.owner.typeSignature.decls.sorted, ListSet.empty).toList
     } else List.empty
   }
 }
