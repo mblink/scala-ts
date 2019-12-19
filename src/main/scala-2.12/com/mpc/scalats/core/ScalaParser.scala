@@ -17,30 +17,35 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     parse(types, ListSet[Type](), ListSet.empty[TypeDef])
 
 
-  private def parseType(tpe: Type): Option[TypeDef] = tpe match {
-    case _: SingleTypeApi =>
-      parseObject(tpe)
+  private def parseType(tpe: Type): Option[TypeDef] =
+    if (!excludeTypes.contains(tpe)) {
+      tpe match {
+        case _: SingleTypeApi =>
+          parseObject(tpe)
 
-    case _ if (tpe.getClass.getName contains "ModuleType" /*Workaround*/) =>
-      parseObject(tpe)
+        case _ if (tpe.getClass.getName contains "ModuleType" /*Workaround*/) =>
+          parseObject(tpe)
 
-    case _ if tpe.typeSymbol.isClass && !tpe.typeSymbol.name.toString.contains("NonEmptyList") => {
-      val classSym = tpe.typeSymbol.asClass
+        case _ if tpe.typeSymbol.isClass && !tpe.typeSymbol.name.toString.contains("NonEmptyList") => {
+          val classSym = tpe.typeSymbol.asClass
 
-      if (classSym.isTrait && classSym.isSealed && tpe.typeParams.isEmpty) {
-        parseSealedUnion(tpe)
-      } else if (isCaseClass(tpe) && !isAnyValChild(tpe)) {
-        parseCaseClass(tpe)
-      } else {
-        Option.empty[TypeDef]
+          if (classSym.isTrait && classSym.isSealed && tpe.typeParams.isEmpty) {
+            parseSealedUnion(tpe)
+          } else if (isCaseClass(tpe) && !isAnyValChild(tpe)) {
+            parseCaseClass(tpe)
+          } else {
+            None
+          }
+        }
+
+        case _ => {
+          logger.warning(s"Unsupported Scala type: $tpe")
+          None
+        }
       }
+    } else {
+      None
     }
-
-    case _ => {
-      logger.warning(s"Unsupported Scala type: $tpe")
-      Option.empty[TypeDef]
-    }
-  }
 
   private object Field {
     def unapply(m: MethodSymbol): Option[MethodSymbol] = m match {
@@ -143,7 +148,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
   @annotation.tailrec
   private def parse(types: List[Type], examined: ListSet[Type], parsed: ListSet[TypeDef]): ListSet[TypeDef] = types match {
     case scalaType :: tail => {
-      if (!excludeTypes.contains(scalaType) && !examined.contains(scalaType) && !scalaType.typeSymbol.isParameter) {
+      if (!examined.contains(scalaType) && !scalaType.typeSymbol.isParameter) {
 
         val relevantMemberSymbols = scalaType.members.collect {
           case m: MethodSymbol if isValidMethod(m) => m
