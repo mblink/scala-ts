@@ -161,9 +161,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
           })
 
         val typeArgs = scalaType match {
-          case t: scala.reflect.runtime.universe.TypeRef =>
-            t.args
-
+          case t: scala.reflect.runtime.universe.TypeRef => t.args
           case _ => List.empty[Type]
         }
 
