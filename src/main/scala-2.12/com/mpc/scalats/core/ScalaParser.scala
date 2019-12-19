@@ -27,9 +27,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
           parseObject(tpe)
 
         case _ if tpe.typeSymbol.isClass && !tpe.typeSymbol.name.toString.contains("NonEmptyList") => {
-          val classSym = tpe.typeSymbol.asClass
-
-          if (classSym.isTrait && classSym.isSealed && tpe.typeParams.isEmpty) {
+          if (isSealedUnion(tpe)) {
             parseSealedUnion(tpe)
           } else if (isCaseClass(tpe) && !isAnyValChild(tpe)) {
             parseCaseClass(tpe)
@@ -208,7 +206,9 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         TypeParamRef(typeParam)
       case _ if isAnyValChild(scalaType) =>
         getTypeRef(scalaType.members.filter(!_.isMethod).map(_.typeSignature).head, Set())
-      case _ if isCaseClass(scalaType) =>
+      case _ if isSealedUnion(scalaType) =>
+          UnionRef(ListSet.empty ++ directKnownSubclasses(scalaType).map(getTypeRef(_, Set.empty)))
+      case _ if isCaseClass(scalaType)=>
         val caseClassName = scalaType.typeSymbol.name.toString
         val typeArgs = scalaType.typeArgs
         val typeArgRefs = typeArgs.map(getTypeRef(_, typeParams))
@@ -232,6 +232,9 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         UnknownTypeRef(unknown)
     }
   }
+
+  @inline private def isSealedUnion(scalaType: Type): Boolean =
+    scalaType.typeSymbol.asClass.isTrait && scalaType.typeSymbol.asClass.isSealed && scalaType.typeParams.isEmpty
 
   @inline private def isCaseClass(scalaType: Type): Boolean =
     scalaType.typeSymbol.isClass && scalaType.typeSymbol.asClass.isCaseClass
