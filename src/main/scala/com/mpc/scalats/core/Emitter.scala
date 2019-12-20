@@ -11,6 +11,7 @@ trait Emitter {
 
   val indent: String = config.typescriptIndent
   def indent(num: Int): String = config.typescriptIndent * num
+  def pluralize(s: String): String = if (s.endsWith("s")) s else s"${s}s"
   def typeParameters(params: ListSet[String]): String =
     if (params.isEmpty) "" else params.mkString("<", ", ", ">")
   def interfaceName(name: String): String = {

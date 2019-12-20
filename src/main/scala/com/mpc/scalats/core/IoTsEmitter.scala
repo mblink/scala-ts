@@ -86,8 +86,10 @@ final class IoTsEmitter(val config: Config) extends Emitter {
                                     out: PrintStream): Unit = {
 
     out.println(s"""export type ${name}U = ${list(possibilities).map(p => interfaceName(p.name)).mkString(" | ")};""")
+    out.println(s"""export const all${pluralize(name)} = ${list(possibilities).map(p => objectName(p.name)).mkString("[", ", ", "]")} as const;""")
     out.println()
     emitInterfaceDeclaration(name, members, superInterface, out)
+
   }
 
   private def emitSingletonDeclaration(
