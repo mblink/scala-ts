@@ -14,7 +14,12 @@ final class IoTsEmitter(val config: Config) extends Emitter {
 
   def emit(declaration: ListSet[Declaration], out: PrintStream): Unit = {
     list(declaration).groupBy(d => d.superInterface.fold(d.name)(_.name)).foreach(g => {
-      g._2.foreach {
+      g._2.sortBy({
+        case _: SingletonDeclaration => -1
+        case _: InterfaceDeclaration => 0
+        case _: UnionDeclaration => 1
+        case _ => -1
+      }).foreach {
         case decl: InterfaceDeclaration =>
           emitIoTsInterfaceDeclaration(decl, out)
         case UnionDeclaration(name, members, possibilities, superInterface) =>
