@@ -144,37 +144,38 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     sym.returnType.map(_.dealias), typeParams.toSet))
 
   @annotation.tailrec
-  private def parse(types: List[Type], examined: ListSet[Type], parsed: ListSet[TypeDef]): ListSet[TypeDef] = types match {
-    case scalaType :: tail => {
-      if (!examined.contains(scalaType) && !scalaType.typeSymbol.isParameter) {
+  private def parse(types: List[Type], examined: ListSet[Type], parsed: ListSet[TypeDef]): ListSet[TypeDef] =
+    types.filterNot(excludeTypes.contains) match {
+      case scalaType :: tail => {
+        if (!examined.contains(scalaType) && !scalaType.typeSymbol.isParameter) {
 
-        val relevantMemberSymbols = scalaType.members.collect {
-          case m: MethodSymbol if isValidMethod(m) => m
+          val relevantMemberSymbols = scalaType.members.collect {
+            case m: MethodSymbol if isValidMethod(m) => m
+          }
+
+          val memberTypes = relevantMemberSymbols.map(
+            _.typeSignature.map(_.dealias) match {
+              case NullaryMethodType(resultType) => resultType
+              case t => t.map(_.dealias)
+            })
+
+          val typeArgs = scalaType match {
+            case t: scala.reflect.runtime.universe.TypeRef => t.args
+            case _ => List.empty[Type]
+          }
+
+          parse(
+            memberTypes ++: typeArgs ++: tail,
+            examined + scalaType,
+            parsed ++ parseType(scalaType))
+
+        } else {
+          parse(tail, examined + scalaType, parsed ++ parseType(scalaType))
         }
-
-        val memberTypes = relevantMemberSymbols.map(
-          _.typeSignature.map(_.dealias) match {
-            case NullaryMethodType(resultType) => resultType
-            case t => t.map(_.dealias)
-          })
-
-        val typeArgs = scalaType match {
-          case t: scala.reflect.runtime.universe.TypeRef => t.args
-          case _ => List.empty[Type]
-        }
-
-        parse(
-          memberTypes ++: typeArgs ++: tail,
-          examined + scalaType,
-          parsed ++ parseType(scalaType))
-
-      } else {
-        parse(tail, examined + scalaType, parsed ++ parseType(scalaType))
       }
-    }
 
-    case _ => parsed
-  }
+      case _ => parsed
+    }
 
   // TODO: resolve from implicit (typeclass)
   private def getTypeRef(scalaType: Type, typeParams: Set[String]): TypeRef = {
