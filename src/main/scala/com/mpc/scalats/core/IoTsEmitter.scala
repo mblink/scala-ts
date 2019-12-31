@@ -13,8 +13,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
   def typeAsValArg(s: String): String = s"_${s}val"
 
   def emit(declaration: ListSet[Declaration], out: PrintStream): Unit = {
-    list(declaration).groupBy(d => d.superInterface.fold(d.name)(_.name)).foreach(g => {
-      g._2.sortBy({
+    declaration.toList.sortBy({
         case _: SingletonDeclaration => -1
         case _: InterfaceDeclaration => 0
         case _: UnionDeclaration => 1
@@ -30,7 +29,6 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       }
       out.println()
       out.println()
-    })
   }
 
   def emitIoTsInterfaceDeclaration(

@@ -109,7 +109,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         Some(SealedUnion(
           tpe.typeSymbol.name.toString,
           ListSet.empty ++ members,
-          parseTypes(possibilities.reverse)))
+          parseTypes(possibilities)))
 
       case _ => Option.empty[SealedUnion]
     }
