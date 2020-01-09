@@ -37,7 +37,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
 
     val InterfaceDeclaration(name, fields, typeParams, _) = decl
 
-    val typeVal = objectName(name);
+    val typeVal = codecName(name);
 
     // Class definition
     if (typeParams.isEmpty) {
@@ -49,7 +49,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     }
 
     list(fields).foreach { v =>
-      out.println(s"${indent}${v.name}: ${getTypeIoTsString(v.typeRef)},")
+      out.println(s"${indent}${v.name}: ${getIoTsTypeString(v.typeRef)},")
     }
 
     out.println("});")
@@ -74,7 +74,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       out.println(" {")
 
       // Abstract fields - common to all the subtypes
-      emitMembers(members, true, out)
+      emitMembers(members, true, false, out)
 
       out.println("}")
       out.println()
@@ -88,8 +88,11 @@ final class IoTsEmitter(val config: Config) extends Emitter {
                                     superInterface: Option[InterfaceDeclaration],
                                     out: PrintStream): Unit = {
 
-    out.println(s"""export type ${name}U = ${list(possibilities).map(p => interfaceName(p.name)).mkString(" | ")};""")
-    out.println(s"""export const all${pluralize(name)} = ${list(possibilities).map(p => objectName(p.name)).mkString("[", ", ", "]")} as const;""")
+    def union(nameFn: (String) => String, p: ListSet[CustomTypeRef]) = list(possibilities).map(p => nameFn(p.name))
+
+    out.println(s"""export const ${codecType(name)}U = t.union(${union(codecName, possibilities).mkString("[", ", ", "]")});""")
+    out.println(s"""export const all${name} = ${union(objectName, possibilities).mkString("[", ", ", "]")} as const;""")
+    out.println(s"""export type ${name}U = t.TypeOf<typeof ${codecType(name)}U>;""")
     out.println()
     emitInterfaceDeclaration(name, members, superInterface, out)
 
@@ -101,40 +104,67 @@ final class IoTsEmitter(val config: Config) extends Emitter {
                                         superInterface: Option[InterfaceDeclaration],
                                         out: PrintStream): Unit = {
 
-    emitInterfaceDeclaration(name, members, superInterface, out)
+    out.println(s"export const ${codecName(name)} = t.strict({")
+    emitMembers(members, false, true, out)
+    out.println("});")
+    out.println()
+
+    out.println(s"export type ${interfaceName(name)} = t.TypeOf<typeof ${codecName(name)}>;")
+    out.println()
 
     out.println(s"export const ${objectName(name)}: ${interfaceName(name)} = {")
-
-    emitMembers(members, false, out)
-
+    emitMembers(members, false, false, out)
     out.println("};")
     out.println()
   }
 
-  def emitMembers(members: ListSet[Member], interfaceContext: Boolean, out: PrintStream): Unit = {
+  def emitMembers(members: ListSet[Member], interfaceContext: Boolean, iotsContext: Boolean, out: PrintStream): Unit = {
     members.foreach(m =>
       out.println(
         m.value.fold(s"${indent}${m.name.trim}: ${getTypeRefString(m.typeRef)};")
-        (v => s"${indent}${m.name.trim}: ${getTypeWrappedVal(v, m.typeRef, interfaceContext)},"))
+        (v => s"${indent}${m.name.trim}: ${
+          if (iotsContext)
+            getIoTsTypeWrappedVal(v, m.typeRef)
+          else
+            getTypeWrappedVal(v, m.typeRef, interfaceContext)
+        },"))
     )
   }
 
-  def getTypeIoTsString(typeRef: TypeRef): String = typeRef match {
+  def getIoTsTypeString(typeRef: TypeRef): String = typeRef match {
     case NumberRef => "t.number"
     case BooleanRef => "t.boolean"
     case StringRef => "t.string"
     case DateRef | DateTimeRef => "DateFromISOString"
-    case ArrayRef(innerType) => s"t.array(${getTypeIoTsString(innerType)})"
-    case NonEmptyArrayRef(innerType) => s"nonEmptyArray(${getTypeIoTsString(innerType)})"
+    case ArrayRef(innerType) => s"t.array(${getIoTsTypeString(innerType)})"
+    case NonEmptyArrayRef(innerType) => s"nonEmptyArray(${getIoTsTypeString(innerType)})"
     case CustomTypeRef(name, params) if params.isEmpty => customIoTsTypes(name)
     case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"${customIoTsTypes(name)}${params.map(getTypeIoTsString).mkString("(", ", ", ")")}"
+      s"${customIoTsTypes(name)}${params.map(getIoTsTypeString).mkString("(", ", ", ")")}"
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => typeAsValArg(param)
-    case UnionType(possibilities) => s"t.union(${possibilities.map(getTypeIoTsString).mkString("[", ", ", "]")})"
-    case MapType(keyType, valueType) => s"t.record(${getTypeIoTsString(keyType)}, ${getTypeIoTsString(valueType)})"
+    case UnionType(possibilities) => s"t.union(${possibilities.map(getIoTsTypeString).mkString("[", ", ", "]")})"
+    case MapType(keyType, valueType) => s"t.record(${getIoTsTypeString(keyType)}, ${getIoTsTypeString(valueType)})"
     case NullRef => "t.null"
     case UndefinedRef => "t.undefined"
+  }
+
+  def getIoTsTypeWrappedVal(value: Any, typeRef: TypeRef): String = typeRef match {
+    case NumberRef => s"t.literal(${value.toString})"
+    case BooleanRef => s"t.literal(${value.toString})"
+    case StringRef => s"t.literal(`${value.toString.trim}`)"
+    case DateRef | DateTimeRef => s"t.literal(new Date(`${value.toString.trim}`))"
+    case ArrayRef(_) => s"t.literal([${value}])"
+    case NonEmptyArrayRef(_) => s"t.literal(nonEmptyArray.of([${value}]))"
+    case CustomTypeRef(name, params) if params.isEmpty => codecName(name)
+    case CustomTypeRef(name, params) if params.nonEmpty =>
+      s"${codecName(name)}${params.map(getIoTsTypeWrappedVal(value, _)).mkString("(", ", ", ")")}"
+    case UnknownTypeRef(unknown) => unknown
+    case SimpleTypeRef(param) => s"t.strict(${typeAsValArg(param)})"
+    case UnionType(possibilities) => s"t.strict(t.union(${possibilities.map(getIoTsTypeWrappedVal(value, _)).mkString("[", ", ", "]")}))"
+    case MapType(keyType, valueType) => s"t.strict(t.record(${getIoTsTypeWrappedVal(value, keyType)}, ${getIoTsTypeWrappedVal(value, valueType)}))"
+    case NullRef => "t.literal(null)"
+    case UndefinedRef => "t.literal(undefined)"
   }
 
   def customIoTsTypes(name: String): String = name match {
@@ -151,11 +181,11 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case NonEmptyArrayRef(_) => s"nonEmptyArray.of([${value}])"
     case CustomTypeRef(name, params) if params.isEmpty => if (interfaceContext) interfaceName(name) else objectName(name)
     case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"${if (interfaceContext) interfaceName(name) else objectName(name)}${params.map(getTypeIoTsString).mkString("(", ", ", ")")}"
+      s"${if (interfaceContext) interfaceName(name) else objectName(name)}${params.map(getIoTsTypeString).mkString("(", ", ", ")")}"
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => if (interfaceContext) param else typeAsValArg(param)
-    case UnionType(possibilities) => s"t.union(${possibilities.map(getTypeIoTsString).mkString("[", ", ", "]")})"
-    case MapType(keyType, valueType) => s"t.record(${getTypeIoTsString(keyType)}, ${getTypeIoTsString(valueType)})"
+    case UnionType(possibilities) => s"t.union(${possibilities.map(getIoTsTypeString).mkString("[", ", ", "]")})"
+    case MapType(keyType, valueType) => s"t.record(${getIoTsTypeString(keyType)}, ${getIoTsTypeString(valueType)})"
     case NullRef => "null"
     case UndefinedRef => "undefined"
   }

@@ -30,6 +30,8 @@ trait Emitter {
       name
     }
   }
+  def codecName(name: String): String = s"${objectName(name)}C"
+  def codecType(name: String): String = s"${interfaceName(name)}C"
 
   def getTypeRefString(typeRef: TypeRef): String = typeRef match {
     case NumberRef => "number"
