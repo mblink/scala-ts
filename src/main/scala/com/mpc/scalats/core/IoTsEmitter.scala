@@ -169,7 +169,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
 
   def customIoTsTypes(name: String): String = name match {
     case "NonEmptyList" => "nonEmptyArray"
-    case _ => objectName(name)
+    case "optionFromNullable" => "optionFromNullable"
+    case _ => codecName(name)
   }
 
   def getTypeWrappedVal(value: Any, typeRef: TypeRef, interfaceContext: Boolean): String = typeRef match {
