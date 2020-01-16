@@ -216,7 +216,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
 
         CaseClassRef(caseClassName, ListSet.empty ++ typeArgRefs)
 
-      case "Either" => {
+      case "Either" | """\/""" | "Disjunction" => {
         val innerTypeL = scalaType.typeArgs.head
         val innerTypeR = scalaType.typeArgs.last
 
