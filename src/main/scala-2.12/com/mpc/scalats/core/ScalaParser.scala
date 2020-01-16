@@ -44,6 +44,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     } else {
       None
     }
+  }
 
   private object Field {
     def unapply(m: MethodSymbol): Option[MethodSymbol] = m match {

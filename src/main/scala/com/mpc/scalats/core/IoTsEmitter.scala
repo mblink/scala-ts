@@ -48,7 +48,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       out.println(s"export const ${typeVal} = ${params}${args} => t.type({")
     }
 
-    list(fields).foreach { v =>
+    fields.foreach { v =>
       out.println(s"${indent}${v.name}: ${getIoTsTypeString(v.typeRef)},")
     }
 
