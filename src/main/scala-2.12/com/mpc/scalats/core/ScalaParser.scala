@@ -17,8 +17,8 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     parse(types, ListSet[Type](), ListSet.empty[TypeDef])
 
 
-  private def parseType(tpe: Type): Option[TypeDef] =
-    if (!excludeTypes.contains(tpe)) {
+  private def parseType(tpe: Type): Option[TypeDef] = {
+    if (!excludeTypes.map(_.toString).contains(tpe.typeSymbol.fullName)) {
       tpe match {
         case _: SingleTypeApi =>
           parseObject(tpe)
