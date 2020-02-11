@@ -67,6 +67,9 @@ object TypeScriptGenerator {
       if (config.tsImports.iotsNonEmptyArray) {
         outputStream.println("""import { nonEmptyArray } from "io-ts-types/lib/nonEmptyArray";""")
       }
+      if (config.tsImports.iotsNumberFromString) {
+        outputStream.println("""import { NumberFromString } from "io-ts-types/lib/NumberFromString";""")
+      }
       if (config.tsImports.iotsOption) {
         outputStream.println("""import { optionFromNullable } from "io-ts-types/lib/optionFromNullable";""")
       }

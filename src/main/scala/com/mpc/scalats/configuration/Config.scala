@@ -24,6 +24,7 @@ case class TsImports(
   iots: Boolean = false,
   iotsDate: Boolean = false,
   iotsNonEmptyArray: Boolean = false,
+  iotsNumberFromString: Boolean = false,
   iotsOption: Boolean = false,
   customImports: List[String] = List()
 )
