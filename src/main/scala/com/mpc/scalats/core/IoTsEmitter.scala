@@ -135,7 +135,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case NumberRef => "t.number"
     case BooleanRef => "t.boolean"
     case StringRef => "t.string"
-    case DateRef | DateTimeRef => "DateFromISOString"
+    case DateRef => "LocalDateFromISOString"
+    case DateTimeRef => "DateFromISOString"
     case ArrayRef(innerType) => s"t.array(${getIoTsTypeString(innerType)})"
     case NonEmptyArrayRef(innerType) => s"nonEmptyArray(${getIoTsTypeString(innerType)})"
     case CustomTypeRef(name, params) if params.isEmpty => customIoTsTypes(name)
@@ -144,16 +145,22 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getIoTsTypeString).mkString("[", ", ", "]")})"
-    case MapType(keyType, valueType) => s"t.record(${getIoTsTypeString(keyType)}, ${getIoTsTypeString(valueType)})"
+    case MapType(keyType, valueType) => s"t.record(${getIoTsRecordKeyTypeString(keyType)}, ${getIoTsTypeString(valueType)})"
     case NullRef => "t.null"
     case UndefinedRef => "t.undefined"
+  }
+
+  def getIoTsRecordKeyTypeString(typeRef: TypeRef): String = typeRef match {
+    case NumberRef => "NumberFromString"
+    case _ => getIoTsTypeString(typeRef)
   }
 
   def getIoTsTypeWrappedVal(value: Any, typeRef: TypeRef): String = typeRef match {
     case NumberRef => s"t.literal(${value.toString})"
     case BooleanRef => s"t.literal(${value.toString})"
     case StringRef => s"t.literal(`${value.toString.trim}`)"
-    case DateRef | DateTimeRef => s"t.literal(new Date(`${value.toString.trim}`))"
+    case DateRef => s"t.literal(`${value.toString.trim}`)"
+    case DateTimeRef => s"t.literal(new Date(`${value.toString.trim}`))"
     case ArrayRef(_) => s"t.literal([${value}])"
     case NonEmptyArrayRef(_) => s"t.literal(nonEmptyArray.of([${value}]))"
     case CustomTypeRef(name, params) if params.isEmpty => codecName(name)
@@ -177,7 +184,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case NumberRef => value.toString
     case BooleanRef => value.toString
     case StringRef => s"`${value.toString.trim}`"
-    case DateRef | DateTimeRef => s"`${value.toString.trim}`"
+    case DateRef => s"`${value.toString.trim}`"
+    case DateTimeRef => s"`${value.toString.trim}`"
     case ArrayRef(_) => s"[${value}]"
     case NonEmptyArrayRef(_) => s"nonEmptyArray.of([${value}])"
     case CustomTypeRef(name, params) if params.isEmpty => if (interfaceContext) interfaceName(name) else objectName(name)

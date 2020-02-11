@@ -62,7 +62,7 @@ object TypeScriptGenerator {
         outputStream.println("""import * as t from "io-ts";""")
       }
       if (config.tsImports.iotsDate) {
-        outputStream.println("""import { DateFromISOString } from "io-ts-types/lib/DateFromISOString";""".stripMargin)
+        outputStream.println("""import { DateFromISOString } from "io-ts-types/lib/DateFromISOString";""")
       }
       if (config.tsImports.iotsNonEmptyArray) {
         outputStream.println("""import { nonEmptyArray } from "io-ts-types/lib/nonEmptyArray";""")

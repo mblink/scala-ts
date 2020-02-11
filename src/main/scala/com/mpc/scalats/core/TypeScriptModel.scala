@@ -66,7 +66,7 @@ object TypeScriptModel {
   }
 
   case object DateRef extends TypeRef {
-    override def toString = "Date"
+    override def toString = "LocalDate"
   }
 
   case object DateTimeRef extends TypeRef {
