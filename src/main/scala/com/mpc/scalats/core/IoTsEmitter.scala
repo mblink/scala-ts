@@ -88,7 +88,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
                                     superInterface: Option[InterfaceDeclaration],
                                     out: PrintStream): Unit = {
 
-    def union(nameFn: (String) => String, p: ListSet[CustomTypeRef]) = list(possibilities).map(p => nameFn(p.name))
+    def union(nameFn: (String) => String, p: ListSet[CustomTypeRef]) = possibilities.map(p => nameFn(p.name))
 
     out.println(s"""export const ${codecType(name)}U = t.union(${union(codecName, possibilities).mkString("[", ", ", "]")});""")
     out.println(s"""export const all${name} = ${union(objectName, possibilities).mkString("[", ", ", "]")} as const;""")
