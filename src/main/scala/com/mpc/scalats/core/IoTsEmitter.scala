@@ -135,7 +135,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case NumberRef => "t.number"
     case BooleanRef => "t.boolean"
     case StringRef => "t.string"
-    case DateRef => "LocalDateFromISOString"
+    case DateRef => "LocalDate"
     case DateTimeRef => "DateFromISOString"
     case ArrayRef(innerType) => s"t.array(${getIoTsTypeString(innerType)})"
     case NonEmptyArrayRef(innerType) => s"nonEmptyArray(${getIoTsTypeString(innerType)})"
