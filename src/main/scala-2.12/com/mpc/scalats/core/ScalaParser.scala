@@ -53,7 +53,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
           {
             val n = m.name.toString
             !(n.contains("$") || n.startsWith("<"))
-          } && 
+          } &&
           m.overrides.forall { o =>
             val declaring = o.owner.fullName
 
@@ -249,6 +249,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     !m.isConstructor && !m.isStatic && m.returnType != typeOf[Unit] &&
     !m.isImplicit
 
+  private def decls(sym: Symbol): List[Symbol] = sym.typeSignature.decls.sorted
 
   private def directKnownSubclasses(tpe: Type): List[Type] = {
     // Workaround for SI-7046: https://issues.scala-lang.org/browse/SI-7046
@@ -270,6 +271,12 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
       }
 
       case Some(o: ModuleSymbol) if (
+        o != NoSymbol &&
+          o == tpeSym.companion && o.companion == tpeSym // companion object of the given type
+      ) =>
+        allSubclasses(path.tail ++ decls(o), subclasses)
+
+      case Some(o: ModuleSymbol) if (
         o.companion == NoSymbol && // not a companion object
           o.typeSignature.baseClasses.contains(tpeSym)) =>
         allSubclasses(path.tail, subclasses + o.typeSignature)
@@ -284,7 +291,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     }
 
     if (tpeSym.isSealed && tpeSym.isAbstract) {
-      allSubclasses(tpeSym.owner.typeSignature.decls.sorted, ListSet.empty).toList
+      allSubclasses(decls(tpeSym.owner), ListSet.empty).toList
     } else List.empty
   }
 }
