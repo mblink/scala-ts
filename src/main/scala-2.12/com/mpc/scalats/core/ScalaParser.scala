@@ -16,9 +16,11 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
   def parseTypes(types: List[Type]): ListSet[TypeDef] =
     parse(types, ListSet[Type](), ListSet.empty[TypeDef])
 
+  def isNotExcluded(tpe: Type): Boolean =
+    !excludeTypes.exists(_.typeSymbol == tpe.typeSymbol)
 
   private def parseType(tpe: Type): Option[TypeDef] = {
-    if (!excludeTypes.map(_.toString).contains(tpe.typeSymbol.fullName)) {
+    if (isNotExcluded(tpe)) {
       tpe match {
         case _: SingleTypeApi =>
           parseObject(tpe)
@@ -146,7 +148,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
 
   @annotation.tailrec
   private def parse(types: List[Type], examined: ListSet[Type], parsed: ListSet[TypeDef]): ListSet[TypeDef] =
-    types.filterNot(excludeTypes.contains) match {
+    types.filter(isNotExcluded) match {
       case scalaType :: tail => {
         if (!examined.contains(scalaType) && !scalaType.typeSymbol.isParameter) {
 
