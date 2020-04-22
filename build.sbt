@@ -1,5 +1,7 @@
 import sbt.Keys._
 
+Global / onChangedBuildSource := ReloadOnSourceChanges
+
 val publishSettings = Seq(
   skip in publish := false,
   publishMavenStyle := true,

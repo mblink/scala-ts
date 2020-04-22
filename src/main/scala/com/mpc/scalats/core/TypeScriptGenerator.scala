@@ -21,7 +21,14 @@ object TypeScriptGenerator {
   }
 
   def getClassNames(mirror: Mirror)(className: String) = {
-    mirror.staticClass(className).toType
+    try {
+      mirror.staticClass(className).toType
+    } catch {
+      case e: Throwable => {
+        println(s"Could not find class $className, trying as module")
+        mirror.staticModule(className).moduleClass.asType.toType
+      }
+    }
   }
 
   def generateFromClassNames(
