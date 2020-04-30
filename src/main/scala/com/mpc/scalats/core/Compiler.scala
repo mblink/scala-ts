@@ -194,6 +194,8 @@ object Compiler {
         compileTypeRef(i, inInterfaceContext)
       })
 
+    case ScalaModel.TupleRef(tpes) =>
+      TypeScriptModel.TupleType(tpes.map(compileTypeRef(_, inInterfaceContext)))
 
     case ScalaModel.UnknownTypeRef(u) =>
       TypeScriptModel.UnknownTypeRef(u)

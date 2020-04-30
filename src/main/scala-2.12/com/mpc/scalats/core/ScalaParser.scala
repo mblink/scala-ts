@@ -180,6 +180,8 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
       case _ => parsed
     }
 
+  private val tupleName = """Tuple(\d)""".r
+
   // TODO: resolve from implicit (typeclass)
   private def getTypeRef(scalaType: Type, typeParams: Set[String]): TypeRef = {
     scalaType.typeSymbol.name.toString match {
@@ -227,6 +229,18 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
           getTypeRef(innerTypeL, typeParams),
           getTypeRef(innerTypeR, typeParams)))
       }
+
+      case "Ior" | """\&/""" =>
+        val typeRefL = getTypeRef(scalaType.typeArgs.head, typeParams)
+        val typeRefR = getTypeRef(scalaType.typeArgs.last, typeParams)
+
+        UnionRef(ListSet(
+          typeRefL,
+          typeRefR,
+          TupleRef(ListSet(typeRefL, typeRefR))))
+
+      case tupleName(_) =>
+        TupleRef(ListSet.empty ++ scalaType.typeArgs.map(getTypeRef(_, Set())))
 
       case "Map" =>
         val keyType = scalaType.typeArgs.head

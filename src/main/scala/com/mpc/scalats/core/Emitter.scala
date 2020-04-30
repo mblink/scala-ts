@@ -51,6 +51,8 @@ trait Emitter {
 
     case MapType(keyType, valueType) => s"{ [key: ${getTypeRefString(keyType)}]: ${getTypeRefString(valueType)} }"
 
+    case TupleType(types) => types.map(getTypeRefString).mkString("[", ", ", "]")
+
     case NullRef => "null"
     case UndefinedRef => "undefined"
   }
