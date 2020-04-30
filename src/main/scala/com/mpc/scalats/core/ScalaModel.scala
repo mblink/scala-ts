@@ -39,6 +39,8 @@ object ScalaModel {
 
   case class SeqRef(innerType: TypeRef) extends TypeRef
 
+  case class TupleRef(typeArgs: ListSet[TypeRef]) extends TypeRef
+
   case class NonEmptySeqRef(innerType: TypeRef) extends TypeRef
 
   case class TypeMember(name: String, typeRef: TypeRef, value: Option[Any] = None)

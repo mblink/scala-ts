@@ -88,4 +88,6 @@ object TypeScriptModel {
   case class UnionType(possibilities: ListSet[TypeRef]) extends TypeRef
 
   case class MapType(keyType: TypeRef, valueType: TypeRef) extends TypeRef
+
+  case class TupleType(types: ListSet[TypeRef]) extends TypeRef
 }
