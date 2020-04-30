@@ -40,9 +40,9 @@ trait Emitter {
     case DateRef | DateTimeRef => "Date"
     case ArrayRef(innerType) => s"${getTypeRefString(innerType)}[]"
     case NonEmptyArrayRef(innerType) => s"NonEmptyArray<${getTypeRefString(innerType)}>"
-    case CustomTypeRef(name, params) if params.isEmpty => name
-    case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"$name<${params.map(getTypeRefString).mkString(", ")}>"
+    case CustomTypeRef(name, params) =>
+      if (params.isEmpty) name
+      else s"$name<${params.map(getTypeRefString).mkString(", ")}>"
     case UnknownTypeRef(typeName) => typeName
     case SimpleTypeRef(param) => param
 

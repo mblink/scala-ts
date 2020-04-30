@@ -159,21 +159,31 @@ object Compiler {
     case ScalaModel.TypeParamRef(name) =>
       TypeScriptModel.SimpleTypeRef(name)
 
-    case ScalaModel.OptionRef(innerType) if (
-      config.optionToNullable && config.optionToUndefined) =>
-      TypeScriptModel.UnionType(ListSet(
+    case ScalaModel.OptionRef(innerType) =>
+      if (config.optionToNullable && config.optionToUndefined)
         TypeScriptModel.UnionType(ListSet(
-          compileTypeRef(innerType, inInterfaceContext), NullRef)),
+          TypeScriptModel.UnionType(ListSet(
+            compileTypeRef(innerType, inInterfaceContext), NullRef)),
+            UndefinedRef))
+
+      else if (config.emitIoTs)
+        TypeScriptModel.CustomTypeRef("optionFromNullable", ListSet(
+          compileTypeRef(innerType, inInterfaceContext)))
+
+      else if (config.optionToNullable)
+        TypeScriptModel.UnionType(ListSet(
+          compileTypeRef(innerType, inInterfaceContext),
+          NullRef))
+
+      else if (config.optionToUndefined)
+        TypeScriptModel.UnionType(ListSet(
+          compileTypeRef(innerType, inInterfaceContext),
           UndefinedRef))
 
-    case ScalaModel.OptionRef(innerType) if config.optionToNullable =>
-      TypeScriptModel.UnionType(ListSet(
-        compileTypeRef(innerType, inInterfaceContext),
-        NullRef))
-
-    case ScalaModel.OptionRef(innerType) if config.emitIoTs =>
-      TypeScriptModel.CustomTypeRef("optionFromNullable", ListSet(
-        compileTypeRef(innerType, inInterfaceContext)))
+      else
+        TypeScriptModel.UnionType(ListSet(
+          compileTypeRef(innerType, inInterfaceContext),
+          NullRef))
 
     case ScalaModel.MapRef(kT, vT) => TypeScriptModel.MapType(
       compileTypeRef(kT, inInterfaceContext),
@@ -184,10 +194,6 @@ object Compiler {
         compileTypeRef(i, inInterfaceContext)
       })
 
-    case ScalaModel.OptionRef(innerType) if config.optionToUndefined =>
-      TypeScriptModel.UnionType(ListSet(
-        compileTypeRef(innerType, inInterfaceContext),
-        UndefinedRef))
 
     case ScalaModel.UnknownTypeRef(u) =>
       TypeScriptModel.UnknownTypeRef(u)

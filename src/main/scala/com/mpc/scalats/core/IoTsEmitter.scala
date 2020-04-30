@@ -139,9 +139,9 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case DateTimeRef => "DateFromISOString"
     case ArrayRef(innerType) => s"t.array(${getIoTsTypeString(innerType)})"
     case NonEmptyArrayRef(innerType) => s"nonEmptyArray(${getIoTsTypeString(innerType)})"
-    case CustomTypeRef(name, params) if params.isEmpty => customIoTsTypes(name)
-    case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"${customIoTsTypes(name)}${params.map(getIoTsTypeString).mkString("(", ", ", ")")}"
+    case CustomTypeRef(name, params) =>
+      if (params.isEmpty) customIoTsTypes(name)
+      else s"${customIoTsTypes(name)}${params.map(getIoTsTypeString).mkString("(", ", ", ")")}"
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getIoTsTypeString).mkString("[", ", ", "]")})"
@@ -163,9 +163,9 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case DateTimeRef => s"t.literal(new Date(`${value.toString.trim}`))"
     case ArrayRef(_) => s"t.literal([${value}])"
     case NonEmptyArrayRef(_) => s"t.literal(nonEmptyArray.of([${value}]))"
-    case CustomTypeRef(name, params) if params.isEmpty => codecName(name)
-    case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"${codecName(name)}${params.map(getIoTsTypeWrappedVal(value, _)).mkString("(", ", ", ")")}"
+    case CustomTypeRef(name, params) =>
+      if (params.isEmpty) codecName(name)
+      else  s"${codecName(name)}${params.map(getIoTsTypeWrappedVal(value, _)).mkString("(", ", ", ")")}"
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => s"t.strict(${typeAsValArg(param)})"
     case UnionType(possibilities) => s"t.strict(t.union(${possibilities.map(getIoTsTypeWrappedVal(value, _)).mkString("[", ", ", "]")}))"
@@ -188,9 +188,12 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case DateTimeRef => s"`${value.toString.trim}`"
     case ArrayRef(_) => s"[${value}]"
     case NonEmptyArrayRef(_) => s"nonEmptyArray.of([${value}])"
-    case CustomTypeRef(name, params) if params.isEmpty => if (interfaceContext) interfaceName(name) else objectName(name)
-    case CustomTypeRef(name, params) if params.nonEmpty =>
-      s"${if (interfaceContext) interfaceName(name) else objectName(name)}${params.map(getIoTsTypeString).mkString("(", ", ", ")")}"
+    case CustomTypeRef(name, params) =>
+      if (params.isEmpty) {
+        if (interfaceContext) interfaceName(name) else objectName(name)
+      } else {
+        s"${if (interfaceContext) interfaceName(name) else objectName(name)}${params.map(getIoTsTypeString).mkString("(", ", ", ")")}"
+      }
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => if (interfaceContext) param else typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getIoTsTypeString).mkString("[", ", ", "]")})"
