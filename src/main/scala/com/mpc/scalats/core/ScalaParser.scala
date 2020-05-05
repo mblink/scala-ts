@@ -195,7 +195,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         BooleanRef
       case "String" =>
         StringRef
-      case "List" | "Seq" | "Set" => // TODO: Traversable
+      case "List" | "Seq" | "Set" => // TODO: Iterable
         val innerType = scalaType.typeArgs.head
         SeqRef(getTypeRef(innerType, typeParams))
       case "NonEmptyList" =>
@@ -272,7 +272,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     val tpeSym = tpe.typeSymbol.asClass
 
     @annotation.tailrec
-    def allSubclasses(path: Traversable[Symbol], subclasses: ListSet[Type]): ListSet[Type] = path.headOption match {
+    def allSubclasses(path: Iterable[Symbol], subclasses: ListSet[Type]): ListSet[Type] = path.headOption match {
       case Some(cls: ClassSymbol) if (
         tpeSym != cls && cls.selfType.baseClasses.contains(tpeSym)) => {
         val newSub: ListSet[Type] = if (!cls.isCaseClass) {

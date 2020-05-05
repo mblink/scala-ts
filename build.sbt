@@ -39,16 +39,18 @@ lazy val pomSettings = Seq(
     </developers>
 )
 
+lazy val scalaVersions = Seq("2.12.11", "2.13.2")
+
 lazy val root = (project in file(".")).
   settings(Seq(
     name := "scala-ts",
     organization := "com.github.miloszpp",
     mainClass in (Compile, run) := Some("com.mpc.scalats.Main"),
-    scalaVersion := "2.12.10",
-    crossScalaVersions := Seq(scalaVersion.value),
+    crossScalaVersions := scalaVersions,
+    scalaVersion := scalaVersions.find(_.startsWith("2.12")).get,
     sbtVersion in pluginCrossBuild := {
       scalaBinaryVersion.value match {
-        case "2.12" => "1.3.4"
+        case "2.12" | "2.13" => "1.3.4"
       }
     }) ++ publishSettings ++ pomSettings)
 
