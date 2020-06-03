@@ -180,7 +180,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
       case _ => parsed
     }
 
-  private val tupleName = """Tuple(\d)""".r
+  private val tupleName = """^Tuple(\d+)$""".r
 
   // TODO: resolve from implicit (typeclass)
   private def getTypeRef(scalaType: Type, typeParams: Set[String]): TypeRef = {
@@ -208,6 +208,8 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         DateRef
       case "Instant" | "Timestamp" | "LocalDateTime" | "ZonedDateTime" | "DateTime" =>
         DateTimeRef
+      case tupleName(_) =>
+        TupleRef(ListSet.empty ++ scalaType.typeArgs.map(getTypeRef(_, Set())))
       case typeParam if typeParams.contains(typeParam) =>
         TypeParamRef(typeParam)
       case _ if isAnyValChild(scalaType) =>
@@ -239,9 +241,6 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
           typeRefR,
           TupleRef(ListSet(typeRefL, typeRefR))))
 
-      case tupleName(_) =>
-        TupleRef(ListSet.empty ++ scalaType.typeArgs.map(getTypeRef(_, Set())))
-
       case "Map" =>
         val keyType = scalaType.typeArgs.head
         val valueType = scalaType.typeArgs.last
@@ -255,7 +254,8 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     scalaType.typeSymbol.asClass.isTrait && scalaType.typeSymbol.asClass.isSealed && scalaType.typeParams.isEmpty
 
   @inline private def isCaseClass(scalaType: Type): Boolean =
-    scalaType.typeSymbol.isClass && scalaType.typeSymbol.asClass.isCaseClass
+    scalaType.typeSymbol.isClass && scalaType.typeSymbol.asClass.isCaseClass &&
+      tupleName.unapplySeq(scalaType.typeSymbol.name.toString).isEmpty
 
   @inline private def isAnyValChild(scalaType: Type): Boolean =
     scalaType <:< typeOf[AnyVal]
