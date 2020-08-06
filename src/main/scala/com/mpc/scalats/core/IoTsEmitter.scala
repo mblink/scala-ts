@@ -145,6 +145,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getIoTsTypeString).mkString("[", ", ", "]")})"
+    case TheseType(lT, rT) => "getIoTsTypeString"
     case MapType(keyType, valueType) => s"t.record(${getIoTsRecordKeyTypeString(keyType)}, ${getIoTsTypeString(valueType)})"
     case TupleType(types) => s"t.tuple(${types.map(getIoTsTypeString).mkString("[", ", ", "]")})"
     case NullRef => "t.null"
@@ -170,6 +171,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => s"t.strict(${typeAsValArg(param)})"
     case UnionType(possibilities) => s"t.strict(t.union(${possibilities.map(getIoTsTypeWrappedVal(value, _)).mkString("[", ", ", "]")}))"
+    case TheseType(lT, rT) => "getIoTsTypeWrappedVal"
     case MapType(keyType, valueType) => s"t.strict(t.record(${getIoTsTypeWrappedVal(value, keyType)}, ${getIoTsTypeWrappedVal(value, valueType)}))"
     case TupleType(types) => s"t.strict(t.tuple(${types.map(getIoTsTypeWrappedVal(value, _)).mkString("[", ", ", "]")}))"
     case NullRef => "t.literal(null)"
@@ -199,6 +201,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => if (interfaceContext) param else typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getIoTsTypeString).mkString("[", ", ", "]")})"
+    case TheseType(lT, rT) => "getTypeWrappedVal"
     case MapType(keyType, valueType) => s"t.record(${getIoTsTypeString(keyType)}, ${getIoTsTypeString(valueType)})"
     case TupleType(types) => s"t.tuple(${types.map(getIoTsTypeString).mkString("[", ", ", "]")})"
     case NullRef => "null"

@@ -49,6 +49,8 @@ trait Emitter {
     case UnionType(possibilities) =>
       possibilities.map(getTypeRefString).mkString("(", " | ", ")")
 
+    case TheseType(lT, rT) => "getTypeRefString"
+
     case MapType(keyType, valueType) => s"{ [key: ${getTypeRefString(keyType)}]: ${getTypeRefString(valueType)} }"
 
     case TupleType(types) => types.map(getTypeRefString).mkString("[", ", ", "]")
