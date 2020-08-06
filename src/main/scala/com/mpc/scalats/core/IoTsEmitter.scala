@@ -145,7 +145,9 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getIoTsTypeString).mkString("[", ", ", "]")})"
-    case TheseType(lT, rT) => "getIoTsTypeString"
+    case TheseType(lT, rT) =>
+      getIoTsTypeString(UnionType(ListSet(lT, rT, TupleType(ListSet(lT, rT))))) +
+      s"""\n${indent(2)}.pipe(toThese("These", ${getIoTsTypeString(lT)}, ${getIoTsTypeString(rT)}))"""
     case MapType(keyType, valueType) => s"t.record(${getIoTsRecordKeyTypeString(keyType)}, ${getIoTsTypeString(valueType)})"
     case TupleType(types) => s"t.tuple(${types.map(getIoTsTypeString).mkString("[", ", ", "]")})"
     case NullRef => "t.null"
