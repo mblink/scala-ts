@@ -49,7 +49,7 @@ trait Emitter {
     case UnionType(possibilities) =>
       possibilities.map(getTypeRefString).mkString("(", " | ", ")")
 
-    case TheseType(lT, rT) => "getTypeRefString"
+    case TheseType(lT, rT) => s"Th.These<${getTypeRefString(lT)}, ${getTypeRefString(rT)}>"
 
     case MapType(keyType, valueType) => s"{ [key: ${getTypeRefString(keyType)}]: ${getTypeRefString(valueType)} }"
 
