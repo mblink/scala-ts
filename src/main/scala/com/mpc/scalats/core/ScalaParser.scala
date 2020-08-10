@@ -195,7 +195,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         BooleanRef
       case "String" =>
         StringRef
-      case "List" | "Seq" | "Set" => // TODO: Iterable
+      case "List" | "Seq" | "Set" | "Vector" => // TODO: Iterable
         val innerType = scalaType.typeArgs.head
         SeqRef(getTypeRef(innerType, typeParams))
       case "NonEmptyList" =>
