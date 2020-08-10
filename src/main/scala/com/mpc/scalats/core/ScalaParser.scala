@@ -195,7 +195,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         BooleanRef
       case "String" =>
         StringRef
-      case "List" | "Seq" | "Set" => // TODO: Iterable
+      case "List" | "Seq" | "Set" | "Vector" => // TODO: Iterable
         val innerType = scalaType.typeArgs.head
         SeqRef(getTypeRef(innerType, typeParams))
       case "NonEmptyList" =>
@@ -233,13 +233,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
       }
 
       case "Ior" | """\&/""" =>
-        val typeRefL = getTypeRef(scalaType.typeArgs.head, typeParams)
-        val typeRefR = getTypeRef(scalaType.typeArgs.last, typeParams)
-
-        UnionRef(ListSet(
-          typeRefL,
-          typeRefR,
-          TupleRef(ListSet(typeRefL, typeRefR))))
+        TheseRef(getTypeRef(scalaType.typeArgs.head, typeParams), getTypeRef(scalaType.typeArgs.last, typeParams))
 
       case "Map" =>
         val keyType = scalaType.typeArgs.head

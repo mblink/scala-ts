@@ -197,6 +197,11 @@ object Compiler {
     case ScalaModel.TupleRef(tpes) =>
       TypeScriptModel.TupleType(tpes.map(compileTypeRef(_, inInterfaceContext)))
 
+    case ScalaModel.TheseRef(lT, rT) =>
+      TypeScriptModel.TheseType(
+        compileTypeRef(lT, inInterfaceContext),
+        compileTypeRef(rT, inInterfaceContext))
+
     case ScalaModel.UnknownTypeRef(u) =>
       TypeScriptModel.UnknownTypeRef(u)
   }
