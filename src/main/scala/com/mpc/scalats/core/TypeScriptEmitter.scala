@@ -26,7 +26,7 @@ final class TypeScriptEmitter(val config: Config) extends Emitter {
         case SingletonDeclaration(name, members, superInterface) =>
           emitSingletonDeclaration(name, members, superInterface, out)
 
-        case UnionDeclaration(name, fields, possibilities, superInterface) =>
+        case UnionDeclaration(name, fields, possibilities, superInterface, _) =>
           emitUnionDeclaration(
             name, fields, possibilities, superInterface, out)
       }

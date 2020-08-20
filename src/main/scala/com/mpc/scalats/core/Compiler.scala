@@ -81,7 +81,16 @@ object Compiler {
               case m =>
                 CustomTypeRef(buildInterfaceName(m.name), ListSet.empty)
             },
-            superInterface)
+            superInterface,
+            possibilities.foldLeft(true)((b, p) =>
+              if(b) {
+                p match {
+                  case ScalaModel.CaseObject(_, _) => true
+                  case _ => false
+                }
+              } else {
+                false
+              }))
         }
       }
     }

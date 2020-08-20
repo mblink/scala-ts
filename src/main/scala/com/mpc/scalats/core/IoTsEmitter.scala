@@ -21,8 +21,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       }).foreach {
         case decl: InterfaceDeclaration =>
           emitIoTsInterfaceDeclaration(decl, out)
-        case UnionDeclaration(name, members, possibilities, superInterface) =>
-          emitUnionDeclaration(name, members, possibilities, superInterface, out)
+        case UnionDeclaration(name, members, possibilities, superInterface, emitAll) =>
+          emitUnionDeclaration(name, members, possibilities, superInterface, emitAll, out)
         case SingletonDeclaration(name, members, superInterface) =>
           emitSingletonDeclaration(name, members, superInterface, out)
         case _ => ()
@@ -86,12 +86,15 @@ final class IoTsEmitter(val config: Config) extends Emitter {
                                     members: ListSet[Member],
                                     possibilities: ListSet[CustomTypeRef],
                                     superInterface: Option[InterfaceDeclaration],
+                                    emitAll: Boolean,
                                     out: PrintStream): Unit = {
 
-    def union(nameFn: (String) => String, p: ListSet[CustomTypeRef]) = possibilities.map(p => nameFn(p.name))
+    def union(nameFn: (String) => String) = possibilities.map(p => nameFn(p.name))
 
-    out.println(s"""export const ${codecType(name)}U = t.union(${union(codecName, possibilities).mkString("[", ", ", "]")});""")
-    out.println(s"""export const all${name} = ${union(objectName, possibilities).mkString("[", ", ", "]")} as const;""")
+    out.println(s"""export const ${codecType(name)}U = t.union(${union(codecName).mkString("[", ", ", "]")});""")
+    if(emitAll) {
+      out.println(s"""export const all${name} = ${union(objectName).mkString("[", ", ", "]")} as const;""")
+    }
     out.println(s"""export type ${name}U = t.TypeOf<typeof ${codecType(name)}U>;""")
     out.println()
     emitInterfaceDeclaration(name, members, superInterface, out)

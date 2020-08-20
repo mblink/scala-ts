@@ -43,7 +43,8 @@ object TypeScriptModel {
     name: String,
     fields: ListSet[Member],
     possibilities: ListSet[CustomTypeRef],
-    superInterface: Option[InterfaceDeclaration]
+    superInterface: Option[InterfaceDeclaration],
+    emitAllConst: Boolean
   ) extends Declaration
 
   case class ClassConstructor(parameters: ListSet[ClassConstructorParameter])
