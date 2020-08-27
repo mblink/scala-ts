@@ -206,6 +206,9 @@ object Compiler {
     case ScalaModel.TupleRef(tpes) =>
       TypeScriptModel.TupleType(tpes.map(compileTypeRef(_, inInterfaceContext)))
 
+    case ScalaModel.EitherRef(lT, rT) =>
+      TypeScriptModel.EitherType(compileTypeRef(lT, inInterfaceContext), compileTypeRef(rT, inInterfaceContext))
+
     case ScalaModel.TheseRef(lT, rT) =>
       TypeScriptModel.TheseType(
         compileTypeRef(lT, inInterfaceContext),

@@ -148,6 +148,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getIoTsTypeString).mkString("[", ", ", "]")})"
+    case EitherType(lT, rT) =>
+      s"""either(${getIoTsTypeString(lT)}, ${getIoTsTypeString(rT)})"""
     case TheseType(lT, rT) =>
       s"""theseC(${getIoTsTypeString(lT)}, ${getIoTsTypeString(rT)})"""
     case MapType(keyType, valueType) => s"t.record(${getIoTsRecordKeyTypeString(keyType)}, ${getIoTsTypeString(valueType)})"
@@ -175,6 +177,10 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => s"t.strict(${typeAsValArg(param)})"
     case UnionType(possibilities) => s"t.strict(t.union(${possibilities.map(getIoTsTypeWrappedVal(value, _)).mkString("[", ", ", "]")}))"
+    case EitherType(lT, rT) =>
+      s"""t.strict(t.union([
+        ${getIoTsTypeWrappedVal(value, lT)},
+        ${getIoTsTypeWrappedVal(value, rT)}]))"""
     case TheseType(lT, rT) =>
       s"""t.strict(t.union([
         ${getIoTsTypeWrappedVal(value, lT)},
@@ -209,6 +215,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => if (interfaceContext) param else typeAsValArg(param)
     case UnionType(possibilities) => s"t.union(${possibilities.map(getIoTsTypeString).mkString("[", ", ", "]")})"
+    case EitherType(lT, rT) =>
+      s"""t.union([${getIoTsTypeString(lT)}, ${getIoTsTypeString(rT)}])"""
     case TheseType(lT, rT) =>
       s"""t.union([
           ${getIoTsTypeString(lT)}, ${getIoTsTypeString(rT)}, ${getIoTsTypeString(TupleType(ListSet(lT, rT)))}])"""

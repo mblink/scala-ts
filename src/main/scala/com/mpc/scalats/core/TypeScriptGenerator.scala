@@ -77,6 +77,9 @@ object TypeScriptGenerator {
       if (config.tsImports.iotsNumberFromString) {
         outputStream.println("""import { NumberFromString } from "io-ts-types/lib/NumberFromString";""")
       }
+      if (config.tsImports.iotsEither) {
+        outputStream.println("""import { either } from "io-ts-types/lib/either";""")
+      }
       if (config.tsImports.iotsOption) {
         outputStream.println("""import { optionFromNullable } from "io-ts-types/lib/optionFromNullable";""")
       }

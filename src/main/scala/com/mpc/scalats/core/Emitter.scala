@@ -37,7 +37,8 @@ trait Emitter {
     case NumberRef => "number"
     case BooleanRef => "boolean"
     case StringRef => "string"
-    case DateRef | DateTimeRef => "Date"
+    case DateRef => "LocalDate"
+    case DateTimeRef => "Date"
     case ArrayRef(innerType) => s"${getTypeRefString(innerType)}[]"
     case NonEmptyArrayRef(innerType) => s"NonEmptyArray<${getTypeRefString(innerType)}>"
     case CustomTypeRef(name, params) =>
@@ -48,6 +49,8 @@ trait Emitter {
 
     case UnionType(possibilities) =>
       possibilities.map(getTypeRefString).mkString("(", " | ", ")")
+
+    case EitherType(lT, rT) => s"E.Either<${getTypeRefString(lT)}, ${getTypeRefString(rT)}>"
 
     case TheseType(lT, rT) => s"Th.These<${getTypeRefString(lT)}, ${getTypeRefString(rT)}>"
 
