@@ -33,6 +33,8 @@ object ScalaModel {
 
   case class UnionRef(possibilities: ListSet[TypeRef]) extends TypeRef
 
+  case class EitherRef(leftType: TypeRef, rightType: TypeRef) extends TypeRef
+
   case class MapRef(keyType: TypeRef, valueType: TypeRef) extends TypeRef
 
   case class CaseClassRef(name: String, typeArgs: ListSet[TypeRef]) extends TypeRef
