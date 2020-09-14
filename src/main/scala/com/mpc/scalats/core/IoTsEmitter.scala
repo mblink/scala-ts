@@ -91,6 +91,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
 
     def union(nameFn: (String) => String) = possibilities.map(p => nameFn(p.name))
 
+    out.println(s"""export const all${name}C = ${union(codecName).mkString("[", ", ", "]")} as const;""")
     out.println(s"""export const ${codecType(name)}U = t.union(${union(codecName).mkString("[", ", ", "]")});""")
     if(emitAll) {
       out.println(s"""export const all${name} = ${union(objectName).mkString("[", ", ", "]")} as const;""")
