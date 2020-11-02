@@ -47,7 +47,7 @@ lazy val root = (project in file(".")).
     organization := "com.github.miloszpp",
     mainClass in (Compile, run) := Some("com.mpc.scalats.Main"),
     crossScalaVersions := scalaVersions,
-    scalaVersion := scalaVersions.find(_.startsWith("2.12")).get,
+    scalaVersion := scalaVersions.find(_.startsWith("2.13")).get,
     sbtVersion in pluginCrossBuild := {
       scalaBinaryVersion.value match {
         case "2.12" | "2.13" => "1.3.4"
