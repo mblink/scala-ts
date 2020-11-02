@@ -2,6 +2,7 @@ package com.mpc.scalats.core
 
 import com.mpc.scalats.configuration.Config
 import scala.reflect.runtime.universe._
+import scala.util.{Failure, Success, Try}
 
 /**
   * Created by Milosz on 11.06.2016.
@@ -20,16 +21,49 @@ object TypeScriptGenerator {
     }
   }
 
-  def getClassNames(mirror: Mirror)(className: String) = {
-    try {
-      mirror.staticClass(className).toType
-    } catch {
-      case e: Throwable => {
-        println(s"Could not find class $className, trying as module")
-        mirror.staticModule(className).moduleClass.asType.toType
+  def normalizeName(packagePath: Option[String], simpleName: String) =
+    s"${packagePath.getOrElse("")}.${Option(simpleName).getOrElse("")}".stripPrefix(".")
+
+  def reflectType(mirror: Mirror)(packagePath: Option[String], simpleName: String): Symbol =
+    (packagePath match {
+      case Some(p) => Try(mirror.staticModule(p)).getOrElse(mirror.staticPackage(p))
+      case None => mirror.staticPackage("scala")
+    }).typeSignature.member(TypeName(simpleName))
+
+  def reflectModule(mirror: Mirror)(packagePath: Option[String], simpleName: String): Symbol =
+    mirror.staticModule(normalizeName(packagePath, simpleName))
+
+  def reflectClass(mirror: Mirror)(packagePath: Option[String], simpleName: String): Symbol =
+    mirror.staticClass(normalizeName(packagePath, simpleName))
+
+  val reflectTypes = List("class" -> reflectClass _, "module" -> reflectModule _, "type" -> reflectType _)
+
+  def tryReflect(mirror: Mirror)(packagePath: Option[String], simpleName: String): Try[Symbol] = {
+    val name = normalizeName(packagePath, simpleName)
+    reflectTypes.zipWithIndex.foldLeft(Failure(new Throwable): Try[Symbol]) { case (acc, ((tpe, fn), i)) =>
+      acc.orElse {
+        reflectTypes.lift(i - 1).foreach { case (t, _) => println(s"Could not find $t $name, trying as $tpe") }
+        Try(fn(mirror)(packagePath, simpleName))
       }
     }
   }
+
+  val classNameRx = """^((?:([^\.]+(?:\.[^\.]+)*)\.)?([a-zA-Z0-9]+))(?:\[(.*)\])?$""".r
+
+  def getTypeFromName(mirror: Mirror)(className: String): Type =
+    className match {
+      case classNameRx(_, packagePath, simpleName, typeParamsStr) =>
+        val typeParams = ScalaParser.parseTypeParams(typeParamsStr).map(getTypeFromName(mirror))
+        val tpe = tryReflect(mirror)(Option(packagePath), simpleName) match {
+          case Success(m: ModuleSymbol) => m.moduleClass.asType.toType
+          case Success(s) => appliedType(s, typeParams)
+          case Failure(th) => throw new Throwable(s"Failed to parse type $className", th)
+        }
+
+        (if (typeParams.isEmpty && tpe.typeParams.nonEmpty) tpe.typeConstructor else tpe)//.map(_.dealias)
+
+      case _ => sys.error(s"Something went wrong, unable to parse `$className`")
+    }
 
   def generateFromClassNames(
     classNames: List[String],
@@ -40,11 +74,11 @@ object TypeScriptGenerator {
     val mirror = runtimeMirror(classLoader)
     val types = classNames.map(cn => {
       println(s"className = $cn")
-      getClassNames(mirror)(cn)
+      getTypeFromName(mirror)(cn)
     })
     val excludeTypes = excludeClassNames.map(cn => {
       println(s"exclude className = $cn")
-      getClassNames(mirror)(cn)
+      getTypeFromName(mirror)(cn)
     })
 
     generate(types, excludeTypes, logger, mirror)(updateConfig(c))

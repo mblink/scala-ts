@@ -4,8 +4,9 @@ package com.mpc.scalats.core
   * Created by Milosz on 09.06.2016.
   */
 
+import scala.annotation.tailrec
+import scala.collection.mutable.StringBuilder
 import scala.collection.immutable.ListSet
-
 import scala.reflect.runtime.universe._
 
 // TODO: Keep namespace using fullName from the Type
@@ -80,7 +81,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         val v = mirror.reflect(mirror.reflectModule(sm).instance).reflectMethod(m)
 
         if (m.paramLists.isEmpty) {
-          TypeMember(m.name.toString, getTypeRef(m.returnType, Set.empty), Some(v()))
+          TypeMember(m.name.toString, getTypeRef(trueType(m.returnType, Some(tpe)), Set()), Some(v()))
         } else {
           TypeMember(m.name.toString, getTypeRef(m.returnType, Set.empty), None)
         }
@@ -89,12 +90,13 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
 
     val members = tpe.decls.sorted.collect {
       case Field(m) if !m.isStatic => {
-        member(m, List.empty)
+        member(tpe, m, List.empty)
       }
     }
 
     Some(CaseObject(
       tpe.typeSymbol.name.toString stripSuffix ".type",
+      tpe.toString,
       ListSet.empty ++ statics ++ members))
   }
 
@@ -104,13 +106,14 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     // Members
     val members = tpe.members.sorted.collect {
       case m: MethodSymbol if isValidMethod(m) && !m.name.toString.endsWith("$") =>
-        member(m, List.empty)
+        member(tpe, m, List.empty)
     }
 
     directKnownSubclasses(tpe) match {
       case possibilities @ (_ :: _ ) =>
         Some(SealedUnion(
           tpe.typeSymbol.name.toString,
+          tpe.toString,
           ListSet.empty ++ members,
           parseTypes(possibilities)))
 
@@ -119,32 +122,33 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
   }
 
   private def parseCaseClass(caseClassType: Type): Option[CaseClass] = {
-    val typeParams = caseClassType.typeConstructor.
-      dealias.typeParams.map(_.name.decodedName.toString)
+    val typeParams = caseClassType.typeParams.map(_.name.decodedName.toString)
 
     // Members
     val members = caseClassType.members.sorted.collect {
       case Field(m) if m.isCaseAccessor =>
-        member(m, typeParams)
+        member(caseClassType, m, typeParams)
     }.toList
 
     val values = caseClassType.decls.sorted.collect {
       case Field(m) =>
-        member(m, typeParams)
+        member(caseClassType, m, typeParams)
     }.filterNot(members.contains)
 
     Some(CaseClass(
       caseClassType.typeSymbol.name.toString,
+      caseClassType.toString,
       ListSet.empty ++ members,
       ListSet.empty ++ values,
       ListSet.empty ++ typeParams
     ))
   }
 
-  @inline private def member(
-    sym: MethodSymbol, typeParams: List[String]
-  ) = TypeMember(sym.name.toString, getTypeRef(
-    sym.returnType.map(_.dealias), typeParams.toSet))
+  @inline private def trueType(tpe: Type, seenFrom: Option[Type]): Type =
+    seenFrom.fold(tpe)(t => tpe.asSeenFrom(t, t.typeSymbol)).map(_.dealias)
+
+  @inline private def member(owner: Type, sym: MethodSymbol, typeParams: List[String]): TypeMember =
+    TypeMember(sym.name.toString, getTypeRef(trueType(sym.returnType, Some(owner)), typeParams.toSet))
 
   @annotation.tailrec
   private def parse(types: List[Type], examined: ListSet[Type], parsed: ListSet[TypeDef]): ListSet[TypeDef] =
@@ -221,7 +225,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         val typeArgs = scalaType.typeArgs
         val typeArgRefs = typeArgs.map(getTypeRef(_, typeParams))
 
-        CaseClassRef(caseClassName, ListSet.empty ++ typeArgRefs)
+        CaseClassRef(caseClassName, scalaType.toString, ListSet.empty ++ typeArgRefs)
 
       case "Either" | """\/""" | "Disjunction" =>
         EitherRef(getTypeRef(scalaType.typeArgs.head, typeParams), getTypeRef(scalaType.typeArgs.last, typeParams))
@@ -233,13 +237,15 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         val keyType = scalaType.typeArgs.head
         val valueType = scalaType.typeArgs.last
         MapRef(getTypeRef(keyType, typeParams), getTypeRef(valueType, typeParams))
+
       case unknown =>
         UnknownTypeRef(unknown)
     }
   }
 
   @inline private def isSealedUnion(scalaType: Type): Boolean =
-    scalaType.typeSymbol.asClass.isTrait && scalaType.typeSymbol.asClass.isSealed && scalaType.typeParams.isEmpty
+    scalaType.typeSymbol.isClass && scalaType.typeSymbol.asClass.isTrait &&
+      scalaType.typeSymbol.asClass.isSealed && scalaType.typeParams.isEmpty
 
   @inline private def isCaseClass(scalaType: Type): Boolean =
     scalaType.typeSymbol.isClass && scalaType.typeSymbol.asClass.isCaseClass &&
@@ -297,5 +303,37 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     if (tpeSym.isSealed && tpeSym.isAbstract) {
       allSubclasses(decls(tpeSym.owner), ListSet.empty).toList
     } else List.empty
+  }
+}
+
+object ScalaParser {
+  def parseTypeParams(typeParams: String): List[String] = {
+    @tailrec
+    def go(prev: List[String], curr: StringBuilder, chars: List[Char], openBrackets: List[Char]): List[String] =
+      (chars, openBrackets) match {
+        case (',' :: rest, Nil) =>
+          go(prev :+ curr.toString, new StringBuilder(""), rest, Nil)
+
+        case ((c @ ',') :: rest, bs) =>
+          go(prev, curr += c, rest, bs)
+
+        case (']' :: rest, Nil) =>
+          sys.error(s"Unexpected closing bracket `]` in string $typeParams")
+
+        case ((c @ ']') :: rest, _ :: bs) =>
+          go(prev, curr += c, rest, bs)
+
+        case ((c @ '[') :: rest, bs) =>
+          go(prev, curr += c, rest, c :: bs)
+
+        case (c :: rest, bs) =>
+          go(prev, curr += c, rest, bs)
+
+        case (Nil, _) =>
+          prev :+ curr.toString
+      }
+
+    Option(typeParams).filter(_.nonEmpty).fold(List[String]())(
+      tps => go(Nil, new StringBuilder(""), tps.toList, Nil))
   }
 }

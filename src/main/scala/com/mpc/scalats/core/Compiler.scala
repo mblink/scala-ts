@@ -47,7 +47,7 @@ object Compiler {
             compileInterface(scalaClass, superInterface)) ++ clazz
         }
 
-        case ScalaModel.CaseObject(name, members) => {
+        case ScalaModel.CaseObject(name, _, members) => {
           val values = members.map { scalaMember =>
             Member(scalaMember.name,
               compileTypeRef(scalaMember.typeRef, false),
@@ -58,7 +58,7 @@ object Compiler {
             SingletonDeclaration(name, values, superInterface))
         }
 
-        case ScalaModel.SealedUnion(name, fields, possibilities) => {
+        case ScalaModel.SealedUnion(name, fullTypeName, fields, possibilities) => {
           val ifaceFields = fields.map { scalaMember =>
             Member(scalaMember.name,
               compileTypeRef(scalaMember.typeRef, false),
@@ -66,26 +66,26 @@ object Compiler {
           }
 
           val unionRef = InterfaceDeclaration(
-            buildInterfaceName(name), ifaceFields, ListSet.empty[String], superInterface)
+            buildInterfaceName(name, fullTypeName), ifaceFields, ListSet.empty[String], superInterface)
 
           compile(possibilities, Some(unionRef)) + UnionDeclaration(
             name,
             ifaceFields,
             possibilities.map {
-              case ScalaModel.CaseObject(nme, _) =>
+              case ScalaModel.CaseObject(nme, _, _) =>
                 CustomTypeRef(nme, ListSet.empty)
 
-              case ScalaModel.CaseClass(n, _, _, tpeArgs) =>
-                CustomTypeRef(buildInterfaceName(n), tpeArgs.map { SimpleTypeRef(_) })
+              case ScalaModel.CaseClass(n, fn, _, _, tpeArgs) =>
+                CustomTypeRef(buildInterfaceName(n, fn), tpeArgs.map { SimpleTypeRef(_) })
 
               case m =>
-                CustomTypeRef(buildInterfaceName(m.name), ListSet.empty)
+                CustomTypeRef(buildInterfaceName(m.name, m.fullTypeName), ListSet.empty)
             },
             superInterface,
             possibilities.foldLeft(true)((b, p) =>
               if(b) {
                 p match {
-                  case ScalaModel.CaseObject(_, _) => true
+                  case ScalaModel.CaseObject(_, _, _) => true
                   case _ => false
                 }
               } else {
@@ -99,7 +99,7 @@ object Compiler {
     scalaClass: ScalaModel.CaseClass,
     superInterface: Option[InterfaceDeclaration]
   )(implicit config: Config) = InterfaceDeclaration(
-    buildInterfaceName(scalaClass.name),
+    buildInterfaceName(scalaClass.name, scalaClass.fullTypeName),
     scalaClass.fields.map { scalaMember =>
       TypeScriptModel.Member(
         scalaMember.name,
@@ -111,8 +111,9 @@ object Compiler {
     superInterface = superInterface
   )
 
-  private def buildInterfaceName(name: String)(implicit config: Config) = {
-    if (config.prependIPrefix) s"I${name}" else name
+  private def buildInterfaceName(name: String, fullTypeName: String)(implicit config: Config) = {
+    val base = if (config.prependIPrefix) s"I${name}" else name
+    if (fullTypeName.endsWith("[Option]")) s"${base}Opt" else base
   }
 
   private def compileClass(
@@ -154,8 +155,8 @@ object Compiler {
     case ScalaModel.NonEmptySeqRef(innerType) =>
       TypeScriptModel.NonEmptyArrayRef(compileTypeRef(innerType, inInterfaceContext))
 
-    case ScalaModel.CaseClassRef(name, typeArgs) => {
-      val actualName = if (inInterfaceContext) buildInterfaceName(name) else name
+    case ScalaModel.CaseClassRef(name, fullTypeName, typeArgs) => {
+      val actualName = if (inInterfaceContext) buildInterfaceName(name, fullTypeName) else name
       TypeScriptModel.CustomTypeRef(
         actualName, typeArgs.map(compileTypeRef(_, inInterfaceContext)))
     }

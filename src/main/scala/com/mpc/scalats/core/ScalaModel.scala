@@ -7,21 +7,25 @@ import scala.collection.immutable.ListSet
 object ScalaModel {
   sealed trait TypeDef {
     def name: String
+    def fullTypeName: String
   }
 
   case class CaseClass(
     name: String,
+    fullTypeName: String,
     fields: ListSet[TypeMember],
     values: ListSet[TypeMember],
     typeArgs: ListSet[String]) extends TypeDef
 
   case class CaseObject(
     name: String,
+    fullTypeName: String,
     values: ListSet[TypeMember]
   ) extends TypeDef
 
   case class SealedUnion(
     name: String,
+    fullTypeName: String,
     fields: ListSet[TypeMember],
     possibilities: ListSet[TypeDef]) extends TypeDef
 
@@ -37,7 +41,7 @@ object ScalaModel {
 
   case class MapRef(keyType: TypeRef, valueType: TypeRef) extends TypeRef
 
-  case class CaseClassRef(name: String, typeArgs: ListSet[TypeRef]) extends TypeRef
+  case class CaseClassRef(name: String, fullTypeName: String, typeArgs: ListSet[TypeRef]) extends TypeRef
 
   case class SeqRef(innerType: TypeRef) extends TypeRef
 
