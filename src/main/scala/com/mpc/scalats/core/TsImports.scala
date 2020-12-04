@@ -102,7 +102,6 @@ object TsImports {
 
   trait WithOps {
     implicit class WithTsImportsOps[A](t: TsImports.With[A]) {
-      def :+(a: A)(implicit S: Semigroup[A]): TsImports.With[A] = (t._1, S.combine(t._2, a))
       def +:(a: A)(implicit S: Semigroup[A]): TsImports.With[A] = (t._1, S.combine(a, t._2))
     }
 
