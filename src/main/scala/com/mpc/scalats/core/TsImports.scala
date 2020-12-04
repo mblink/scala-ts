@@ -3,6 +3,7 @@ package com.mpc.scalats.core
 import cats.{Monoid, Semigroup}
 import cats.syntax.foldable._
 import cats.syntax.functor._
+import cats.syntax.semigroup._
 import com.mpc.scalats.configuration.Config
 import java.io.File
 import java.nio.file.Paths
@@ -14,6 +15,15 @@ sealed trait TsImport {
     case x @ TsImport_*(_) => f(x)
     case x @ TsImportNames(_) => g(x)
   }
+}
+
+object TsImport {
+  implicit val semigroup: Semigroup[TsImport] = Semigroup.instance((x, y) => (x, y) match {
+    case (TsImport_*(_), i @ TsImport_*(_)) => i
+    case (TsImportNames(ns), TsImportNames(ns2)) => TsImportNames(ns ++ ns2)
+    case (TsImport_*(_), TsImportNames(ns)) => sys.error(s"Can't import `*` and `${ns.mkString}`")
+    case (TsImportNames(ns), TsImport_*(_)) => sys.error(s"Can't import `${ns.mkString}` and `*`")
+  })
 }
 
 case class TsImport_*(alias: String) extends TsImport {
@@ -50,25 +60,8 @@ class TsImports private (
   private val m: Map[String, TsImport],
   val needed: List[(Type, String)]
 ) {
-  private def combine(i1: Option[TsImport], i2: TsImport): TsImport =
-    (i1, i2) match {
-      case (Some(TsImport_*(_)), i @ TsImport_*(_)) => i
-      case (Some(TsImportNames(ns)), TsImportNames(ns2)) => TsImportNames(ns ++ ns2)
-      case (None, i) => i
-      case (Some(TsImport_*(_)), TsImportNames(ns)) => sys.error(s"Can't import `*` and `${ns.mkString}`")
-      case (Some(TsImportNames(ns)), TsImport_*(_)) => sys.error(s"Can't import `${ns.mkString}` and `*`")
-    }
-
   def ++(other: TsImports): TsImports =
-    new TsImports(if (m.size <= other.m.size) {
-      m.foldLeft(other.m) { case (my, (k, x)) =>
-        my.updated(k, my.get(k).fold(x)(combine(Some(x), _)))
-      }
-    } else {
-      other.m.foldLeft(m) { case (mx, (k, y)) =>
-        mx.updated(k, combine(mx.get(k), y))
-      }
-    }, needed ++ other.needed)
+    new TsImports(m |+| other.m, needed ++ other.needed)
 
   def resolve(customType: (Type, String) => TsImports): TsImports.Resolved =
     new TsImports.Resolved((this ++ needed.foldMap(customType.tupled(_).resolve(customType): TsImports)).m)
