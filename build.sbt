@@ -39,23 +39,19 @@ lazy val pomSettings = Seq(
     </developers>
 )
 
-lazy val scalaVersions = Seq("2.12.11", "2.13.2")
+lazy val scalaVersions = Seq("2.12.12", "2.13.4")
 
 lazy val root = (project in file(".")).
   settings(Seq(
     name := "scala-ts",
     organization := "com.github.miloszpp",
-    mainClass in (Compile, run) := Some("com.mpc.scalats.Main"),
     crossScalaVersions := scalaVersions,
     scalaVersion := scalaVersions.find(_.startsWith("2.13")).get,
-    sbtVersion in pluginCrossBuild := {
-      scalaBinaryVersion.value match {
-        case "2.12" | "2.13" => "1.3.4"
-      }
-    }) ++ publishSettings ++ pomSettings)
+  ) ++ publishSettings ++ pomSettings)
 
 libraryDependencies ++= Seq(
   "org.scala-lang" % "scala-reflect" % scalaVersion.value,
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "org.scalatest" %% "scalatest" % "3.1.0" % "test"
+  "org.scalatest" %% "scalatest" % "3.1.0" % "test",
+  "org.typelevel" %% "cats-core" % "2.2.0"
 )

@@ -1,24 +1,21 @@
 package com.mpc.scalats.core
 
-/**
-  * Created by Milosz on 09.06.2016.
-  */
-
 import scala.annotation.tailrec
 import scala.collection.mutable.StringBuilder
 import scala.collection.immutable.ListSet
 import scala.reflect.runtime.universe._
 
-// TODO: Keep namespace using fullName from the Type
-final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]) {
-
+final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boolean) {
   import ScalaModel._
 
   def parseTypes(types: List[Type]): ListSet[TypeDef] =
     parse(types, ListSet[Type](), ListSet.empty[TypeDef])
 
   def isNotExcluded(tpe: Type): Boolean =
-    !excludeTypes.exists(_.typeSymbol == tpe.typeSymbol)
+    !excludeType(tpe)
+
+  private def getTypeParams(tpe: Type): Set[String] =
+    tpe.typeParams.map(_.name.decodedName.toString).toSet
 
   private def parseType(tpe: Type): Option[TypeDef] = {
     if (isNotExcluded(tpe)) {
@@ -29,20 +26,20 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         case _ if (tpe.getClass.getName contains "ModuleType" /*Workaround*/) =>
           parseObject(tpe)
 
-        case _ if tpe.typeSymbol.isClass && !tpe.typeSymbol.name.toString.contains("NonEmptyList") => {
+        case _ if tpe.typeSymbol.isClass && !tpe.typeSymbol.name.toString.contains("NonEmptyList") =>
           if (isSealedUnion(tpe)) {
             parseSealedUnion(tpe)
           } else if (isCaseClass(tpe) && !isAnyValChild(tpe)) {
             parseCaseClass(tpe)
+          } else if (tpe.dealias != tpe) { // if the dealiased type is different then it's a type alias
+            parseTypeAlias(tpe)
           } else {
             None
           }
-        }
 
-        case _ => {
+        case _ =>
           logger.warning(s"Unsupported Scala type: $tpe")
           None
-        }
       }
     } else {
       None
@@ -90,14 +87,15 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
 
     val members = tpe.decls.sorted.collect {
       case Field(m) if !m.isStatic => {
-        member(tpe, m, List.empty)
+        member(tpe, m, Set())
       }
     }
 
     Some(CaseObject(
       tpe.typeSymbol.name.toString stripSuffix ".type",
       tpe.toString,
-      ListSet.empty ++ statics ++ members))
+      ListSet.empty ++ statics ++ members,
+      tpe))
   }
 
   private def parseSealedUnion(tpe: Type): Option[SealedUnion] = {
@@ -106,7 +104,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
     // Members
     val members = tpe.members.sorted.collect {
       case m: MethodSymbol if isValidMethod(m) && !m.name.toString.endsWith("$") =>
-        member(tpe, m, List.empty)
+        member(tpe, m, Set())
     }
 
     directKnownSubclasses(tpe) match {
@@ -115,14 +113,15 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
           tpe.typeSymbol.name.toString,
           tpe.toString,
           ListSet.empty ++ members,
-          parseTypes(possibilities)))
+          parseTypes(possibilities),
+          tpe))
 
       case _ => Option.empty[SealedUnion]
     }
   }
 
   private def parseCaseClass(caseClassType: Type): Option[CaseClass] = {
-    val typeParams = caseClassType.typeParams.map(_.name.decodedName.toString)
+    val typeParams = getTypeParams(caseClassType)
 
     // Members
     val members = caseClassType.members.sorted.collect {
@@ -140,15 +139,27 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
       caseClassType.toString,
       ListSet.empty ++ members,
       ListSet.empty ++ values,
-      ListSet.empty ++ typeParams
+      ListSet.empty ++ typeParams,
+      caseClassType
     ))
+  }
+
+  private def parseTypeAlias(tpe: Type): Option[TypeAlias] = {
+    val typeParams = getTypeParams(tpe)
+
+    Some(TypeAlias(
+      tpe.toString.split('.').last,
+      tpe.toString,
+      getTypeRef(tpe.dealias, typeParams),
+      ListSet.empty ++ typeParams,
+      tpe))
   }
 
   @inline private def trueType(tpe: Type, seenFrom: Option[Type]): Type =
     seenFrom.fold(tpe)(t => tpe.asSeenFrom(t, t.typeSymbol)).map(_.dealias)
 
-  @inline private def member(owner: Type, sym: MethodSymbol, typeParams: List[String]): TypeMember =
-    TypeMember(sym.name.toString, getTypeRef(trueType(sym.returnType, Some(owner)), typeParams.toSet))
+  @inline private def member(owner: Type, sym: MethodSymbol, typeParams: Set[String]): TypeMember =
+    TypeMember(sym.name.toString, getTypeRef(trueType(sym.returnType, Some(owner)), typeParams))
 
   @annotation.tailrec
   private def parse(types: List[Type], examined: ListSet[Type], parsed: ListSet[TypeDef]): ListSet[TypeDef] =
@@ -215,17 +226,17 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
       case tupleName(_) =>
         TupleRef(ListSet.empty ++ scalaType.typeArgs.map(getTypeRef(_, Set())))
       case typeParam if typeParams.contains(typeParam) =>
-        TypeParamRef(typeParam)
+        TypeParamRef(typeParam, scalaType)
       case _ if isAnyValChild(scalaType) =>
         getTypeRef(scalaType.members.filter(!_.isMethod).map(_.typeSignature).head, Set())
       case _ if isSealedUnion(scalaType) =>
-          UnionRef(ListSet.empty ++ directKnownSubclasses(scalaType).map(getTypeRef(_, Set.empty)))
+        UnionRef(ListSet.empty ++ directKnownSubclasses(scalaType).map(getTypeRef(_, Set.empty)))
       case _ if isCaseClass(scalaType)=>
         val caseClassName = scalaType.typeSymbol.name.toString
         val typeArgs = scalaType.typeArgs
         val typeArgRefs = typeArgs.map(getTypeRef(_, typeParams))
 
-        CaseClassRef(caseClassName, scalaType.toString, ListSet.empty ++ typeArgRefs)
+        CaseClassRef(caseClassName, scalaType.toString, ListSet.empty ++ typeArgRefs, scalaType)
 
       case "Either" | """\/""" | "Disjunction" =>
         EitherRef(getTypeRef(scalaType.typeArgs.head, typeParams), getTypeRef(scalaType.typeArgs.last, typeParams))
@@ -239,7 +250,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         MapRef(getTypeRef(keyType, typeParams), getTypeRef(valueType, typeParams))
 
       case unknown =>
-        UnknownTypeRef(unknown)
+        UnknownTypeRef(unknown, scalaType)
     }
   }
 
@@ -261,9 +272,14 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
 
   private def decls(sym: Symbol): List[Symbol] = sym.typeSignature.decls.sorted
 
+  private def sealedAbstractClass(sym: Symbol): Option[ClassSymbol] =
+    if (sym.isClass) Some(sym.asClass).filter(s => s.isSealed && s.isAbstract)
+    else None
+
   private def directKnownSubclasses(tpe: Type): List[Type] = {
     // Workaround for SI-7046: https://issues.scala-lang.org/browse/SI-7046
-    val tpeSym = tpe.typeSymbol.asClass
+    lazy val tpeSym = tpe.typeSymbol.asClass
+    lazy val tpeSymParents = tpeSym.baseClasses.flatMap(sealedAbstractClass)
 
     @annotation.tailrec
     def allSubclasses(path: Iterable[Symbol], subclasses: ListSet[Type]): ListSet[Type] = path.headOption match {
@@ -287,6 +303,12 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
         allSubclasses(path.tail ++ decls(o), subclasses)
 
       case Some(o: ModuleSymbol) if (
+        o != NoSymbol &&
+          tpeSymParents.exists(p => o == p.companion && o.companion == p) // companion of a parent of the given type
+      ) =>
+        allSubclasses(path.tail ++ decls(o), subclasses)
+
+      case Some(o: ModuleSymbol) if (
         o.companion == NoSymbol && // not a companion object
           o.typeSignature.baseClasses.contains(tpeSym)) =>
         allSubclasses(path.tail, subclasses + o.typeSignature)
@@ -300,9 +322,9 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeTypes: List[Type]
       case _ => subclasses
     }
 
-    if (tpeSym.isSealed && tpeSym.isAbstract) {
-      allSubclasses(decls(tpeSym.owner), ListSet.empty).toList
-    } else List.empty
+    sealedAbstractClass(tpeSym)
+      .map(s => allSubclasses(decls(s.owner), ListSet.empty).toList)
+      .getOrElse(Nil)
   }
 }
 
@@ -317,7 +339,7 @@ object ScalaParser {
         case ((c @ ',') :: rest, bs) =>
           go(prev, curr += c, rest, bs)
 
-        case (']' :: rest, Nil) =>
+        case (']' :: _, Nil) =>
           sys.error(s"Unexpected closing bracket `]` in string $typeParams")
 
         case ((c @ ']') :: rest, _ :: bs) =>

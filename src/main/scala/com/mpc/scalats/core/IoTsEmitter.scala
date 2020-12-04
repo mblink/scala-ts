@@ -1,230 +1,236 @@
 package com.mpc.scalats.core
 
-import java.io.PrintStream
-import scala.collection.immutable.ListSet
+import cats.syntax.foldable._
+import cats.syntax.semigroup._
 import com.mpc.scalats.configuration.Config
+import scala.collection.immutable.ListSet
+import scala.reflect.runtime.universe.Type
 
-// TODO: Emit Option (space-lift?)
-// TODO: Use a template engine (velocity?)
 final class IoTsEmitter(val config: Config) extends Emitter {
   import TypeScriptModel._
   import Internals.list
 
   def typeAsValArg(s: String): String = s"_${s}val"
 
-  def emit(declaration: ListSet[Declaration], out: PrintStream): Unit = {
-    declaration.toList.sortBy({
-        case _: SingletonDeclaration => -1
-        case _: InterfaceDeclaration => 0
-        case _: UnionDeclaration => 1
-        case _ => -1
-      }).foreach {
-        case decl: InterfaceDeclaration =>
-          emitIoTsInterfaceDeclaration(decl, out)
-        case UnionDeclaration(name, members, possibilities, superInterface, emitAll) =>
-          emitUnionDeclaration(name, members, possibilities, superInterface, emitAll, out)
-        case SingletonDeclaration(name, members, superInterface) =>
-          emitSingletonDeclaration(name, members, superInterface, out)
-        case _ => ()
-      }
-      out.println()
-      out.println()
-  }
+  def emit(declarations: ListSet[Declaration]): Lines =
+    declarations.toList.foldMap {
+      case decl: InterfaceDeclaration =>
+        emitIoTsInterfaceDeclaration(decl)
+      case UnionDeclaration(name, members, possibilities, superInterface, emitAll) =>
+        emitUnionDeclaration(name, members, possibilities, superInterface, emitAll)
+      case SingletonDeclaration(name, members, superInterface) =>
+        emitSingletonDeclaration(name, members, superInterface)
+      case decl: TypeDeclaration =>
+        emitTypeDeclaration(decl)
+    }
 
-  def emitIoTsInterfaceDeclaration(
-                                decl: InterfaceDeclaration,
-                                out: PrintStream): Unit = {
+  private def typeParamArgs(typeParams: List[String]): TsImports.With[String] =
+    if (typeParams.isEmpty) (imports.empty, "") else
+      TsImports.join(typeParams, "<", ", ", ">")(p => s"$p extends " |+ imports.iotsMixed) |+|
+      TsImports.join(typeParams, "(", ", ", ")")(p => s"${typeAsValArg(p)}: $p") |+| " => "
 
+  def emitIoTsInterfaceDeclaration(decl: InterfaceDeclaration): Lines = {
     val InterfaceDeclaration(name, fields, typeParams, _) = decl
+    val typeVal = codecName(name)
 
-    val typeVal = codecName(name);
-
-    // Class definition
-    if (typeParams.isEmpty) {
-      out.println(s"export const ${typeVal} = t.type({")
-    } else {
-      val params = list(typeParams).map(p => s"${p} extends t.Mixed").mkString("<", ", ", ">")
-      val args = list(typeParams).map(p => s"${typeAsValArg(p)}: $p").mkString("(", ", ", ")")
-      out.println(s"export const ${typeVal} = ${params}${args} => t.type({")
-    }
-
-    fields.foreach { v =>
-      out.println(s"${indent}${v.name}: ${getIoTsTypeString(v.typeRef)},")
-    }
-
-    out.println("});")
-    if (typeParams.isEmpty) {
-      out.println(s"export type ${name} = t.TypeOf<typeof ${typeVal}>;")
-    }
-    out.println()
+    imports.iotsTypeFunction.lines(
+      s => s"export const $typeVal = " |+ typeParamArgs(list(typeParams)) |+| s"$s{",
+      TsImports.joinLines(fields, ",")(v => s"${indent}${v.name}: " |+ getIoTsTypeString(v.typeRef)),
+      "}" ++ _ ++ ";"
+    ) |+|
+    (if (typeParams.isEmpty) line(s"export type $name = " |+ imports.iotsTypeOf |+| s"<typeof $typeVal>;") else Nil) |+|
+    List("")
   }
 
-  private def emitInterfaceDeclaration(
-                                        name: String,
-                                        members: ListSet[Member],
-                                        superInterface: Option[InterfaceDeclaration],
-                                        out: PrintStream): Unit = {
-    if (config.emitInterfaces) {
-      out.print(s"export interface ${interfaceName(name)}")
-
-      superInterface.foreach { iface =>
-        out.print(s" extends ${iface.name}")
-      }
-
-      out.println(" {")
-
-      // Abstract fields - common to all the subtypes
-      emitMembers(members, true, false, out)
-
-      out.println("}")
-      out.println()
-    }
-  }
+  def emitInterfaceDeclaration(name: String, members: ListSet[Member], superInterface: Option[InterfaceDeclaration]): Lines =
+    if (!config.emitInterfaces) Nil else
+      line(s"export interface ${interfaceName(name)}${superInterface.fold("")(i => s" extends ${i.name}")} {") |+|
+      emitMembers(members, true, false) |+|
+      line("}") |+|
+      line()
 
   private def emitUnionDeclaration(
                                     name: String,
                                     members: ListSet[Member],
                                     possibilities: ListSet[CustomTypeRef],
                                     superInterface: Option[InterfaceDeclaration],
-                                    emitAll: Boolean,
-                                    out: PrintStream): Unit = {
+                                    emitAll: Boolean): Lines = {
+    def union(nameFn: String => String, prefix: String, glue: String, suffix: String) =
+      TsImports.join(possibilities, prefix, glue, suffix)(p => nameFn(p.name))
 
-    def union(nameFn: (String) => String) = possibilities.map(p => nameFn(p.name))
+    lazy val codecs = union(codecName, "[", ", ", "]")
+    lazy val uName = s"${codecType(name)}U"
 
-    out.println(s"""export const all${name}C = ${union(codecName).mkString("[", ", ", "]")} as const;""")
-    out.println(s"""export const ${codecType(name)}U = t.union(${union(codecName).mkString("[", ", ", "]")});""")
-    if(emitAll) {
-      out.println(s"""export const all${name} = ${union(objectName).mkString("[", ", ", "]")} as const;""")
-    }
-    out.println(s"""export type ${name}U = t.TypeOf<typeof ${codecType(name)}U>;""")
-    out.println()
-    emitInterfaceDeclaration(name, members, superInterface, out)
-
+    line(s"export const all${name}C = " |+ codecs |+| " as const;") |+|
+    line(s"export const $uName = " |+ (
+      if (possibilities.size == 1) codecName(possibilities.head.name)
+      else if (possibilities.size == 0) sys.error(s"Can't create $name union composed of 0 members")
+      else imports.iotsUnion(codecs)) |+| ";") |+|
+    (if (emitAll) line(s"export const all$name = " |+ union(objectName, "[", ", ", "]") |+| " as const;") else Nil) |+|
+    line(s"export type ${name}U = " |+ imports.iotsTypeOf |+| s"<typeof $uName>") |+|
+    line() |+|
+    emitInterfaceDeclaration(name, members, superInterface)
   }
+
+  private def isAbstractMember(member: Member, superInterface: Option[InterfaceDeclaration]): Boolean = {
+    val Member(n, t, _) = member
+    superInterface.exists(_.fields.collectFirst { case Member(`n`, `t`, None) => () }.isDefined)
+  }
+
+  private def singletonIdentifier(name: String, members: ListSet[Member], superInterface: Option[InterfaceDeclaration]): Member =
+    members.collectFirst {
+      // The member is an abstract `val id: Int` on the parent
+      case m @ Member("id", NumberRef, _) if isAbstractMember(m, superInterface) => m
+
+      // The member is the only abstract `val` on the parent
+      case m if superInterface.exists(_.fields.size == 1) && isAbstractMember(m, superInterface) => m
+    }.getOrElse(sys.error(s"""
+      |Can't choose identifier for singleton type
+      |
+      |const ${name}${superInterface.fold("")(i => s": ${i.name}")} = {
+      |  ${members.map(m => s"${m.name}: ${m.typeRef}${m.value.fold("")(v => s" = $v")}").mkString(",\n  ")}
+      |}
+      |
+      |Make sure the `sealed trait` interface has either
+      |
+      |  1. An abstract `val id: Int` member
+      |  2. A single abstract `val` member, expected to be a unique identifier
+      |""".stripMargin))
 
   private def emitSingletonDeclaration(
                                         name: String,
                                         members: ListSet[Member],
-                                        superInterface: Option[InterfaceDeclaration],
-                                        out: PrintStream): Unit = {
+                                        superInterface: Option[InterfaceDeclaration]): Lines = {
+    val (objName, ifaceName, cName, partialCName) =
+      (objectName(name), interfaceName(name), codecName(name), codecName(s"${name}Partial"))
 
-    out.println(s"export const ${codecName(name)} = t.strict({")
-    emitMembers(members, false, true, out)
-    out.println("});")
-    out.println()
+    val identifierMember = singletonIdentifier(name, members, superInterface)
 
-    out.println(s"export type ${interfaceName(name)} = t.TypeOf<typeof ${codecName(name)}>;")
-    out.println()
-
-    out.println(s"export const ${objectName(name)}: ${interfaceName(name)} = {")
-    emitMembers(members, false, false, out)
-    out.println("};")
-    out.println()
+    line(s"export const $objName = {") |+|
+    emitMembers(members, false, false) |+|
+    line("} as const;") |+|
+    line() |+|
+    line(s"export type $ifaceName = typeof $objName;") |+|
+    line() |+|
+    imports.iotsStrict.lines(
+      s => s"export const $partialCName = $s{",
+      emitMembers(ListSet(identifierMember), false, true),
+      "}" ++ _ ++ ";"
+    ) |+|
+    line(s"export const $cName = new " |+ imports.iotsTypeType |+| s"<$ifaceName>(") |+|
+    line(s"""  "${superInterface.fold("")(i => s"${i.name} ")}$ifaceName",""") |+|
+    line(s"  (u: unknown): u is $ifaceName => " |+ imports.fptsEither(s"isRight($partialCName.decode(u)),")) |+|
+    line("  (u: unknown): " |+ imports.fptsEither("Either") |+| "<" |+| imports.iotsErrors |+|
+      s", $ifaceName> => " |+| imports.fptsPipe(s"$partialCName.decode(u), " |+
+        imports.fptsEither(s"map(() => $objName)")) |+| ",") |+|
+    line("  t.identity") |+|
+    line(");")
   }
 
-  def emitMembers(members: ListSet[Member], interfaceContext: Boolean, iotsContext: Boolean, out: PrintStream): Unit = {
-    members.foreach(m =>
-      out.println(
-        m.value.fold(s"${indent}${m.name.trim}: ${getTypeRefString(m.typeRef)};")
-        (v => s"${indent}${m.name.trim}: ${
-          if (iotsContext)
-            getIoTsTypeWrappedVal(v, m.typeRef)
-          else
-            getTypeWrappedVal(v, m.typeRef, interfaceContext)
-        },"))
-    )
+  private def emitTypeDeclaration(decl: TypeDeclaration): Lines = {
+    val TypeDeclaration(name, typeRef, typeParams) = decl
+    val typeVal = codecName(name)
+
+    line(s"export const $typeVal = " |+ typeParamArgs(list(typeParams)) |+| getIoTsTypeString(typeRef) |+| ";") |+|
+    (if (typeParams.isEmpty) line(s"export type $name = " |+ imports.iotsTypeOf |+| s"<typeof $typeVal>;") else Nil ) |+|
+    line()
   }
 
-  def getIoTsTypeString(typeRef: TypeRef): String = typeRef match {
-    case NumberRef => "t.number"
-    case BooleanRef => "t.boolean"
-    case StringRef => "t.string"
-    case DateRef => "LocalDate"
-    case DateTimeRef => "DateFromISOString"
-    case ArrayRef(innerType) => s"t.array(${getIoTsTypeString(innerType)})"
-    case NonEmptyArrayRef(innerType) => s"nonEmptyArray(${getIoTsTypeString(innerType)})"
-    case CustomTypeRef(name, params) =>
-      if (params.isEmpty) customIoTsTypes(name)
-      else s"${customIoTsTypes(name)}${params.map(getIoTsTypeString).mkString("(", ", ", ")")}"
-    case UnknownTypeRef(unknown) => unknown
-    case SimpleTypeRef(param) => typeAsValArg(param)
-    case UnionType(possibilities) => s"t.union(${possibilities.map(getIoTsTypeString).mkString("[", ", ", "]")})"
+  def emitMembers(members: ListSet[Member], interfaceContext: Boolean, iotsContext: Boolean): Lines =
+    TsImports.joinLines(members, ",")(m => s"${indent}${m.name}: " |+
+      m.value.fold(getTypeRefString(m.typeRef))(v =>
+        if (iotsContext) getIoTsTypeWrappedVal(v, m.typeRef)
+        else getTypeWrappedVal(v, m.typeRef, interfaceContext)))
+
+  def getIoTsTypeString(typeRef: TypeRef): TsImports.With[String] = typeRef match {
+    case NumberRef => imports.iotsNumber
+    case BooleanRef => imports.iotsBoolean
+    case StringRef => imports.iotsString
+    case DateRef => imports.iotsLocalDate
+    case DateTimeRef => imports.iotsDateTime
+    case ArrayRef(innerType) => imports.iotsArray(getIoTsTypeString(innerType))
+    case NonEmptyArrayRef(innerType) => imports.iotsNonEmptyArray(getIoTsTypeString(innerType))
+    case CustomTypeRef(name, params, scalaType) =>
+      if (params.isEmpty) customIoTsTypes(scalaType, name)
+      else customIoTsTypes(scalaType, name) |+| TsImports.join(params, "(", ", ", ")")(getIoTsTypeString)
+    case UnknownTypeRef(unknown) => (imports.empty, unknown)
+    case SimpleTypeRef(param) => (imports.empty, typeAsValArg(param))
+    case UnionType(possibilities) =>
+      imports.iotsUnion(TsImports.join(possibilities, "[", ", ", "]")(getIoTsTypeString))
     case EitherType(lT, rT) =>
-      s"""either(${getIoTsTypeString(lT)}, ${getIoTsTypeString(rT)})"""
+      imports.iotsEither(TsImports.join(List(lT, rT), "", ", ", "")(getIoTsTypeString))
     case TheseType(lT, rT) =>
-      s"""theseC(${getIoTsTypeString(lT)}, ${getIoTsTypeString(rT)})"""
-    case MapType(keyType, valueType) => s"t.record(${getIoTsRecordKeyTypeString(keyType)}, ${getIoTsTypeString(valueType)})"
-    case TupleType(types) => s"t.tuple(${types.map(getIoTsTypeString).mkString("[", ", ", "]")})"
-    case NullRef => "t.null"
-    case UndefinedRef => "t.undefined"
+      imports.iotsThese(TsImports.join(List(lT, rT), "", ", ", "")(getIoTsTypeString))
+    case MapType(keyType, valueType) =>
+      imports.iotsRecord(TsImports.join(List(keyType, valueType), "", ", ", "")(getIoTsTypeString))
+    case TupleType(types) =>
+      imports.iotsTuple(TsImports.join(types, "[", ", ", "]")(getIoTsTypeString))
+    case NullRef => imports.iotsNull
+    case UndefinedRef => imports.iotsUndefined
   }
 
-  def getIoTsRecordKeyTypeString(typeRef: TypeRef): String = typeRef match {
-    case NumberRef => "NumberFromString"
+  def getIoTsRecordKeyTypeString(typeRef: TypeRef): TsImports.With[String] = typeRef match {
+    case NumberRef => imports.iotsNumberFromString
     case _ => getIoTsTypeString(typeRef)
   }
 
-  def getIoTsTypeWrappedVal(value: Any, typeRef: TypeRef): String = typeRef match {
-    case NumberRef => s"t.literal(${value.toString})"
-    case BooleanRef => s"t.literal(${value.toString})"
-    case StringRef => s"t.literal(`${value.toString.trim}`)"
-    case DateRef => s"t.literal(`${value.toString.trim}`)"
-    case DateTimeRef => s"t.literal(new Date(`${value.toString.trim}`))"
-    case ArrayRef(_) => s"t.literal([${value}])"
-    case NonEmptyArrayRef(_) => s"t.literal(nonEmptyArray.of([${value}]))"
-    case CustomTypeRef(name, params) =>
-      if (params.isEmpty) codecName(name)
-      else  s"${codecName(name)}${params.map(getIoTsTypeWrappedVal(value, _)).mkString("(", ", ", ")")}"
+  def getIoTsTypeWrappedVal(value: Any, typeRef: TypeRef): TsImports.With[String] = typeRef match {
+    case NumberRef => imports.iotsLiteral(value.toString)
+    case BooleanRef => imports.iotsLiteral(value.toString)
+    case StringRef => imports.iotsLiteral(s"`${value.toString.trim}`")
+    case DateRef => imports.iotsLiteral(s"`${value.toString.trim}`")
+    case DateTimeRef => imports.iotsLiteral(s"new Date(`${value.toString.trim}`)")
+    case ArrayRef(_) => imports.iotsLiteral(s"[$value]")
+    case NonEmptyArrayRef(_) => imports.iotsLiteral(imports.iotsNonEmptyArray.value |+| s".of([$value])")
+    case CustomTypeRef(name, params, scalaType) =>
+      if (params.isEmpty) imports.custom(scalaType, codecName(name))
+      else imports.custom(scalaType, codecName(name)) |+| TsImports.join(params, "(", ", ", ")")(getIoTsTypeWrappedVal(value, _))
     case UnknownTypeRef(unknown) => unknown
-    case SimpleTypeRef(param) => s"t.strict(${typeAsValArg(param)})"
-    case UnionType(possibilities) => s"t.strict(t.union(${possibilities.map(getIoTsTypeWrappedVal(value, _)).mkString("[", ", ", "]")}))"
+    case SimpleTypeRef(param) => imports.iotsStrict(typeAsValArg(param))
+    case UnionType(possibilities) =>
+      imports.iotsStrict(imports.iotsUnion(
+        TsImports.join(possibilities, "[", ", ", "]")(getIoTsTypeWrappedVal(value, _))))
     case EitherType(lT, rT) =>
-      s"""t.strict(t.union([
-        ${getIoTsTypeWrappedVal(value, lT)},
-        ${getIoTsTypeWrappedVal(value, rT)}]))"""
+      imports.iotsStrict(imports.iotsUnion(
+        TsImports.join(List(lT, rT), "[", ", ", "]")(getIoTsTypeWrappedVal(value, _))))
     case TheseType(lT, rT) =>
-      s"""t.strict(t.union([
-        ${getIoTsTypeWrappedVal(value, lT)},
-        ${getIoTsTypeWrappedVal(value, rT)},
-        ${getIoTsTypeWrappedVal(value, TupleType(ListSet(lT, rT)))}]))"""
-    case MapType(keyType, valueType) => s"t.strict(t.record(${getIoTsTypeWrappedVal(value, keyType)}, ${getIoTsTypeWrappedVal(value, valueType)}))"
-    case TupleType(types) => s"t.strict(t.tuple(${types.map(getIoTsTypeWrappedVal(value, _)).mkString("[", ", ", "]")}))"
-    case NullRef => "t.literal(null)"
-    case UndefinedRef => "t.literal(undefined)"
+      imports.iotsStrict(imports.iotsUnion(
+        TsImports.join(List(lT, rT, TupleType(ListSet(lT, rT))), "[", ", ", "]")(getIoTsTypeWrappedVal(value, _))))
+    case MapType(keyType, valueType) =>
+      imports.iotsStrict(imports.iotsRecord(
+        TsImports.join(List(keyType, valueType), "", ", ", "")(getIoTsTypeWrappedVal(value, _))))
+    case TupleType(types) =>
+      imports.iotsStrict(imports.iotsTuple(
+        TsImports.join(types, "[", ", ", "]")(getIoTsTypeWrappedVal(value, _))))
+    case NullRef => imports.iotsLiteral("null")
+    case UndefinedRef => imports.iotsLiteral("undefined")
   }
 
-  def customIoTsTypes(name: String): String = name match {
-    case "NonEmptyList" => "nonEmptyArray"
-    case "optionFromNullable" => "optionFromNullable"
-    case _ => codecName(name)
+  def customIoTsTypes(scalaType: Type, name: String): TsImports.With[String] = name match {
+    case "NonEmptyList" => imports.iotsNonEmptyArray.value
+    case "optionFromNullable" => imports.iotsOption.value
+    case _ => imports.custom(scalaType, codecName(name))
   }
 
-  def getTypeWrappedVal(value: Any, typeRef: TypeRef, interfaceContext: Boolean): String = typeRef match {
+  def getTypeWrappedVal(value: Any, typeRef: TypeRef, interfaceContext: Boolean): TsImports.With[String] = typeRef match {
     case NumberRef => value.toString
     case BooleanRef => value.toString
     case StringRef => s"`${value.toString.trim}`"
     case DateRef => s"`${value.toString.trim}`"
     case DateTimeRef => s"`${value.toString.trim}`"
     case ArrayRef(_) => s"[${value}]"
-    case NonEmptyArrayRef(_) => s"nonEmptyArray.of([${value}])"
-    case CustomTypeRef(name, params) =>
-      if (params.isEmpty) {
-        if (interfaceContext) interfaceName(name) else objectName(name)
-      } else {
-        s"${if (interfaceContext) interfaceName(name) else objectName(name)}${params.map(getIoTsTypeString).mkString("(", ", ", ")")}"
-      }
+    case NonEmptyArrayRef(_) => imports.iotsNonEmptyArray.value |+| s".of([$value])"
+    case CustomTypeRef(name, params, scalaType) =>
+      imports.custom(scalaType, if (interfaceContext) interfaceName(name) else objectName(name)) |+|
+        (if (params.isEmpty) "" else TsImports.join(params, "(", ", ", ")")(getIoTsTypeString))
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => if (interfaceContext) param else typeAsValArg(param)
-    case UnionType(possibilities) => s"t.union(${possibilities.map(getIoTsTypeString).mkString("[", ", ", "]")})"
-    case EitherType(lT, rT) =>
-      s"""t.union([${getIoTsTypeString(lT)}, ${getIoTsTypeString(rT)}])"""
-    case TheseType(lT, rT) =>
-      s"""t.union([
-          ${getIoTsTypeString(lT)}, ${getIoTsTypeString(rT)}, ${getIoTsTypeString(TupleType(ListSet(lT, rT)))}])"""
-    case MapType(keyType, valueType) => s"t.record(${getIoTsTypeString(keyType)}, ${getIoTsTypeString(valueType)})"
-    case TupleType(types) => s"t.tuple(${types.map(getIoTsTypeString).mkString("[", ", ", "]")})"
+    case UnionType(possibilities) => imports.iotsUnion(TsImports.join(possibilities, "[", ", ", "]")(getIoTsTypeString))
+    case EitherType(lT, rT) => imports.iotsUnion(TsImports.join(List(lT, rT), "[", ", ", "]")(getIoTsTypeString))
+    case TheseType(lT, rT) => imports.iotsUnion(TsImports.join(List(lT, rT, TupleType(ListSet(lT, rT))), "[", ", ", "]")(getIoTsTypeString))
+    case MapType(keyType, valueType) => imports.iotsRecord(TsImports.join(List(keyType, valueType), "", ", ", "")(getIoTsTypeString))
+    case TupleType(types) => imports.iotsTuple(TsImports.join(types, "[", ", ", "]")(getIoTsTypeString))
     case NullRef => "null"
     case UndefinedRef => "undefined"
   }
-
 }
