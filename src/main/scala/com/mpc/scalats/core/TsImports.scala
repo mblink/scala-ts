@@ -30,7 +30,7 @@ case class TsImport_*(alias: String) extends TsImport {
 }
 
 case class TsImportNames(names: Set[String]) extends TsImport {
-  val str: String = names.mkString("{ ", ", ", "}")
+  val str: String = names.mkString("{ ", ", ", " }")
 }
 object TsImportNames {
   def apply(ns: String*): TsImportNames = new TsImportNames(ns.toSet)
