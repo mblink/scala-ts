@@ -66,7 +66,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       else if (possibilities.size == 0) sys.error(s"Can't create $name union composed of 0 members")
       else imports.iotsUnion(codecs)) |+| ";") |+|
     (if (emitAll) line(s"export const all$name = " |+| union(objectName, "[", ", ", "]") |+| " as const;") else Nil) |+|
-    line(s"export type ${name}U = " |+| imports.iotsTypeOf |+| s"<typeof $uName>") |+|
+    line(s"export type ${name}U = " |+| imports.iotsTypeOf |+| s"<typeof $uName>;") |+|
     line() |+|
     emitInterfaceDeclaration(name, members, superInterface)
   }
@@ -111,7 +111,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     line() |+|
     line(s"export type $ifaceName = typeof $objName;") |+|
     line() |+|
-    imports.iotsStrict.lines(
+    imports.iotsTypeFunction.lines(
       s => s"export const $partialCName = $s{",
       emitMembers(ListSet(identifierMember), false, true),
       "}" ++ _ ++ ";"
@@ -150,8 +150,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case ArrayRef(innerType) => imports.iotsArray(getIoTsTypeString(innerType))
     case NonEmptyArrayRef(innerType) => imports.iotsNonEmptyArray(getIoTsTypeString(innerType))
     case CustomTypeRef(name, params, scalaType) =>
-      if (params.isEmpty) customIoTsTypes(scalaType, name)
-      else customIoTsTypes(scalaType, name) |+| params.joinParens(", ")(getIoTsTypeString)
+      customIoTsTypes(scalaType, name, codecName) |+|
+        (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
     case UnknownTypeRef(unknown) => (imports.empty, unknown)
     case SimpleTypeRef(param) => (imports.empty, typeAsValArg(param))
     case UnionType(possibilities) =>
@@ -182,8 +182,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case ArrayRef(_) => imports.iotsLiteral(s"[$value]")
     case NonEmptyArrayRef(_) => imports.iotsLiteral(imports.iotsNonEmptyArray.value |+| s".of([$value])")
     case CustomTypeRef(name, params, scalaType) =>
-      if (params.isEmpty) imports.custom(scalaType, codecName(name))
-      else imports.custom(scalaType, codecName(name)) |+| params.joinParens(", ")(getIoTsTypeWrappedVal(value, _))
+      customIoTsTypes(scalaType, name, codecName) |+|
+        (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeWrappedVal(value, _)))
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => imports.iotsStrict(typeAsValArg(param))
     case UnionType(possibilities) =>
@@ -205,10 +205,10 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case UndefinedRef => imports.iotsLiteral("undefined")
   }
 
-  def customIoTsTypes(scalaType: Type, name: String): TsImports.With[String] = name match {
+  def customIoTsTypes(scalaType: Type, name: String, customName: String => String): TsImports.With[String] = name match {
     case "NonEmptyList" => imports.iotsNonEmptyArray.value
     case "optionFromNullable" => imports.iotsOption.value
-    case _ => imports.custom(scalaType, codecName(name))
+    case _ => imports.custom(scalaType, customName(name))
   }
 
   def getTypeWrappedVal(value: Any, typeRef: TypeRef, interfaceContext: Boolean): TsImports.With[String] = typeRef match {
