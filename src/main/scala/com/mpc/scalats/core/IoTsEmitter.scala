@@ -161,7 +161,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case TheseType(lT, rT) =>
       imports.iotsThese(List(lT, rT).join(", ")(getIoTsTypeString))
     case MapType(keyType, valueType) =>
-      imports.iotsRecord(List(keyType, valueType).join(", ")(getIoTsTypeString))
+      imports.iotsRecord(getIoTsRecordKeyTypeString(keyType) |+| ", " |+| getIoTsTypeString(valueType))
     case TupleType(types) =>
       imports.iotsTuple(types.joinArray(getIoTsTypeString))
     case NullRef => imports.iotsNull
