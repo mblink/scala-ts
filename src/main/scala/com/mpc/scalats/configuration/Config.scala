@@ -16,7 +16,7 @@ case class Config(
 case class TsImports(
   fptsEither: String = "fp-ts/lib/Either",
   fptsThese: String = "fp-ts/lib/These",
-  fptsPipe: (String, String) = ("pipe", "fp-ts/lib/Option"),
+  fptsPipe: (String, String) = ("pipe", "fp-ts/lib/function"),
   iots: String = "io-ts",
   iotsDateTime: (String, String) = ("DateFromISOString", "io-ts-types/lib/DateFromISOString"),
   iotsNonEmptyArray: (String, String) = ("nonEmptyArray", "io-ts-types/lib/nonEmptyArray"),

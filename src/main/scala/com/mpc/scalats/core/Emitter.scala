@@ -1,11 +1,10 @@
 package com.mpc.scalats.core
 
-import cats.syntax.semigroup._
 import com.mpc.scalats.configuration.Config
 import com.mpc.scalats.core.TypeScriptModel._
 import scala.collection.immutable.ListSet
 
-trait Emitter extends TsImports.WithOps {
+trait Emitter extends TsImports.HelperSyntax {
   val config: Config
   lazy val imports: TsImports.available = TsImports.available(config)
 
@@ -48,24 +47,24 @@ trait Emitter extends TsImports.WithOps {
     case NonEmptyArrayRef(innerType) => imports.iotsNonEmptyArray.value |+| "<" |+| getTypeRefString(innerType) |+| ">"
     case CustomTypeRef(name, params, scalaType) =>
       if (params.isEmpty) imports.custom(scalaType, name)
-      else name |+ TsImports.join(params, "<", ", ", ">")(getTypeRefString)
+      else name |+| params.joinTypeParams(getTypeRefString)
     case UnknownTypeRef(typeName) => typeName
     case SimpleTypeRef(param) => param
 
     case UnionType(possibilities) =>
-      TsImports.join(possibilities, "(", " | ", ")")(getTypeRefString)
+      possibilities.joinParens(" | ")(getTypeRefString)
 
     case EitherType(lT, rT) =>
-      imports.fptsEither("Either") |+| TsImports.join(List(lT, rT), "<", ", ", ">")(getTypeRefString)
+      imports.fptsEither("Either") |+| List(lT, rT).joinTypeParams(getTypeRefString)
 
     case TheseType(lT, rT) =>
-      imports.fptsThese("These") |+| TsImports.join(List(lT, rT), "<", ", ", ">")(getTypeRefString)
+      imports.fptsThese("These") |+| List(lT, rT).joinTypeParams(getTypeRefString)
 
     case MapType(keyType, valueType) =>
-      "{ [key: " |+ getTypeRefString(keyType) |+| "]: " |+| getTypeRefString(valueType) |+| " }"
+      "{ [key: " |+| getTypeRefString(keyType) |+| "]: " |+| getTypeRefString(valueType) |+| " }"
 
     case TupleType(types) =>
-      TsImports.join(types, "[", ", ", "]")(getTypeRefString)
+      types.joinArray(getTypeRefString)
 
     case NullRef => "null"
     case UndefinedRef => "undefined"

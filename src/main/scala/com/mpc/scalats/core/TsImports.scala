@@ -1,9 +1,10 @@
 package com.mpc.scalats.core
 
-import cats.{Monoid, Semigroup}
+import cats.{Monoid, Semigroup, Show}
 import cats.syntax.foldable._
 import cats.syntax.functor._
 import cats.syntax.semigroup._
+import cats.syntax.show._
 import com.mpc.scalats.configuration.Config
 import java.io.File
 import java.nio.file.Paths
@@ -11,10 +12,6 @@ import scala.reflect.runtime.universe.Type
 
 sealed trait TsImport {
   val str: String
-  def fold[A](f: TsImport_* => A, g: TsImportNames => A): A = this match {
-    case x @ TsImport_*(_) => f(x)
-    case x @ TsImportNames(_) => g(x)
-  }
 }
 
 object TsImport {
@@ -24,6 +21,8 @@ object TsImport {
     case (TsImport_*(_), TsImportNames(ns)) => sys.error(s"Can't import `*` and `${ns.mkString}`")
     case (TsImportNames(ns), TsImport_*(_)) => sys.error(s"Can't import `${ns.mkString}` and `*`")
   })
+
+  implicit val show: Show[TsImport] = Show.show(_.str)
 }
 
 case class TsImport_*(alias: String) extends TsImport {
@@ -49,7 +48,7 @@ case class QualifiedImport(loc: String, run: TsImport) {
   }
 
   def asString(currFile: File, allFiles: Set[String]): String =
-    "import " ++ run.fold(x => s"* as ${x.alias}", x => x.names.mkString("{ ", ", ", " }")) ++ """ from """" ++
+    show"""import $run from """" ++
       // Relativize paths to files that exist on the file system or are currently being generated
       (if (file.exists || allFiles.contains(file.toString))
         normalizePath(relPath(loc, currFile.getParent).replaceAll("\\.tsx?$", ""))
@@ -82,17 +81,6 @@ object TsImports {
 
   implicit val monoid: Monoid[TsImports] = Monoid.instance(empty, _ ++ _)
 
-  def join[A](values: Iterable[A], prefix: String, glue: String, suffix: String)(
-    f: A => TsImports.With[String]
-  ): TsImports.With[String] =
-    values.toList.foldMap(f(_).map(List(_))).map(_.mkString(prefix, glue, suffix))
-
-  def joinLines[A](values: Iterable[A], glue: String)(f: A => TsImports.With[String]): TsImports.With[List[String]] = {
-    val l = values.toList.zipWithIndex
-    val last = l.length - 1
-    l.foldMap { case (a, i) => f(a).map(s => List(s ++ (if (i == last) "" else glue))) }
-  }
-
   class Resolved(m: Map[String, TsImport]) extends TsImports(m, Nil) {
     def foreach(f: QualifiedImport => Unit): Unit =
       m.foreach { case (l, i) => f(QualifiedImport(l, i)) }
@@ -100,13 +88,38 @@ object TsImports {
 
   type With[A] = (TsImports, A)
 
-  trait WithOps {
-    implicit class WithTsImportsOps[A](t: TsImports.With[A]) {
-      def +:(a: A)(implicit S: Semigroup[A]): TsImports.With[A] = (t._1, S.combine(a, t._2))
+  trait HelperSyntax {
+    implicit class TsImportsWithStringOps[A](s: String) {
+      def |+|(t: TsImports.With[String]): TsImports.With[String] =
+        (t._1, s ++ t._2)
     }
 
-    implicit class AOps[A](a: A) {
-      def |+(t: TsImports.With[A])(implicit S: Semigroup[A]): TsImports.With[A] = (t._1, S.combine(a, t._2))
+    implicit class TsImportsWithAOps[A](t: TsImports.With[A]) {
+      def |+|(t2: TsImports.With[A])(implicit S: Semigroup[A]): TsImports.With[A] =
+        (t._1 |+| t2._1, S.combine(t._2, t2._2))
+    }
+
+    implicit class TsImportsIterableOps[A](values: Iterable[A]) {
+      def join(prefix: String, glue: String, suffix: String)(f: A => TsImports.With[String]): TsImports.With[String] =
+        values.toList.foldMap(f(_).map(List(_))).map(_.mkString(prefix, glue, suffix))
+
+      def join(glue: String)(f: A => TsImports.With[String]): TsImports.With[String] =
+        join("", glue, "")(f)
+
+      def joinArray(f: A => TsImports.With[String]): TsImports.With[String] =
+        join("[", ", ", "]")(f)
+
+      def joinParens(glue: String)(f: A => TsImports.With[String]): TsImports.With[String] =
+        join("(", glue, ")")(f)
+
+      def joinTypeParams(f: A => TsImports.With[String]): TsImports.With[String] =
+        join("<", ", ", ">")(f)
+
+      def joinLines(glue: String)(f: A => TsImports.With[String]): TsImports.With[List[String]] = {
+        val l = values.toList.zipWithIndex
+        val last = l.length - 1
+        l.foldMap { case (a, i) => f(a).map(s => List(s ++ (if (i == last) "" else glue))) }
+      }
     }
   }
 

@@ -211,8 +211,6 @@ case class Compiler(config: Config) {
         decls.filter(refersTo(decl, _)).foreach(addDecl)
         // then this declaration
         res += decl
-        // then any declarations that refer to this declaration
-        decls.filter(refersTo(_, decl)).foreach(addDecl)
       }
 
     while (math.max(res.size, curr) < decls.size) {
