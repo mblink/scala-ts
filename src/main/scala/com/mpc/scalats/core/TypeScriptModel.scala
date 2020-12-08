@@ -1,6 +1,7 @@
 package com.mpc.scalats.core
 
 import scala.collection.immutable.ListSet
+import scala.reflect.runtime.universe.Type
 
 object TypeScriptModel {
 
@@ -13,7 +14,8 @@ object TypeScriptModel {
 
   case class CustomTypeRef(
     name: String,
-    typeArgs: ListSet[TypeRef]
+    typeArgs: ListSet[TypeRef],
+    scalaType: Type
   ) extends TypeRef
 
   case class ArrayRef(innerType: TypeRef) extends TypeRef
@@ -23,15 +25,14 @@ object TypeScriptModel {
   case class InterfaceDeclaration(name: String, fields: ListSet[Member], typeParams: ListSet[String], superInterface: Option[InterfaceDeclaration]) extends Declaration
   // TODO: Support mapping of typeParams with superInterface
 
-  case class Member(name: String, typeRef: TypeRef, value: Option[Any])
+  class Member(val name: String, val typeRef: TypeRef, val value: Option[Any])
+  object Member {
+    def apply(name: String, typeRef: TypeRef, value: Option[Any]): Member =
+      new Member(name.trim, typeRef, value)
 
-  case class ClassDeclaration(
-    name: String,
-    constructor: ClassConstructor,
-    values: ListSet[Member],
-    typeParams: ListSet[String],
-    superInterface: Option[InterfaceDeclaration]
-  ) extends Declaration
+    def unapply(member: Member): Some[(String, TypeRef, Option[Any])] =
+      Some((member.name, member.typeRef, member.value))
+  }
 
   case class SingletonDeclaration(
     name: String,
@@ -47,10 +48,13 @@ object TypeScriptModel {
     emitAllConst: Boolean
   ) extends Declaration
 
-  case class ClassConstructor(parameters: ListSet[ClassConstructorParameter])
-
-  case class ClassConstructorParameter(name: String,
-                                       typeRef: TypeRef)
+  case class TypeDeclaration(
+    name: String,
+    typeRef: TypeRef,
+    typeParams: ListSet[String]
+  ) extends Declaration {
+    val superInterface = None
+  }
 
   case class UnknownTypeRef(name: String) extends TypeRef
 

@@ -2,35 +2,27 @@ package com.mpc.scalats.configuration
 
 import java.io.PrintStream
 
-/**
-  * Created by Milosz on 09.12.2016.
-  */
 case class Config(
-    emitInterfaces: Boolean = true,
-    emitClasses: Boolean = false,
-    optionToNullable: Boolean = true,
-    optionToUndefined: Boolean = false,
-    outputStream: Option[PrintStream] = None,
-    prependIPrefix: Boolean = true,
-    tsNamingConvention: Boolean = true,
-    typescriptIndent: String = "\t",
-    emitCodecs: Boolean = true,
-    fieldNaming: FieldNaming = FieldNaming.Identity,
-    emitIoTs: Boolean = false,
-    tsImports: TsImports = TsImports(),
+  emitCodecs: Boolean = true,
+  emitInterfaces: Boolean = true,
+  fieldNaming: FieldNaming = FieldNaming.Identity,
+  outputStream: Option[PrintStream] = None,
+  prependIPrefix: Boolean = false,
+  tsNamingConvention: Boolean = true,
+  typescriptIndent: String = "  ",
+  tsImports: TsImports = TsImports()
 )
 
 case class TsImports(
-  iots: Boolean = false,
-  iotsDate: Boolean = false,
-  iotsNonEmptyArray: Boolean = false,
-  iotsNumberFromString: Boolean = false,
-  iotsEither: Boolean = false,
-  iotsOption: Boolean = false,
-  customImports: List[String] = List()
+  fptsEither: String = "fp-ts/lib/Either",
+  fptsThese: String = "fp-ts/lib/These",
+  fptsPipe: (String, String) = ("pipe", "fp-ts/lib/function"),
+  iots: String = "io-ts",
+  iotsDateTime: (String, String) = ("DateFromISOString", "io-ts-types/lib/DateFromISOString"),
+  iotsNonEmptyArray: (String, String) = ("nonEmptyArray", "io-ts-types/lib/nonEmptyArray"),
+  iotsNumberFromString: (String, String) = ("NumberFromString", "io-ts-types/lib/NumberFromString"),
+  iotsEither: (String, String) = ("either", "io-ts-types/lib/either"),
+  iotsOption: (String, String) = ("optionFromNullable", "io-ts-types/lib/optionFromNullable"),
+  iotsLocalDate: Option[(String, String)] = None,
+  iotsThese: Option[(String, String)] = None
 )
-
-// TODO: nullable as function setting (gathering optionToNullable/optionToUndefined)
-// TODO: option as space-lift Option
-// TODO: prelude: String
-// TODO: Per-type options: nullable, fieldNaming, emitCodecs, prelude

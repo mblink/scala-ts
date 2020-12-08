@@ -1,53 +1,34 @@
 package com.mpc.scalats.core
 
-import scala.collection.immutable.ListSet
-
 import com.mpc.scalats.configuration.Config
-
 import com.mpc.scalats.core.TypeScriptModel.{
-  ClassConstructor,
-  ClassConstructorParameter,
   CustomTypeRef,
   Declaration,
   InterfaceDeclaration,
   Member,
-  NullRef,
-  UndefinedRef,
   UnionDeclaration,
   SimpleTypeRef,
   SingletonDeclaration
 }
+import scala.collection.immutable.ListSet
+import scala.reflect.runtime.universe.typeOf
 
-/**
- * Created by Milosz on 09.06.2016.
- */
-object Compiler {
-  // TODO: Refactor as class with config parameter in ctor
-
+case class Compiler(config: Config) {
   @inline def compile(
     scalaTypes: ListSet[ScalaModel.TypeDef]
-  )(implicit config: Config): ListSet[Declaration] =
-    compile(scalaTypes, Option.empty[InterfaceDeclaration])
+  ): ListSet[Declaration] =
+    sortTypes(compile(scalaTypes, None))
 
   def compile(
     scalaTypes: ListSet[ScalaModel.TypeDef],
     superInterface: Option[InterfaceDeclaration]
-  )(implicit config: Config): ListSet[Declaration] =
+  ): ListSet[Declaration] =
     scalaTypes.flatMap { typeDef =>
       typeDef match {
-        case scalaClass: ScalaModel.CaseClass => {
-          val clazz = {
-            if (config.emitClasses) {
-              ListSet[Declaration](compileClass(scalaClass, superInterface))
-            } else ListSet.empty[Declaration]
-          }
+        case scalaClass: ScalaModel.CaseClass =>
+          ListSet[Declaration](compileInterface(scalaClass, superInterface))
 
-          if (!config.emitInterfaces) clazz
-          else ListSet[Declaration](
-            compileInterface(scalaClass, superInterface)) ++ clazz
-        }
-
-        case ScalaModel.CaseObject(name, members) => {
+        case ScalaModel.CaseObject(name, _, members, _) =>
           val values = members.map { scalaMember =>
             Member(scalaMember.name,
               compileTypeRef(scalaMember.typeRef, false),
@@ -56,9 +37,8 @@ object Compiler {
 
           ListSet[Declaration](
             SingletonDeclaration(name, values, superInterface))
-        }
 
-        case ScalaModel.SealedUnion(name, fields, possibilities) => {
+        case ScalaModel.SealedUnion(name, fullTypeName, fields, possibilities, _) =>
           val ifaceFields = fields.map { scalaMember =>
             Member(scalaMember.name,
               compileTypeRef(scalaMember.typeRef, false),
@@ -66,40 +46,42 @@ object Compiler {
           }
 
           val unionRef = InterfaceDeclaration(
-            buildInterfaceName(name), ifaceFields, ListSet.empty[String], superInterface)
+            buildTypeName(name, fullTypeName), ifaceFields, ListSet.empty[String], superInterface)
 
           compile(possibilities, Some(unionRef)) + UnionDeclaration(
             name,
             ifaceFields,
             possibilities.map {
-              case ScalaModel.CaseObject(nme, _) =>
-                CustomTypeRef(nme, ListSet.empty)
+              case ScalaModel.CaseObject(nme, _, _, scalaType) =>
+                CustomTypeRef(nme, ListSet.empty, scalaType)
 
-              case ScalaModel.CaseClass(n, _, _, tpeArgs) =>
-                CustomTypeRef(buildInterfaceName(n), tpeArgs.map { SimpleTypeRef(_) })
+              case ScalaModel.CaseClass(n, fn, _, _, tpeArgs, scalaType) =>
+                CustomTypeRef(buildTypeName(n, fn), tpeArgs.map { SimpleTypeRef(_) }, scalaType)
 
               case m =>
-                CustomTypeRef(buildInterfaceName(m.name), ListSet.empty)
+                CustomTypeRef(buildTypeName(m.name, m.fullTypeName), ListSet.empty, m.scalaType)
             },
             superInterface,
             possibilities.foldLeft(true)((b, p) =>
               if(b) {
                 p match {
-                  case ScalaModel.CaseObject(_, _) => true
+                  case ScalaModel.CaseObject(_, _, _, _) => true
                   case _ => false
                 }
               } else {
                 false
               }))
-        }
+
+        case typeAlias: ScalaModel.TypeAlias =>
+          ListSet[Declaration](compileTypeAlias(typeAlias))
       }
     }
 
   private def compileInterface(
     scalaClass: ScalaModel.CaseClass,
     superInterface: Option[InterfaceDeclaration]
-  )(implicit config: Config) = InterfaceDeclaration(
-    buildInterfaceName(scalaClass.name),
+  ) = InterfaceDeclaration(
+    buildTypeName(scalaClass.name, scalaClass.fullTypeName),
     scalaClass.fields.map { scalaMember =>
       TypeScriptModel.Member(
         scalaMember.name,
@@ -111,34 +93,23 @@ object Compiler {
     superInterface = superInterface
   )
 
-  private def buildInterfaceName(name: String)(implicit config: Config) = {
-    if (config.prependIPrefix) s"I${name}" else name
+  private def buildTypeName(name: String, fullTypeName: String) = {
+    val base = if (config.prependIPrefix) s"I${name}" else name
+    if (fullTypeName.endsWith("[Option]")) s"${base}Opt" else base
   }
 
-  private def compileClass(
-    scalaClass: ScalaModel.CaseClass,
-    superInterface: Option[InterfaceDeclaration])(implicit config: Config) = {
-    TypeScriptModel.ClassDeclaration(
-      scalaClass.name,
-      ClassConstructor(
-        scalaClass.fields map { scalaMember =>
-          ClassConstructorParameter(
-            scalaMember.name,
-            compileTypeRef(scalaMember.typeRef, inInterfaceContext = false))
-        }
-      ),
-      values = scalaClass.values.map { v =>
-        TypeScriptModel.Member(v.name, compileTypeRef(v.typeRef, false), v.value)
-      },
-      typeParams = scalaClass.typeArgs,
-      superInterface
-    )
-  }
+  private def compileTypeAlias(
+    scalaTypeAlias: ScalaModel.TypeAlias
+  ): TypeScriptModel.TypeDeclaration =
+    TypeScriptModel.TypeDeclaration(
+      buildTypeName(scalaTypeAlias.name, scalaTypeAlias.fullTypeName),
+      compileTypeRef(scalaTypeAlias.typeRef, false),
+      scalaTypeAlias.typeArgs)
 
   private def compileTypeRef(
       scalaTypeRef: ScalaModel.TypeRef,
       inInterfaceContext: Boolean
-  )(implicit config: Config): TypeScriptModel.TypeRef = scalaTypeRef match {
+  ): TypeScriptModel.TypeRef = scalaTypeRef match {
     case ScalaModel.IntRef =>
       TypeScriptModel.NumberRef
     case ScalaModel.LongRef =>
@@ -154,10 +125,9 @@ object Compiler {
     case ScalaModel.NonEmptySeqRef(innerType) =>
       TypeScriptModel.NonEmptyArrayRef(compileTypeRef(innerType, inInterfaceContext))
 
-    case ScalaModel.CaseClassRef(name, typeArgs) => {
-      val actualName = if (inInterfaceContext) buildInterfaceName(name) else name
-      TypeScriptModel.CustomTypeRef(
-        actualName, typeArgs.map(compileTypeRef(_, inInterfaceContext)))
+    case ScalaModel.CaseClassRef(name, fullTypeName, typeArgs, scalaType) => {
+      val actualName = if (inInterfaceContext) buildTypeName(name, fullTypeName) else name
+      TypeScriptModel.CustomTypeRef(actualName, typeArgs.map(compileTypeRef(_, inInterfaceContext)), scalaType)
     }
 
     case ScalaModel.DateRef =>
@@ -165,34 +135,12 @@ object Compiler {
     case ScalaModel.DateTimeRef =>
       TypeScriptModel.DateTimeRef
 
-    case ScalaModel.TypeParamRef(name) =>
+    case ScalaModel.TypeParamRef(name, _) =>
       TypeScriptModel.SimpleTypeRef(name)
 
     case ScalaModel.OptionRef(innerType) =>
-      if (config.optionToNullable && config.optionToUndefined)
-        TypeScriptModel.UnionType(ListSet(
-          TypeScriptModel.UnionType(ListSet(
-            compileTypeRef(innerType, inInterfaceContext), NullRef)),
-            UndefinedRef))
-
-      else if (config.emitIoTs)
-        TypeScriptModel.CustomTypeRef("optionFromNullable", ListSet(
-          compileTypeRef(innerType, inInterfaceContext)))
-
-      else if (config.optionToNullable)
-        TypeScriptModel.UnionType(ListSet(
-          compileTypeRef(innerType, inInterfaceContext),
-          NullRef))
-
-      else if (config.optionToUndefined)
-        TypeScriptModel.UnionType(ListSet(
-          compileTypeRef(innerType, inInterfaceContext),
-          UndefinedRef))
-
-      else
-        TypeScriptModel.UnionType(ListSet(
-          compileTypeRef(innerType, inInterfaceContext),
-          NullRef))
+      TypeScriptModel.CustomTypeRef("optionFromNullable", ListSet(
+        compileTypeRef(innerType, inInterfaceContext)), typeOf[Option[_]].typeConstructor)
 
     case ScalaModel.MapRef(kT, vT) => TypeScriptModel.MapType(
       compileTypeRef(kT, inInterfaceContext),
@@ -214,7 +162,62 @@ object Compiler {
         compileTypeRef(lT, inInterfaceContext),
         compileTypeRef(rT, inInterfaceContext))
 
-    case ScalaModel.UnknownTypeRef(u) =>
+    case ScalaModel.UnknownTypeRef(u, _) =>
       TypeScriptModel.UnknownTypeRef(u)
+  }
+
+  private def sortTypes(decls: ListSet[TypeScriptModel.Declaration]): ListSet[TypeScriptModel.Declaration] = {
+    def refersToRef(r: TypeScriptModel.TypeRef, d: TypeScriptModel.Declaration): Boolean =
+      r match {
+        case TypeScriptModel.CustomTypeRef(n, rs, _) => n == d.name || rs.exists(refersToRef(_, d))
+        case TypeScriptModel.ArrayRef(r) => refersToRef(r, d)
+        case TypeScriptModel.NonEmptyArrayRef(r) => refersToRef(r, d)
+        case TypeScriptModel.UnknownTypeRef(n) => n == d.name
+        case TypeScriptModel.SimpleTypeRef(n) => n == d.name
+        case TypeScriptModel.UnionType(rs) => rs.exists(refersToRef(_, d))
+        case TypeScriptModel.EitherType(l, r) => refersToRef(l, d) || refersToRef(r, d)
+        case TypeScriptModel.TheseType(l, r) => refersToRef(l, d) || refersToRef(r, d)
+        case TypeScriptModel.MapType(k, v) => refersToRef(k, d) || refersToRef(v, d)
+        case TypeScriptModel.TupleType(rs) => rs.exists(refersToRef(_, d))
+        case TypeScriptModel.NumberRef | TypeScriptModel.StringRef | TypeScriptModel.BooleanRef |
+             TypeScriptModel.DateRef | TypeScriptModel.DateTimeRef | TypeScriptModel.NullRef |
+             TypeScriptModel.UndefinedRef => false
+      }
+
+    def refersTo(d1: TypeScriptModel.Declaration, d2: TypeScriptModel.Declaration): Boolean =
+      d1 match {
+        case TypeScriptModel.InterfaceDeclaration(_, fs, _, si) =>
+          fs.exists(f => refersToRef(f.typeRef, d2)) || si.fold(false)(refersTo(_, d2))
+
+        case TypeScriptModel.SingletonDeclaration(_, vs, si) =>
+          vs.exists(v => refersToRef(v.typeRef, d2)) || si.fold(false)(refersTo(_, d2))
+
+        case TypeScriptModel.UnionDeclaration(_, fs, ps, si, _) =>
+          fs.exists(f => refersToRef(f.typeRef, d2)) || ps.exists(refersToRef(_, d2)) || si.fold(false)(refersTo(_, d2))
+
+        case TypeScriptModel.TypeDeclaration(_, r, _) =>
+          refersToRef(r, d2)
+      }
+
+    var seen = Set[String]()
+    var res = ListSet[TypeScriptModel.Declaration]()
+    var curr = 0
+
+    def addDecl(decl: TypeScriptModel.Declaration): Unit =
+      if (seen.contains(decl.name)) ()
+      else {
+        seen = seen + decl.name
+        // Any declarations that this declaration refers to go first
+        decls.filter(refersTo(decl, _)).foreach(addDecl)
+        // then this declaration
+        res += decl
+      }
+
+    while (math.max(res.size, curr) < decls.size) {
+      addDecl(decls.toList(curr))
+      curr += 1
+    }
+
+    res
   }
 }

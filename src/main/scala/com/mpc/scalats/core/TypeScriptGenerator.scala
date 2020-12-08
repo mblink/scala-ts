@@ -1,97 +1,115 @@
 package com.mpc.scalats.core
 
 import com.mpc.scalats.configuration.Config
+import java.io.{File, PrintStream}
 import scala.reflect.runtime.universe._
+import scala.util.{Failure, Success, Try}
 
-/**
-  * Created by Milosz on 11.06.2016.
-  */
 object TypeScriptGenerator {
+  def normalizeName(packagePath: Option[String], simpleName: String) =
+    s"${packagePath.getOrElse("")}.${Option(simpleName).getOrElse("")}".stripPrefix(".")
 
-  private def updateConfig(c: Config): Config = {
-    if (c.emitIoTs) {
-      c.copy(
-        emitClasses = false,
-        emitInterfaces = true,
-        optionToNullable = false,
-        optionToUndefined = false)
-    } else {
-      c
-    }
-  }
+  def reflectType(mirror: Mirror)(packagePath: Option[String], simpleName: String): Symbol =
+    (packagePath match {
+      case Some(p) => Try(mirror.staticModule(p)).getOrElse(mirror.staticPackage(p))
+      case None => mirror.staticPackage("scala")
+    }).typeSignature.member(TypeName(simpleName))
 
-  def getClassNames(mirror: Mirror)(className: String) = {
-    try {
-      mirror.staticClass(className).toType
-    } catch {
-      case e: Throwable => {
-        println(s"Could not find class $className, trying as module")
-        mirror.staticModule(className).moduleClass.asType.toType
+  def reflectModule(mirror: Mirror)(packagePath: Option[String], simpleName: String): Symbol =
+    mirror.staticModule(normalizeName(packagePath, simpleName))
+
+  def reflectClass(mirror: Mirror)(packagePath: Option[String], simpleName: String): Symbol =
+    mirror.staticClass(normalizeName(packagePath, simpleName))
+
+  val reflectTypes = List("class" -> reflectClass _, "module" -> reflectModule _, "type" -> reflectType _)
+
+  def tryReflect(mirror: Mirror)(packagePath: Option[String], simpleName: String): Try[Symbol] = {
+    val name = normalizeName(packagePath, simpleName)
+    reflectTypes.zipWithIndex.foldLeft(Failure(new Throwable): Try[Symbol]) { case (acc, ((tpe, fn), i)) =>
+      acc.orElse {
+        reflectTypes.lift(i - 1).foreach { case (t, _) => println(s"Could not find $t $name, trying as $tpe") }
+        Try(fn(mirror)(packagePath, simpleName))
       }
     }
   }
 
-  def generateFromClassNames(
-    classNames: List[String],
-    excludeClassNames: List[String],
+  val classNameRx = """^((?:([^\.]+(?:\.[^\.]+)*)\.)?([a-zA-Z0-9]+))(?:\[(.*)\])?$""".r
+
+  def getTypeFromName(mirror: Mirror)(className: String): Type =
+    className match {
+      case classNameRx(_, packagePath, simpleName, typeParamsStr) =>
+        val typeParams = ScalaParser.parseTypeParams(typeParamsStr).map(getTypeFromName(mirror))
+        val tpe = tryReflect(mirror)(Option(packagePath), simpleName) match {
+          case Success(m: ModuleSymbol) => m.moduleClass.asType.toType
+          case Success(s) => appliedType(s, typeParams)
+          case Failure(th) => throw new Throwable(s"Failed to parse type $className", th)
+        }
+        if (typeParams.isEmpty && tpe.typeParams.nonEmpty) tpe.typeConstructor else tpe
+
+      case _ => sys.error(s"Something went wrong, unable to parse `$className`")
+    }
+
+  def looseTpeEq(t1: Type, t2: Type): Boolean =
+    t1 =:= t2 || t1.typeSymbol == t2.typeSymbol || (t1.typeSymbol.isClass && t1.typeSymbol.asClass.isSealed && t2 <:< t1)
+
+  class TypeToFile(pairs: List[(Type, String)]) {
+    def get(tpe: Type): Option[String] =
+      pairs.collect { case (t, f) if looseTpeEq(t, tpe) => f }.distinct match {
+        case s :: Nil => Option(s)
+        case ss @ (_ :: _ :: _) => sys.error(s"Type $tpe found in more than one file: ${ss.mkString(", ")}")
+        case Nil => None
+      }
+
+    def forFile(file: String): List[Type] =
+      pairs.collect { case (t, f) if f == file => t }
+
+    lazy val allFiles: Set[String] = pairs.map(_._2).toSet
+  }
+
+  def generateFiles(
+    basePath: File,
+    files: Map[String, List[String]],
     logger: Logger,
     classLoader: ClassLoader = getClass.getClassLoader
-  )(c: Config) = {
+  )(implicit config: Config) = {
     val mirror = runtimeMirror(classLoader)
-    val types = classNames.map(cn => {
-      println(s"className = $cn")
-      getClassNames(mirror)(cn)
+    var classNameToType = Map[String, Type]()
+    val typeToFile = new TypeToFile(files.toList.flatMap { case (f, classNames) =>
+      classNames.map { n =>
+        val tpe = getTypeFromName(mirror)(n)
+        classNameToType = classNameToType + (n -> tpe)
+        tpe -> s"$basePath/$f"
+      }
     })
-    val excludeTypes = excludeClassNames.map(cn => {
-      println(s"exclude className = $cn")
-      getClassNames(mirror)(cn)
-    })
 
-    generate(types, excludeTypes, logger, mirror)(updateConfig(c))
-  }
+    files.foreach { case (fileName, _) =>
+      val file = new File(s"$basePath/$fileName")
+      file.getParentFile.mkdirs()
+      file.createNewFile()
+      val outputStream = new PrintStream(file)
 
-  def generate(caseClasses: List[Type], excludeCaseClasses: List[Type], logger: Logger, mirror: Mirror)(c: Config) = {
-    implicit val config: Config = updateConfig(c)
-    val outputStream = config.outputStream.getOrElse(Console.out)
-    val scalaParser = new ScalaParser(logger, mirror, excludeCaseClasses)
-    val scalaTypes = scalaParser.parseTypes(caseClasses)
-    val typeScriptInterfaces = Compiler.compile(scalaTypes)
+      val excludeType = (t: Type) => typeToFile.get(t).exists(_ != file.toString)
+      val scalaParser = new ScalaParser(logger, mirror, excludeType)
+      val scalaTypes = scalaParser.parseTypes(typeToFile.forFile(file.toString))
 
-    outputStream.println("/**********************************************************")
-    outputStream.println(" *                                                        *")
-    outputStream.println(" *    FILE GENERATED BY SCALA-TS. DO NOT EDIT BY HAND.    *")
-    outputStream.println(" *                                                        *")
-    outputStream.println(" *********************************************************/")
-    outputStream.println()
-
-    val emitter: Emitter = if (config.emitIoTs) {
-      if (config.tsImports.iots) {
-        outputStream.println("""import * as t from "io-ts";""")
-      }
-      if (config.tsImports.iotsDate) {
-        outputStream.println("""import { DateFromISOString } from "io-ts-types/lib/DateFromISOString";""")
-      }
-      if (config.tsImports.iotsNonEmptyArray) {
-        outputStream.println("""import { nonEmptyArray } from "io-ts-types/lib/nonEmptyArray";""")
-      }
-      if (config.tsImports.iotsNumberFromString) {
-        outputStream.println("""import { NumberFromString } from "io-ts-types/lib/NumberFromString";""")
-      }
-      if (config.tsImports.iotsEither) {
-        outputStream.println("""import { either } from "io-ts-types/lib/either";""")
-      }
-      if (config.tsImports.iotsOption) {
-        outputStream.println("""import { optionFromNullable } from "io-ts-types/lib/optionFromNullable";""")
-      }
-      config.tsImports.customImports.foreach(outputStream.println)
-
+      outputStream.println("/**********************************************************")
+      outputStream.println(" *                                                        *")
+      outputStream.println(" *    FILE GENERATED BY SCALA-TS. DO NOT EDIT BY HAND.    *")
+      outputStream.println(" *                                                        *")
+      outputStream.println(" *********************************************************/")
       outputStream.println()
 
-      new IoTsEmitter(config)
-    } else {
-      new TypeScriptEmitter(config)
-    }
+      val emitter = new IoTsEmitter(config)
+      val (imports, lines) = emitter.emit(Compiler(config).compile(scalaTypes))
 
-    emitter.emit(typeScriptInterfaces, outputStream)
+      imports
+        .resolve((tpe, name) => typeToFile.get(tpe).filter(_ != file.toString)
+          .map(f => TsImports.names(f.toString, name)).getOrElse(TsImports.empty))
+        .foreach(i => outputStream.println(i.asString(file, typeToFile.allFiles)))
+      outputStream.println()
+
+      lines.foreach(outputStream.println)
+      outputStream.println()
+    }
   }
 }
