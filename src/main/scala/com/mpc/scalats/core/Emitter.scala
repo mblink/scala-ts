@@ -17,7 +17,7 @@ trait Emitter extends TsImports.HelperSyntax {
   implicit def listStringToLines(ls: List[String]): Lines = (imports.empty, ls)
   implicit def stringToTsImportsWithString(s: String): TsImports.With[String] = (imports.empty, s)
 
-  def emit(declaration: ListSet[Declaration]): Lines
+  def emit(declaration: ListSet[Declaration])(implicit ctx: TsImports.Ctx): Lines
 
   val indent: String = config.typescriptIndent
   def indent(num: Int): String = config.typescriptIndent * num
@@ -37,7 +37,7 @@ trait Emitter extends TsImports.HelperSyntax {
   def codecName(name: String): String = s"${objectName(name)}C"
   def codecType(name: String): String = s"${interfaceName(name)}C"
 
-  def getTypeRefString(typeRef: TypeRef): TsImports.With[String] = typeRef match {
+  def getTypeRefString(typeRef: TypeRef)(implicit ctx: TsImports.Ctx): TsImports.With[String] = typeRef match {
     case NumberRef => "number"
     case BooleanRef => "boolean"
     case StringRef => "string"
@@ -51,8 +51,8 @@ trait Emitter extends TsImports.HelperSyntax {
     case UnknownTypeRef(typeName) => typeName
     case SimpleTypeRef(param) => param
 
-    case UnionType(possibilities) =>
-      possibilities.joinParens(" | ")(getTypeRefString)
+    case UnionType(name, possibilities, scalaType) =>
+      imports.custom(scalaType, name).orElse(possibilities.joinParens(" | ")(getTypeRefString))
 
     case EitherType(lT, rT) =>
       imports.fptsEither("Either") |+| List(lT, rT).joinTypeParams(getTypeRefString)

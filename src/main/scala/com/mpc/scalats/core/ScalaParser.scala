@@ -230,7 +230,10 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
       case _ if isAnyValChild(scalaType) =>
         getTypeRef(scalaType.members.filter(!_.isMethod).map(_.typeSignature).head, Set())
       case _ if isSealedUnion(scalaType) =>
-        UnionRef(ListSet.empty ++ directKnownSubclasses(scalaType).map(getTypeRef(_, Set.empty)))
+        UnionRef(
+          scalaType.typeSymbol.name.toString,
+          ListSet.empty ++ directKnownSubclasses(scalaType).map(getTypeRef(_, Set.empty)),
+          scalaType)
       case _ if isCaseClass(scalaType)=>
         val caseClassName = scalaType.typeSymbol.name.toString
         val typeArgs = scalaType.typeArgs

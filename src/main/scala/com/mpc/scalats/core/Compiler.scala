@@ -146,10 +146,10 @@ case class Compiler(config: Config) {
       compileTypeRef(kT, inInterfaceContext),
       compileTypeRef(vT, inInterfaceContext))
 
-    case ScalaModel.UnionRef(possibilities) =>
-      TypeScriptModel.UnionType(possibilities.map { i =>
+    case ScalaModel.UnionRef(name, possibilities, scalaType) =>
+      TypeScriptModel.UnionType(name, possibilities.map { i =>
         compileTypeRef(i, inInterfaceContext)
-      })
+      }, scalaType)
 
     case ScalaModel.TupleRef(tpes) =>
       TypeScriptModel.TupleType(tpes.map(compileTypeRef(_, inInterfaceContext)))
@@ -174,7 +174,7 @@ case class Compiler(config: Config) {
         case TypeScriptModel.NonEmptyArrayRef(r) => refersToRef(r, d)
         case TypeScriptModel.UnknownTypeRef(n) => n == d.name
         case TypeScriptModel.SimpleTypeRef(n) => n == d.name
-        case TypeScriptModel.UnionType(rs) => rs.exists(refersToRef(_, d))
+        case TypeScriptModel.UnionType(_, rs, _) => rs.exists(refersToRef(_, d))
         case TypeScriptModel.EitherType(l, r) => refersToRef(l, d) || refersToRef(r, d)
         case TypeScriptModel.TheseType(l, r) => refersToRef(l, d) || refersToRef(r, d)
         case TypeScriptModel.MapType(k, v) => refersToRef(k, d) || refersToRef(v, d)

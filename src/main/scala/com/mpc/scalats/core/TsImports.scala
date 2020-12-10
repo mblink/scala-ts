@@ -55,36 +55,22 @@ case class QualifiedImport(loc: String, run: TsImport) {
       else loc) ++ """";"""
 }
 
-class TsImports private (
-  private val m: Map[String, TsImport],
-  val needed: List[(Type, String)]
-) {
-  def ++(other: TsImports): TsImports =
-    new TsImports(m |+| other.m, needed ++ other.needed)
-
-  def resolve(customType: (Type, String) => TsImports): TsImports.Resolved =
-    new TsImports.Resolved((this ++ needed.foldMap(customType.tupled(_).resolve(customType): TsImports)).m)
+class TsImports private (private val m: Map[String, TsImport]) {
+  def isEmpty: Boolean = m.isEmpty
+  def ++(other: TsImports): TsImports = new TsImports(m |+| other.m)
+  def foreach(f: QualifiedImport => Unit): Unit = m.foreach { case (l, i) => f(QualifiedImport(l, i)) }
 }
 
-
 object TsImports {
-  lazy val empty: TsImports = new TsImports(Map(), Nil)
+  lazy val empty: TsImports = new TsImports(Map())
 
   def all(loc: String, alias: String): TsImports =
-    new TsImports(Map(loc -> TsImport_*(alias)), Nil)
+    new TsImports(Map(loc -> TsImport_*(alias)))
 
   def names(loc: String, name1: String, otherNames: String*): TsImports =
-    new TsImports(Map(loc -> TsImportNames(otherNames.toSet + name1)), Nil)
-
-  def needed(names: List[(Type, String)]): TsImports =
-    new TsImports(Map(), names)
+    new TsImports(Map(loc -> TsImportNames(otherNames.toSet + name1)))
 
   implicit val monoid: Monoid[TsImports] = Monoid.instance(empty, _ ++ _)
-
-  class Resolved(m: Map[String, TsImport]) extends TsImports(m, Nil) {
-    def foreach(f: QualifiedImport => Unit): Unit =
-      m.foreach { case (l, i) => f(QualifiedImport(l, i)) }
-  }
 
   type With[A] = (TsImports, A)
 
@@ -97,6 +83,9 @@ object TsImports {
     implicit class TsImportsWithAOps[A](t: TsImports.With[A]) {
       def |+|(t2: TsImports.With[A])(implicit S: Semigroup[A]): TsImports.With[A] =
         (t._1 |+| t2._1, S.combine(t._2, t2._2))
+
+      def orElse(t2: TsImports.With[A]): TsImports.With[A] =
+        if (t._1.isEmpty) t2 else t
     }
 
     implicit class TsImportsIterableOps[A](values: Iterable[A]) {
@@ -145,6 +134,10 @@ object TsImports {
     def apply(t: With[String], p: String, s: String): CallableImport = CallableImport(t._1, t._2, p, s)
   }
 
+  case class Ctx(
+    custom: (Type, String) => TsImports
+  )
+
   case class available(config: Config) {
     lazy val empty: TsImports = TsImports.empty
     lazy val tsi = config.tsImports
@@ -184,6 +177,7 @@ object TsImports {
     lazy val iotsLocalDate = optImport(tsi.iotsLocalDate, "LocalDate", "iotsLocalDate")
     lazy val iotsThese = CallableImport(optImport(tsi.iotsThese, "These", "iotsThese"))
 
-    def custom(scalaType: Type, name: String): With[String] = (needed(List(scalaType -> name)), name)
+    def custom(scalaType: Type, name: String)(implicit ctx: Ctx): With[String] =
+      (ctx.custom(scalaType, name), name)
   }
 }

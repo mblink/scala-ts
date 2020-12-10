@@ -54,7 +54,7 @@ object ScalaModel {
 
   case class OptionRef(innerType: TypeRef) extends TypeRef
 
-  case class UnionRef(possibilities: ListSet[TypeRef]) extends TypeRef
+  case class UnionRef(name: String, possibilities: ListSet[TypeRef], tpe: Type) extends TypeRef with HasType
 
   case class EitherRef(leftType: TypeRef, rightType: TypeRef) extends TypeRef
 

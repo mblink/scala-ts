@@ -90,7 +90,7 @@ object TypeScriptModel {
     override def toString = name
   }
 
-  case class UnionType(possibilities: ListSet[TypeRef]) extends TypeRef
+  case class UnionType(name: String, possibilities: ListSet[TypeRef], scalaType: Type) extends TypeRef
 
   case class EitherType(lT: TypeRef, rT: TypeRef) extends TypeRef
 

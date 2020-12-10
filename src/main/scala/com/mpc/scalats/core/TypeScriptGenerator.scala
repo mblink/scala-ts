@@ -74,16 +74,18 @@ object TypeScriptGenerator {
   )(implicit config: Config) = {
     val mirror = runtimeMirror(classLoader)
     var classNameToType = Map[String, Type]()
+    val filePath = (n: String) => s"$basePath/$n"
+
     val typeToFile = new TypeToFile(files.toList.flatMap { case (f, classNames) =>
       classNames.map { n =>
         val tpe = getTypeFromName(mirror)(n)
         classNameToType = classNameToType + (n -> tpe)
-        tpe -> s"$basePath/$f"
+        tpe -> filePath(f)
       }
     })
 
     files.foreach { case (fileName, _) =>
-      val file = new File(s"$basePath/$fileName")
+      val file = new File(filePath(fileName))
       file.getParentFile.mkdirs()
       file.createNewFile()
       val outputStream = new PrintStream(file)
@@ -100,12 +102,11 @@ object TypeScriptGenerator {
       outputStream.println()
 
       val emitter = new IoTsEmitter(config)
-      val (imports, lines) = emitter.emit(Compiler(config).compile(scalaTypes))
+      val (imports, lines) = emitter.emit(Compiler(config).compile(scalaTypes))(
+        TsImports.Ctx((tpe, name) => typeToFile.get(tpe).filter(_ != file.toString)
+          .map(f => TsImports.names(f.toString, name)).getOrElse(TsImports.empty)))
 
-      imports
-        .resolve((tpe, name) => typeToFile.get(tpe).filter(_ != file.toString)
-          .map(f => TsImports.names(f.toString, name)).getOrElse(TsImports.empty))
-        .foreach(i => outputStream.println(i.asString(file, typeToFile.allFiles)))
+      imports.foreach(i => outputStream.println(i.asString(file, typeToFile.allFiles)))
       outputStream.println()
 
       lines.foreach(outputStream.println)
