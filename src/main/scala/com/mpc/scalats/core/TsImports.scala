@@ -172,8 +172,8 @@ object TsImports {
     lazy val iotsDateTime = namedImport(tsi.iotsDateTime)
     lazy val iotsNonEmptyArray = CallableImport(namedImport(tsi.iotsNonEmptyArray))
     lazy val iotsNumberFromString = namedImport(tsi.iotsNumberFromString)
-    lazy val iotsEither = CallableImport(namedImport(tsi.iotsEither))
     lazy val iotsOption = CallableImport(namedImport(tsi.iotsOption))
+    lazy val iotsEither = CallableImport(optImport(tsi.iotsEither, "Either", "iotsEither"))
     lazy val iotsLocalDate = optImport(tsi.iotsLocalDate, "LocalDate", "iotsLocalDate")
     lazy val iotsThese = CallableImport(optImport(tsi.iotsThese, "These", "iotsThese"))
 

@@ -21,8 +21,8 @@ case class TsImports(
   iotsDateTime: (String, String) = ("DateFromISOString", "io-ts-types/lib/DateFromISOString"),
   iotsNonEmptyArray: (String, String) = ("nonEmptyArray", "io-ts-types/lib/nonEmptyArray"),
   iotsNumberFromString: (String, String) = ("NumberFromString", "io-ts-types/lib/NumberFromString"),
-  iotsEither: (String, String) = ("either", "io-ts-types/lib/either"),
   iotsOption: (String, String) = ("optionFromNullable", "io-ts-types/lib/optionFromNullable"),
+  iotsEither: Option[(String, String)] = None,
   iotsLocalDate: Option[(String, String)] = None,
   iotsThese: Option[(String, String)] = None
 )
