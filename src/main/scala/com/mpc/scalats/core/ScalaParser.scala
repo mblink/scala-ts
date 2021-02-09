@@ -113,7 +113,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
           tpe.typeSymbol.name.toString,
           tpe.toString,
           ListSet.empty ++ members,
-          parseTypes(possibilities),
+          possibilities.foldLeft(ListSet[TypeDef]())((b, a) => b ++ parseType(a)),
           tpe))
 
       case _ => Option.empty[SealedUnion]
