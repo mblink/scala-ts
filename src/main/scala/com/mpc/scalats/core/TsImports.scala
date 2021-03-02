@@ -151,7 +151,7 @@ object TsImports {
     lazy val fptsThese = CallableImport(all(tsi.fptsThese, "Th"), "Th", ".", "")
 
     lazy val iotsImport = all(tsi.iots, "t")
-    lazy val iotsArray = CallableImport(iotsImport, "t.array")
+    lazy val iotsReadonlyArray = CallableImport(iotsImport, "t.readonlyArray")
     lazy val iotsBoolean = (iotsImport, "t.boolean")
     lazy val iotsErrors = (iotsImport, "t.Errors")
     lazy val iotsLiteral = CallableImport(iotsImport, "t.literal")
@@ -170,7 +170,7 @@ object TsImports {
 
 
     lazy val iotsDateTime = namedImport(tsi.iotsDateTime)
-    lazy val iotsNonEmptyArray = CallableImport(namedImport(tsi.iotsNonEmptyArray))
+    lazy val iotsReadonlyNonEmptyArray = CallableImport(namedImport(tsi.iotsReadonlyNonEmptyArray))
     lazy val iotsNumberFromString = namedImport(tsi.iotsNumberFromString)
     lazy val iotsOption = CallableImport(namedImport(tsi.iotsOption))
     lazy val iotsEither = CallableImport(optImport(tsi.iotsEither, "Either", "iotsEither"))

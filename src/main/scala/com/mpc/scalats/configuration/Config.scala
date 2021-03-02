@@ -19,7 +19,7 @@ case class TsImports(
   fptsPipe: (String, String) = ("pipe", "fp-ts/lib/function"),
   iots: String = "io-ts",
   iotsDateTime: (String, String) = ("DateFromISOString", "io-ts-types/lib/DateFromISOString"),
-  iotsNonEmptyArray: (String, String) = ("nonEmptyArray", "io-ts-types/lib/nonEmptyArray"),
+  iotsReadonlyNonEmptyArray: (String, String) = ("readonlyNonEmptyArray", "io-ts-types/lib/readonlyNonEmptyArray"),
   iotsNumberFromString: (String, String) = ("NumberFromString", "io-ts-types/lib/NumberFromString"),
   iotsOption: (String, String) = ("optionFromNullable", "io-ts-types/lib/optionFromNullable"),
   iotsEither: Option[(String, String)] = None,

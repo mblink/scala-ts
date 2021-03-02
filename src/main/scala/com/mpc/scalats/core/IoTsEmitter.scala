@@ -150,8 +150,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case StringRef => imports.iotsString
     case DateRef => imports.iotsLocalDate
     case DateTimeRef => imports.iotsDateTime
-    case ArrayRef(innerType) => imports.iotsArray(getIoTsTypeString(innerType))
-    case NonEmptyArrayRef(innerType) => imports.iotsNonEmptyArray(getIoTsTypeString(innerType))
+    case ArrayRef(innerType) => imports.iotsReadonlyArray(getIoTsTypeString(innerType))
+    case NonEmptyArrayRef(innerType) => imports.iotsReadonlyNonEmptyArray(getIoTsTypeString(innerType))
     case CustomTypeRef(name, params, scalaType) =>
       customIoTsTypes(scalaType, name, codecName) |+|
         (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
@@ -183,7 +183,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case DateRef => imports.iotsLiteral(s"`${value.toString.trim}`")
     case DateTimeRef => imports.iotsLiteral(s"new Date(`${value.toString.trim}`)")
     case ArrayRef(_) => imports.iotsLiteral(s"[$value]")
-    case NonEmptyArrayRef(_) => imports.iotsLiteral(imports.iotsNonEmptyArray.value |+| s".of([$value])")
+    case NonEmptyArrayRef(_) => imports.iotsLiteral(imports.iotsReadonlyNonEmptyArray.value |+| s".of([$value])")
     case CustomTypeRef(name, params, scalaType) =>
       customIoTsTypes(scalaType, name, codecName) |+|
         (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeWrappedVal(value, _)))
@@ -209,7 +209,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
   }
 
   def customIoTsTypes(scalaType: Type, name: String, customName: String => String)(implicit ctx: TsImports.Ctx): TsImports.With[String] = name match {
-    case "NonEmptyList" => imports.iotsNonEmptyArray.value
+    case "NonEmptyList" => imports.iotsReadonlyNonEmptyArray.value
     case "optionFromNullable" => imports.iotsOption.value
     case _ => imports.custom(scalaType, customName(name))
   }
@@ -221,7 +221,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case DateRef => s"`${value.toString.trim}`"
     case DateTimeRef => s"`${value.toString.trim}`"
     case ArrayRef(_) => s"[${value}]"
-    case NonEmptyArrayRef(_) => imports.iotsNonEmptyArray.value |+| s".of([$value])"
+    case NonEmptyArrayRef(_) => imports.iotsReadonlyNonEmptyArray.value |+| s".of([$value])"
     case CustomTypeRef(name, params, scalaType) =>
       imports.custom(scalaType, if (interfaceContext) interfaceName(name) else objectName(name)) |+|
         (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))

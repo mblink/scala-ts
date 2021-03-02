@@ -44,7 +44,7 @@ trait Emitter extends TsImports.HelperSyntax {
     case DateRef => imports.iotsLocalDate
     case DateTimeRef => "Date"
     case ArrayRef(innerType) => getTypeRefString(innerType) |+| "[]"
-    case NonEmptyArrayRef(innerType) => imports.iotsNonEmptyArray.value |+| "<" |+| getTypeRefString(innerType) |+| ">"
+    case NonEmptyArrayRef(innerType) => imports.iotsReadonlyNonEmptyArray.value |+| "<" |+| getTypeRefString(innerType) |+| ">"
     case CustomTypeRef(name, params, scalaType) =>
       if (params.isEmpty) imports.custom(scalaType, name)
       else name |+| params.joinTypeParams(getTypeRefString)
