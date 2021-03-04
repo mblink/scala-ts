@@ -210,6 +210,8 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
         BooleanRef
       case "String" =>
         StringRef
+      case "Nil" =>
+        SeqRef(UnknownTypeRef("Nothing", typeOf[Nothing]))
       case "List" | "Seq" | "Set" | "Vector" => // TODO: Iterable
         val innerType = scalaType.typeArgs.head
         SeqRef(getTypeRef(innerType, typeParams))
@@ -234,7 +236,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
           scalaType.typeSymbol.name.toString,
           ListSet.empty ++ directKnownSubclasses(scalaType).map(getTypeRef(_, Set.empty)),
           scalaType)
-      case _ if isCaseClass(scalaType)=>
+      case _ if isCaseClass(scalaType) =>
         val caseClassName = scalaType.typeSymbol.name.toString
         val typeArgs = scalaType.typeArgs
         val typeArgRefs = typeArgs.map(getTypeRef(_, typeParams))
