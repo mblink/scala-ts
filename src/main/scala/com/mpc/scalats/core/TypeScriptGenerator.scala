@@ -49,8 +49,13 @@ object TypeScriptGenerator {
       case _ => sys.error(s"Something went wrong, unable to parse `$className`")
     }
 
+  def isTypeConstructor(t: Type): Boolean =
+    t =:= t.typeConstructor && t.takesTypeArgs
+
   def looseTpeEq(t1: Type, t2: Type): Boolean =
-    t1 =:= t2 || t1.typeSymbol == t2.typeSymbol || (t1.typeSymbol.isClass && t1.typeSymbol.asClass.isSealed && t2 <:< t1)
+    t1 =:= t2 ||
+      (isTypeConstructor(t1) && !isTypeConstructor(t2) && t1 =:= t2.typeConstructor) ||
+      (t1.typeSymbol.isClass && t1.typeSymbol.asClass.isSealed && t2 <:< t1)
 
   class TypeToFile(pairs: List[(Type, String)]) {
     def get(tpe: Type): Option[String] =
