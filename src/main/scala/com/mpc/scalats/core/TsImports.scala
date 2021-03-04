@@ -135,7 +135,7 @@ object TsImports {
   }
 
   case class Ctx(
-    custom: (Type, String) => TsImports
+    custom: (Type, String) => TsImports.With[String]
   )
 
   case class available(config: Config) {
@@ -177,7 +177,6 @@ object TsImports {
     lazy val iotsLocalDate = optImport(tsi.iotsLocalDate, "LocalDate", "iotsLocalDate")
     lazy val iotsThese = CallableImport(optImport(tsi.iotsThese, "These", "iotsThese"))
 
-    def custom(scalaType: Type, name: String)(implicit ctx: Ctx): With[String] =
-      (ctx.custom(scalaType, name), name)
+    def custom(scalaType: Type, name: String)(implicit ctx: Ctx): With[String] = ctx.custom(scalaType, name)
   }
 }
