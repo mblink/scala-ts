@@ -220,15 +220,20 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case StringRef => s"`${value.toString.trim}`"
     case DateRef => s"`${value.toString.trim}`"
     case DateTimeRef => s"`${value.toString.trim}`"
-    case ArrayRef(_) => s"[${value}]"
-    case NonEmptyArrayRef(_) => imports.iotsReadonlyNonEmptyArray.value |+| s".of([$value])"
+    case ArrayRef(t) => value.asInstanceOf[Iterable[Any]].joinArray(getTypeWrappedVal(_, t, interfaceContext))
+    case NonEmptyArrayRef(t) =>
+      imports.iotsReadonlyNonEmptyArray.value |+| ".of(" |+| getTypeWrappedVal(value, ArrayRef(t), interfaceContext) |+| ")"
     case CustomTypeRef(name, params, scalaType) =>
       imports.custom(scalaType, if (interfaceContext) interfaceName(name) else objectName(name)) |+|
         (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => if (interfaceContext) param else typeAsValArg(param)
-    case UnionType(name, possibilities, scalaType) =>
-      imports.custom(scalaType, name).orElse(imports.iotsUnion(possibilities.joinArray(getIoTsTypeString)))
+    case u @ UnionType(_, possibilities, _) =>
+      val valueType = scala.reflect.runtime.currentMirror.classSymbol(value.getClass).toType
+      val (customTypeName, customType) = possibilities.collectFirst {
+        case CustomTypeRef(n, _, t) if t =:= valueType => (n, t)
+      }.getOrElse(sys.error(s"Value $value of type $valueType is not a member of union $u"))
+      imports.custom(customType, objectName(customTypeName))
     case EitherType(lT, rT) => imports.iotsUnion(List(lT, rT).joinArray(getIoTsTypeString))
     case TheseType(lT, rT) => imports.iotsUnion(List(lT, rT, TupleType(ListSet(lT, rT))).joinArray(getIoTsTypeString))
     case MapType(keyType, valueType) => imports.iotsRecord(List(keyType, valueType).join(", ")(getIoTsTypeString))
