@@ -6,9 +6,7 @@ val publishSettings = Seq(
   skip in publish := false,
   publishMavenStyle := true,
   publishArtifact in Test := false,
-  bintrayOrganization := Some("bondlink"),
-  bintrayRepository := "scala-ts",
-  bintrayReleaseOnPublish in ThisBuild := false,
+  gitPublishDir := file("/src/maven-repo"),
   licenses += ("MIT", url("https://opensource.org/licenses/MIT"))
 )
 
@@ -39,7 +37,7 @@ lazy val pomSettings = Seq(
     </developers>
 )
 
-lazy val scalaVersions = Seq("2.12.12", "2.13.4")
+lazy val scalaVersions = Seq("2.12.13", "2.13.5")
 
 lazy val root = (project in file(".")).
   settings(Seq(
@@ -53,5 +51,5 @@ libraryDependencies ++= Seq(
   "org.scala-lang" % "scala-reflect" % scalaVersion.value,
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "org.scalatest" %% "scalatest" % "3.1.0" % "test",
-  "org.typelevel" %% "cats-core" % "2.2.0"
+  "org.typelevel" %% "cats-core" % "2.4.2"
 )
