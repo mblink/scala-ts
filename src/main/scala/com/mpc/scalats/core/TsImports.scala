@@ -146,6 +146,7 @@ object TsImports {
     private def optImport(o: Option[(String, String)], tpeName: String, cfgKey: String): With[String] =
       o.map(namedImport).getOrElse(sys.error(s"$tpeName type requested but $cfgKey import config value missing"))
 
+    lazy val fptsOption = CallableImport(all(tsi.fptsOption, "O"), "O", ".", "")
     lazy val fptsEither = CallableImport(all(tsi.fptsEither, "E"), "E", ".", "")
     lazy val fptsPipe = CallableImport(namedImport(tsi.fptsPipe))
     lazy val fptsThese = CallableImport(all(tsi.fptsThese, "Th"), "Th", ".", "")
@@ -164,6 +165,7 @@ object TsImports {
     lazy val iotsTuple = CallableImport(iotsImport, "t.tuple")
     lazy val iotsTypeFunction = CallableImport(iotsImport, "t.type")
     lazy val iotsTypeType = (iotsImport, "t.Type")
+    lazy val iotsTypeTypeC = (iotsImport, "t.TypeC")
     lazy val iotsTypeOf = (iotsImport, "t.TypeOf")
     lazy val iotsUndefined = (iotsImport, "t.undefined")
     lazy val iotsUnion = CallableImport(iotsImport, "t.union")

@@ -54,6 +54,9 @@ trait Emitter extends TsImports.HelperSyntax {
     case UnionType(name, possibilities, scalaType) =>
       imports.custom(scalaType, name).orElse(possibilities.joinParens(" | ")(getTypeRefString))
 
+    case OptionType(iT) =>
+      imports.fptsOption("Option") |+| List(iT).joinTypeParams(getTypeRefString)
+
     case EitherType(lT, rT) =>
       imports.fptsEither("Either") |+| List(lT, rT).joinTypeParams(getTypeRefString)
 
