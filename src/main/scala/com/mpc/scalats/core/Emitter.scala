@@ -47,7 +47,7 @@ trait Emitter extends TsImports.HelperSyntax {
     case NonEmptyArrayRef(innerType) => imports.iotsReadonlyNonEmptyArray.value |+| "<" |+| getTypeRefString(innerType) |+| ">"
     case CustomTypeRef(name, params, scalaType) =>
       if (params.isEmpty) imports.custom(scalaType, name)
-      else name |+| params.joinTypeParams(getTypeRefString)
+      else imports.custom(scalaType, name) |+| params.joinTypeParams(getTypeRefString)
     case UnknownTypeRef(typeName) => typeName
     case SimpleTypeRef(param) => param
 
