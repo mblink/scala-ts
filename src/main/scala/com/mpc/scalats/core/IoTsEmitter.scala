@@ -46,9 +46,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
         line(s"export type $typeType = typeof $typeVal;")
       } else {
         line() |+|
-        line(s"export interface ${interfaceName(name)}" |+| interfaceTypeParamArgs(list(typeParams)) |+| s"${superInterface.fold("")(i => s" extends ${i.name}")} {") |+|
-        emitMembers(fields, true, false) |+|
-        line("}") |+|
+        emitInterfaceDeclaration(name, fields, typeParams, superInterface) |+|
         line(s"export type $typeType" |+| typeParams.joinTypeParams(t => s"$t extends " |+| imports.iotsTypeTypeC |+| "<any>") |+| s" = ${interfaceName(name)}<" |+| imports.iotsTypeOf |+| s"<${typeParams.mkString(", ")}>>;")
       }
     ) |+|
@@ -56,9 +54,9 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     List("")
   }
 
-  def emitInterfaceDeclaration(name: String, members: ListSet[Member], superInterface: Option[InterfaceDeclaration])(implicit ctx: TsImports.Ctx): Lines =
+  def emitInterfaceDeclaration(name: String, members: ListSet[Member], typeParams: ListSet[String], superInterface: Option[InterfaceDeclaration])(implicit ctx: TsImports.Ctx): Lines =
     if (!config.emitInterfaces) Nil else
-      line(s"export interface ${interfaceName(name)}${superInterface.fold("")(i => s" extends ${i.name}")} {") |+|
+      line(s"export interface ${interfaceName(name)}" |+| interfaceTypeParamArgs(list(typeParams)) |+| s"${superInterface.fold("")(i => s" extends ${i.name}")} {") |+|
       emitMembers(members, true, false) |+|
       line("}") |+|
       line()
@@ -85,7 +83,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     (if (emitAll) line(s"export const all$name = " |+| union(objectName, "[", ", ", "]") |+| " as const;") else Nil) |+|
     line(s"export type ${name}U = " |+| imports.iotsTypeOf |+| s"<typeof ${tsUnionName(name)}>;") |+|
     line() |+|
-    emitInterfaceDeclaration(name, members, superInterface)
+    emitInterfaceDeclaration(name, members, ListSet.empty, superInterface)
   }
 
   private def isAbstractMember(member: Member, superInterface: Option[InterfaceDeclaration]): Boolean = {
