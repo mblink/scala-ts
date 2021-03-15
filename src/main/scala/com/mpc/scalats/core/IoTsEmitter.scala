@@ -23,27 +23,40 @@ final class IoTsEmitter(val config: Config) extends Emitter {
         emitTypeDeclaration(decl)
     }
 
-  private def typeParamArgs(typeParams: List[String]): TsImports.With[String] =
+  private def iotsTypeParamArgs(typeParams: List[String]): TsImports.With[String] =
     if (typeParams.isEmpty) (imports.empty, "") else
       typeParams.joinTypeParams(p => s"$p extends " |+| imports.iotsMixed) |+|
       typeParams.joinParens(", ")(p => s"${typeAsValArg(p)}: $p") |+| " => "
 
+  private def interfaceTypeParamArgs(typeParams: List[String]): TsImports.With[String] =
+    if (typeParams.isEmpty) (imports.empty, "") else typeParams.joinTypeParams(p => p)
+
   def emitIoTsInterfaceDeclaration(decl: InterfaceDeclaration)(implicit ctx: TsImports.Ctx): Lines = {
-    val InterfaceDeclaration(name, fields, typeParams, _) = decl
+    val InterfaceDeclaration(name, fields, typeParams, superInterface) = decl
     val typeVal = codecName(name)
+    val typeType = codecType(name)
 
     imports.iotsTypeFunction.lines(
-      s => s"export const $typeVal = " |+| typeParamArgs(list(typeParams)) |+| s"$s{",
+      s => s"export const $typeVal = " |+| iotsTypeParamArgs(list(typeParams)) |+| s"$s{",
       fields.joinLines(",")(v => s"${indent}${v.name}: " |+| getIoTsTypeString(v.typeRef)),
       "}" ++ _ ++ ";"
     ) |+|
-    (if (typeParams.isEmpty) line(s"export type $name = " |+| imports.iotsTypeOf |+| s"<typeof $typeVal>;") else Nil) |+|
+    (
+      if (typeParams.isEmpty) {
+        line(s"export type $typeType = typeof $typeVal;")
+      } else {
+        line() |+|
+        emitInterfaceDeclaration(name, fields, typeParams, superInterface) |+|
+        line(s"export type $typeType" |+| typeParams.joinTypeParams(t => s"$t extends " |+| imports.iotsTypeTypeC |+| "<any>") |+| s" = ${interfaceName(name)}<" |+| imports.iotsTypeOf |+| s"<${typeParams.mkString(", ")}>>;")
+      }
+    ) |+|
+    (if (typeParams.isEmpty) line(s"export type $name = " |+| imports.iotsTypeOf |+| s"<$typeType>;") else Nil) |+|
     List("")
   }
 
-  def emitInterfaceDeclaration(name: String, members: ListSet[Member], superInterface: Option[InterfaceDeclaration])(implicit ctx: TsImports.Ctx): Lines =
+  def emitInterfaceDeclaration(name: String, members: ListSet[Member], typeParams: ListSet[String], superInterface: Option[InterfaceDeclaration])(implicit ctx: TsImports.Ctx): Lines =
     if (!config.emitInterfaces) Nil else
-      line(s"export interface ${interfaceName(name)}${superInterface.fold("")(i => s" extends ${i.name}")} {") |+|
+      line(s"export interface ${interfaceName(name)}" |+| interfaceTypeParamArgs(list(typeParams)) |+| s"${superInterface.fold("")(i => s" extends ${i.name}")} {") |+|
       emitMembers(members, true, false) |+|
       line("}") |+|
       line()
@@ -70,7 +83,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     (if (emitAll) line(s"export const all$name = " |+| union(objectName, "[", ", ", "]") |+| " as const;") else Nil) |+|
     line(s"export type ${name}U = " |+| imports.iotsTypeOf |+| s"<typeof ${tsUnionName(name)}>;") |+|
     line() |+|
-    emitInterfaceDeclaration(name, members, superInterface)
+    emitInterfaceDeclaration(name, members, ListSet.empty, superInterface)
   }
 
   private def isAbstractMember(member: Member, superInterface: Option[InterfaceDeclaration]): Boolean = {
@@ -133,7 +146,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     val TypeDeclaration(name, typeRef, typeParams) = decl
     val typeVal = codecName(name)
 
-    line(s"export const $typeVal = " |+| typeParamArgs(list(typeParams)) |+| getIoTsTypeString(typeRef) |+| ";") |+|
+    line(s"export const $typeVal = " |+| iotsTypeParamArgs(list(typeParams)) |+| getIoTsTypeString(typeRef) |+| ";") |+|
     (if (typeParams.isEmpty) line(s"export type $name = " |+| imports.iotsTypeOf |+| s"<typeof $typeVal>;") else Nil ) |+|
     line()
   }
@@ -159,6 +172,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case SimpleTypeRef(param) => (imports.empty, typeAsValArg(param))
     case UnionType(name, possibilities, scalaType) =>
       imports.custom(scalaType, tsUnionName(name)).orElse(imports.iotsUnion(possibilities.joinArray(getIoTsTypeString)))
+    case OptionType(iT) =>
+      imports.iotsOption(getIoTsTypeString(iT))
     case EitherType(lT, rT) =>
       imports.iotsEither(List(lT, rT).join(", ")(getIoTsTypeString))
     case TheseType(lT, rT) =>
@@ -192,6 +207,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case UnionType(name, possibilities, scalaType) =>
       imports.custom(scalaType, name).orElse(imports.iotsStrict(
         imports.iotsUnion(possibilities.joinArray(getIoTsTypeWrappedVal(value, _)))))
+    case OptionType(iT) =>
+      imports.iotsOption(getIoTsTypeWrappedVal(value, iT))
     case EitherType(lT, rT) =>
       imports.iotsStrict(imports.iotsUnion(
         List(lT, rT).joinArray(getIoTsTypeWrappedVal(value, _))))
@@ -210,7 +227,6 @@ final class IoTsEmitter(val config: Config) extends Emitter {
 
   def customIoTsTypes(scalaType: Type, name: String, customName: String => String)(implicit ctx: TsImports.Ctx): TsImports.With[String] = name match {
     case "NonEmptyList" => imports.iotsReadonlyNonEmptyArray.value
-    case "optionFromNullable" => imports.iotsOption.value
     case _ => imports.custom(scalaType, customName(name))
   }
 
@@ -234,6 +250,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
         case CustomTypeRef(n, _, t) if t =:= valueType => (n, t)
       }.getOrElse(sys.error(s"Value $value of type $valueType is not a member of union $u"))
       imports.custom(customType, objectName(customTypeName))
+    case OptionType(iT) => getIoTsTypeString(iT)
     case EitherType(lT, rT) => imports.iotsUnion(List(lT, rT).joinArray(getIoTsTypeString))
     case TheseType(lT, rT) => imports.iotsUnion(List(lT, rT, TupleType(ListSet(lT, rT))).joinArray(getIoTsTypeString))
     case MapType(keyType, valueType) => imports.iotsRecord(List(keyType, valueType).join(", ")(getIoTsTypeString))

@@ -11,7 +11,6 @@ import com.mpc.scalats.core.TypeScriptModel.{
   SingletonDeclaration
 }
 import scala.collection.immutable.ListSet
-import scala.reflect.runtime.universe.typeOf
 
 case class Compiler(config: Config) {
   @inline def compile(
@@ -139,8 +138,7 @@ case class Compiler(config: Config) {
       TypeScriptModel.SimpleTypeRef(name)
 
     case ScalaModel.OptionRef(innerType) =>
-      TypeScriptModel.CustomTypeRef("optionFromNullable", ListSet(
-        compileTypeRef(innerType, inInterfaceContext)), typeOf[Option[_]].typeConstructor)
+      TypeScriptModel.OptionType(compileTypeRef(innerType, inInterfaceContext))
 
     case ScalaModel.MapRef(kT, vT) => TypeScriptModel.MapType(
       compileTypeRef(kT, inInterfaceContext),
@@ -175,6 +173,7 @@ case class Compiler(config: Config) {
         case TypeScriptModel.UnknownTypeRef(n) => n == d.name
         case TypeScriptModel.SimpleTypeRef(n) => n == d.name
         case TypeScriptModel.UnionType(_, rs, _) => rs.exists(refersToRef(_, d))
+        case TypeScriptModel.OptionType(i) => refersToRef(i, d)
         case TypeScriptModel.EitherType(l, r) => refersToRef(l, d) || refersToRef(r, d)
         case TypeScriptModel.TheseType(l, r) => refersToRef(l, d) || refersToRef(r, d)
         case TypeScriptModel.MapType(k, v) => refersToRef(k, d) || refersToRef(v, d)

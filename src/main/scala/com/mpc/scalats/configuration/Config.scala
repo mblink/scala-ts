@@ -14,6 +14,7 @@ case class Config(
 )
 
 case class TsImports(
+  fptsOption: String = "fp-ts/lib/Option",
   fptsEither: String = "fp-ts/lib/Either",
   fptsThese: String = "fp-ts/lib/These",
   fptsPipe: (String, String) = ("pipe", "fp-ts/lib/function"),

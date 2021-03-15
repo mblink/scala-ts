@@ -43,16 +43,19 @@ trait Emitter extends TsImports.HelperSyntax {
     case StringRef => "string"
     case DateRef => imports.iotsLocalDate
     case DateTimeRef => "Date"
-    case ArrayRef(innerType) => getTypeRefString(innerType) |+| "[]"
+    case ArrayRef(innerType) => "ReadonlyArray<" |+| getTypeRefString(innerType) |+| ">"
     case NonEmptyArrayRef(innerType) => imports.iotsReadonlyNonEmptyArray.value |+| "<" |+| getTypeRefString(innerType) |+| ">"
     case CustomTypeRef(name, params, scalaType) =>
       if (params.isEmpty) imports.custom(scalaType, name)
-      else name |+| params.joinTypeParams(getTypeRefString)
+      else imports.custom(scalaType, name) |+| params.joinTypeParams(getTypeRefString)
     case UnknownTypeRef(typeName) => typeName
     case SimpleTypeRef(param) => param
 
     case UnionType(name, possibilities, scalaType) =>
       imports.custom(scalaType, name).orElse(possibilities.joinParens(" | ")(getTypeRefString))
+
+    case OptionType(iT) =>
+      imports.fptsOption("Option") |+| List(iT).joinTypeParams(getTypeRefString)
 
     case EitherType(lT, rT) =>
       imports.fptsEither("Either") |+| List(lT, rT).joinTypeParams(getTypeRefString)

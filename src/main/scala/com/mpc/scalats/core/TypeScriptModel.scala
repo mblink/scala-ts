@@ -92,6 +92,8 @@ object TypeScriptModel {
 
   case class UnionType(name: String, possibilities: ListSet[TypeRef], scalaType: Type) extends TypeRef
 
+  case class OptionType(t: TypeRef) extends TypeRef
+
   case class EitherType(lT: TypeRef, rT: TypeRef) extends TypeRef
 
   case class TheseType(lT: TypeRef, rT: TypeRef) extends TypeRef
