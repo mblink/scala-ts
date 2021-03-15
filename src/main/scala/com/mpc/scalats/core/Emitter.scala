@@ -43,7 +43,7 @@ trait Emitter extends TsImports.HelperSyntax {
     case StringRef => "string"
     case DateRef => imports.iotsLocalDate
     case DateTimeRef => "Date"
-    case ArrayRef(innerType) => getTypeRefString(innerType) |+| "[]"
+    case ArrayRef(innerType) => "ReadonlyArray<" |+| getTypeRefString(innerType) |+| ">"
     case NonEmptyArrayRef(innerType) => imports.iotsReadonlyNonEmptyArray.value |+| "<" |+| getTypeRefString(innerType) |+| ">"
     case CustomTypeRef(name, params, scalaType) =>
       if (params.isEmpty) imports.custom(scalaType, name)
