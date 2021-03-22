@@ -20,7 +20,7 @@ case class Compiler(config: Config) {
 
   def compile(
     scalaTypes: ListSet[ScalaModel.TypeDef],
-    superInterface: Option[InterfaceDeclaration]
+    superInterface: Option[UnionDeclaration]
   ): ListSet[Declaration] =
     scalaTypes.flatMap { typeDef =>
       typeDef match {
@@ -29,7 +29,7 @@ case class Compiler(config: Config) {
 
         case ScalaModel.CaseObject(name, _, members, _) =>
           val values = members.map { scalaMember =>
-            Member(scalaMember.name,
+            Member(scalaMember.name.trim,
               compileTypeRef(scalaMember.typeRef, false),
               scalaMember.value)
           }
@@ -37,19 +37,17 @@ case class Compiler(config: Config) {
           ListSet[Declaration](
             SingletonDeclaration(name, values, superInterface))
 
-        case ScalaModel.SealedUnion(name, fullTypeName, fields, possibilities, _) =>
+        case ScalaModel.SealedUnion(name, _, fields, typeArgs, possibilities, _) =>
           val ifaceFields = fields.map { scalaMember =>
-            Member(scalaMember.name,
+            Member(scalaMember.name.trim,
               compileTypeRef(scalaMember.typeRef, false),
               scalaMember.value)
           }
 
-          val unionRef = InterfaceDeclaration(
-            buildTypeName(name, fullTypeName), ifaceFields, ListSet.empty[String], superInterface)
-
-          compile(possibilities, Some(unionRef)) + UnionDeclaration(
+          val unionDecl = UnionDeclaration(
             name,
             ifaceFields,
+            typeArgs,
             possibilities.map {
               case ScalaModel.CaseObject(nme, _, _, scalaType) =>
                 CustomTypeRef(nme, ListSet.empty, scalaType)
@@ -61,15 +59,12 @@ case class Compiler(config: Config) {
                 CustomTypeRef(buildTypeName(m.name, m.fullTypeName), ListSet.empty, m.scalaType)
             },
             superInterface,
-            possibilities.foldLeft(true)((b, p) =>
-              if(b) {
-                p match {
-                  case ScalaModel.CaseObject(_, _, _, _) => true
-                  case _ => false
-                }
-              } else {
-                false
-              }))
+            possibilities.forall(_ match {
+              case _: ScalaModel.CaseObject => true
+              case _ => false
+            }))
+
+          compile(possibilities, Some(unionDecl)) + unionDecl
 
         case typeAlias: ScalaModel.TypeAlias =>
           ListSet[Declaration](compileTypeAlias(typeAlias))
@@ -78,12 +73,12 @@ case class Compiler(config: Config) {
 
   private def compileInterface(
     scalaClass: ScalaModel.CaseClass,
-    superInterface: Option[InterfaceDeclaration]
+    superInterface: Option[UnionDeclaration]
   ) = InterfaceDeclaration(
     buildTypeName(scalaClass.name, scalaClass.fullTypeName),
     scalaClass.fields.map { scalaMember =>
       TypeScriptModel.Member(
-        scalaMember.name,
+        scalaMember.name.trim,
         compileTypeRef(scalaMember.typeRef, inInterfaceContext = true),
         scalaMember.value
       )
@@ -144,10 +139,12 @@ case class Compiler(config: Config) {
       compileTypeRef(kT, inInterfaceContext),
       compileTypeRef(vT, inInterfaceContext))
 
-    case ScalaModel.UnionRef(name, possibilities, scalaType) =>
-      TypeScriptModel.UnionType(name, possibilities.map { i =>
-        compileTypeRef(i, inInterfaceContext)
-      }, scalaType)
+    case ScalaModel.UnionRef(name, typeArgs, possibilities, scalaType) =>
+      TypeScriptModel.UnionType(
+        name,
+        typeArgs.map(compileTypeRef(_, inInterfaceContext)),
+        possibilities.map(compileTypeRef(_, inInterfaceContext)),
+        scalaType)
 
     case ScalaModel.TupleRef(tpes) =>
       TypeScriptModel.TupleType(tpes.map(compileTypeRef(_, inInterfaceContext)))
@@ -172,7 +169,7 @@ case class Compiler(config: Config) {
         case TypeScriptModel.NonEmptyArrayRef(r) => refersToRef(r, d)
         case TypeScriptModel.UnknownTypeRef(n) => n == d.name
         case TypeScriptModel.SimpleTypeRef(n) => n == d.name
-        case TypeScriptModel.UnionType(_, rs, _) => rs.exists(refersToRef(_, d))
+        case TypeScriptModel.UnionType(_, ps, rs, _) => ps.exists(refersToRef(_, d)) || rs.exists(refersToRef(_, d))
         case TypeScriptModel.OptionType(i) => refersToRef(i, d)
         case TypeScriptModel.EitherType(l, r) => refersToRef(l, d) || refersToRef(r, d)
         case TypeScriptModel.TheseType(l, r) => refersToRef(l, d) || refersToRef(r, d)
@@ -191,7 +188,7 @@ case class Compiler(config: Config) {
         case TypeScriptModel.SingletonDeclaration(_, vs, si) =>
           vs.exists(v => refersToRef(v.typeRef, d2)) || si.fold(false)(refersTo(_, d2))
 
-        case TypeScriptModel.UnionDeclaration(_, fs, ps, si, _) =>
+        case TypeScriptModel.UnionDeclaration(_, fs, _, ps, si, _) =>
           fs.exists(f => refersToRef(f.typeRef, d2)) || ps.exists(refersToRef(_, d2)) || si.fold(false)(refersTo(_, d2))
 
         case TypeScriptModel.TypeDeclaration(_, r, _) =>

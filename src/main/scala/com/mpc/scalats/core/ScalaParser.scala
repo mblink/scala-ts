@@ -99,8 +99,6 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
   }
 
   private def parseSealedUnion(tpe: Type): Option[SealedUnion] = {
-    // TODO: Check & warn there is no type parameters for a union type
-
     // Members
     val members = tpe.members.sorted.collect {
       case m: MethodSymbol if isValidMethod(m) && !m.name.toString.endsWith("$") =>
@@ -113,6 +111,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
           tpe.typeSymbol.name.toString,
           tpe.toString,
           ListSet.empty ++ members,
+          ListSet.empty ++ getTypeParams(tpe),
           possibilities.foldLeft(ListSet[TypeDef]())((b, a) => b ++ parseType(a)),
           tpe))
 
@@ -234,6 +233,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
       case _ if isSealedUnion(scalaType) =>
         UnionRef(
           scalaType.typeSymbol.name.toString,
+          ListSet.empty ++ scalaType.typeArgs.map(getTypeRef(_, Set())),
           ListSet.empty ++ directKnownSubclasses(scalaType).map(getTypeRef(_, Set.empty)),
           scalaType)
       case _ if isCaseClass(scalaType) =>
@@ -260,8 +260,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
   }
 
   @inline private def isSealedUnion(scalaType: Type): Boolean =
-    scalaType.typeSymbol.isClass && scalaType.typeSymbol.asClass.isTrait &&
-      scalaType.typeSymbol.asClass.isSealed && scalaType.typeParams.isEmpty
+    scalaType.typeSymbol.isClass && scalaType.typeSymbol.asClass.isTrait && scalaType.typeSymbol.asClass.isSealed
 
   @inline private def isCaseClass(scalaType: Type): Boolean =
     scalaType.typeSymbol.isClass && scalaType.typeSymbol.asClass.isCaseClass &&
@@ -290,13 +289,10 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
     def allSubclasses(path: Iterable[Symbol], subclasses: ListSet[Type]): ListSet[Type] = path.headOption match {
       case Some(cls: ClassSymbol) if (
         tpeSym != cls && cls.selfType.baseClasses.contains(tpeSym)) => {
-        val newSub: ListSet[Type] = if (!cls.isCaseClass) {
+        val newSub: ListSet[Type] = if (cls.isCaseClass) ListSet(cls.selfType.typeConstructor) else {
           logger.warning(s"cannot handle class ${cls.fullName}: no case accessor")
           ListSet.empty
-        } else if (cls.typeParams.nonEmpty) {
-          logger.warning(s"cannot handle class ${cls.fullName}: type parameter not supported")
-          ListSet.empty
-        } else ListSet(cls.selfType)
+        }
 
         allSubclasses(path.tail, subclasses ++ newSub)
       }

@@ -75,17 +75,51 @@ object TsImports {
   type With[A] = (TsImports, A)
 
   trait HelperSyntax {
-    implicit class TsImportsWithStringOps[A](s: String) {
+    implicit class TsImportsWithStringOps(s: String) {
       def |+|(t: TsImports.With[String]): TsImports.With[String] =
         (t._1, s ++ t._2)
+    }
+
+    implicit class TsImportsWithListStringOps(ls: List[String]) {
+      def |+|(t: TsImports.With[List[String]]): TsImports.With[List[String]] =
+        (t._1, ls ++ t._2)
     }
 
     implicit class TsImportsWithAOps[A](t: TsImports.With[A]) {
       def |+|(t2: TsImports.With[A])(implicit S: Semigroup[A]): TsImports.With[A] =
         (t._1 |+| t2._1, S.combine(t._2, t2._2))
 
+      def foldEmpty[B](fallback: => B)(f: TsImports.With[A] => B): B =
+        if (t._1.isEmpty) fallback else f(t)
+
       def orElse(t2: TsImports.With[A]): TsImports.With[A] =
-        if (t._1.isEmpty) t2 else t
+        foldEmpty(t2)(identity)
+    }
+
+    implicit class TsImportsWithListAOps[A](t: TsImports.With[List[A]]) {
+      def +:(a: A)(implicit S: Semigroup[A]): TsImports.With[List[A]] =
+        t match {
+          case (i, h :: t) => (i, S.combine(a, h) :: t)
+          case x @ (_, Nil) => x
+        }
+
+      def :+(a: A)(implicit S: Semigroup[A]): TsImports.With[List[A]] =
+        t match {
+          case x @ (_, Nil) => x
+          case (i, l) => (i, l.init :+ S.combine(l.last, a))
+        }
+
+      def +:(ta: TsImports.With[A])(implicit S: Semigroup[A]): TsImports.With[List[A]] =
+        (ta, t) match {
+          case ((i1, a), (i2, h :: t)) => (i1 |+| i2, S.combine(a, h) :: t)
+          case (_, x @ (_, Nil)) => x
+        }
+
+      def :+(ta: TsImports.With[A])(implicit S: Semigroup[A]): TsImports.With[List[A]] =
+        (t, ta) match {
+          case (x @ (_, Nil), _) => x
+          case ((i1, l), (i2, a)) => (i1 |+| i2, l.init :+ S.combine(l.last, a))
+        }
     }
 
     implicit class TsImportsIterableOps[A](values: Iterable[A]) {
@@ -102,7 +136,7 @@ object TsImports {
         join("(", glue, ")")(f)
 
       def joinTypeParams(f: A => TsImports.With[String]): TsImports.With[String] =
-        join("<", ", ", ">")(f)
+        if (values.isEmpty) (empty, "") else join("<", ", ", ">")(f)
 
       def joinLines(glue: String)(f: A => TsImports.With[String]): TsImports.With[List[String]] = {
         val l = values.toList.zipWithIndex
@@ -142,6 +176,9 @@ object TsImports {
     lazy val empty: TsImports = TsImports.empty
     lazy val tsi = config.tsImports
 
+    def lift(s: String): With[String] = (empty, s)
+    lazy val emptyStr: With[String] = lift("")
+
     private def namedImport(t: (String, String)): With[String] = (names(t._2, t._1), t._1)
     private def optImport(o: Option[(String, String)], tpeName: String, cfgKey: String): With[String] =
       o.map(namedImport).getOrElse(sys.error(s"$tpeName type requested but $cfgKey import config value missing"))
@@ -166,10 +203,9 @@ object TsImports {
     lazy val iotsTypeFunction = CallableImport(iotsImport, "t.type")
     lazy val iotsTypeType = (iotsImport, "t.Type")
     lazy val iotsTypeTypeC = (iotsImport, "t.TypeC")
-    lazy val iotsTypeOf = (iotsImport, "t.TypeOf")
+    lazy val iotsTypeOf = CallableImport(iotsImport, "t.TypeOf", "<", ">")
     lazy val iotsUndefined = (iotsImport, "t.undefined")
     lazy val iotsUnion = CallableImport(iotsImport, "t.union")
-
 
     lazy val iotsDateTime = namedImport(tsi.iotsDateTime)
     lazy val iotsReadonlyNonEmptyArray = CallableImport(namedImport(tsi.iotsReadonlyNonEmptyArray))

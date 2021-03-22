@@ -51,8 +51,9 @@ trait Emitter extends TsImports.HelperSyntax {
     case UnknownTypeRef(typeName) => typeName
     case SimpleTypeRef(param) => param
 
-    case UnionType(name, possibilities, scalaType) =>
-      imports.custom(scalaType, name).orElse(possibilities.joinParens(" | ")(getTypeRefString))
+    case UnionType(name, typeParams, possibilities, scalaType) =>
+      imports.custom(scalaType, name).orElse(possibilities.joinParens(" | ")(getTypeRefString)) |+|
+        (if (typeParams.isEmpty) imports.emptyStr else typeParams.joinTypeParams(getTypeRefString))
 
     case OptionType(iT) =>
       imports.fptsOption("Option") |+| List(iT).joinTypeParams(getTypeRefString)

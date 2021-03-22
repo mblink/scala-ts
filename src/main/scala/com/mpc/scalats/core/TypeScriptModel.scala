@@ -7,7 +7,7 @@ object TypeScriptModel {
 
   sealed trait Declaration {
     val name: String
-    val superInterface: Option[InterfaceDeclaration]
+    val superInterface: Option[UnionDeclaration]
   }
 
   sealed trait TypeRef
@@ -22,29 +22,22 @@ object TypeScriptModel {
 
   case class NonEmptyArrayRef(innerType: TypeRef) extends TypeRef
 
-  case class InterfaceDeclaration(name: String, fields: ListSet[Member], typeParams: ListSet[String], superInterface: Option[InterfaceDeclaration]) extends Declaration
-  // TODO: Support mapping of typeParams with superInterface
+  case class InterfaceDeclaration(name: String, fields: ListSet[Member], typeParams: ListSet[String], superInterface: Option[UnionDeclaration]) extends Declaration
 
-  class Member(val name: String, val typeRef: TypeRef, val value: Option[Any])
-  object Member {
-    def apply(name: String, typeRef: TypeRef, value: Option[Any]): Member =
-      new Member(name.trim, typeRef, value)
-
-    def unapply(member: Member): Some[(String, TypeRef, Option[Any])] =
-      Some((member.name, member.typeRef, member.value))
-  }
+  case class Member(name: String, typeRef: TypeRef, value: Option[Any])
 
   case class SingletonDeclaration(
     name: String,
     values: ListSet[Member],
-    superInterface: Option[InterfaceDeclaration]
+    superInterface: Option[UnionDeclaration]
   ) extends Declaration
 
   case class UnionDeclaration(
     name: String,
     fields: ListSet[Member],
+    typeParams: ListSet[String],
     possibilities: ListSet[CustomTypeRef],
-    superInterface: Option[InterfaceDeclaration],
+    superInterface: Option[UnionDeclaration],
     emitAllConst: Boolean
   ) extends Declaration
 
@@ -90,7 +83,7 @@ object TypeScriptModel {
     override def toString = name
   }
 
-  case class UnionType(name: String, possibilities: ListSet[TypeRef], scalaType: Type) extends TypeRef
+  case class UnionType(name: String, typeParams: ListSet[TypeRef], possibilities: ListSet[TypeRef], scalaType: Type) extends TypeRef
 
   case class OptionType(t: TypeRef) extends TypeRef
 

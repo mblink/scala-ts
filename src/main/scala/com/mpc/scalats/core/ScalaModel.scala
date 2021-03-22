@@ -32,6 +32,7 @@ object ScalaModel {
     name: String,
     fullTypeName: String,
     fields: ListSet[TypeMember],
+    typeArgs: ListSet[String],
     possibilities: ListSet[TypeDef],
     scalaType: Type
   ) extends TypeDef
@@ -54,7 +55,7 @@ object ScalaModel {
 
   case class OptionRef(innerType: TypeRef) extends TypeRef
 
-  case class UnionRef(name: String, possibilities: ListSet[TypeRef], tpe: Type) extends TypeRef with HasType
+  case class UnionRef(name: String, typeArgs: ListSet[TypeRef], possibilities: ListSet[TypeRef], tpe: Type) extends TypeRef with HasType
 
   case class EitherRef(leftType: TypeRef, rightType: TypeRef) extends TypeRef
 
