@@ -52,10 +52,13 @@ object TypeScriptGenerator {
   def isTypeConstructor(t: Type): Boolean =
     t =:= t.typeConstructor && t.takesTypeArgs
 
+  def maybeTypeConstructor(t: Type): Type =
+    if (t.typeArgs.nonEmpty) t.typeConstructor else t
+
   def looseTpeEq(t1: Type, t2: Type): Boolean =
     t1 =:= t2 ||
       (isTypeConstructor(t1) && !isTypeConstructor(t2) && t1 =:= t2.typeConstructor) ||
-      (t1.typeSymbol.isClass && t1.typeSymbol.asClass.isSealed && t2 <:< t1)
+      (t1.typeSymbol.isClass && t1.typeSymbol.asClass.isSealed && maybeTypeConstructor(t2) <:< maybeTypeConstructor(t1))
 
   class TypeToFile(pairs: List[(Type, String)]) {
     def get(tpe: Type): Option[String] =
