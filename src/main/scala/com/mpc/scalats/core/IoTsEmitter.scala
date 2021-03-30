@@ -23,28 +23,28 @@ final class IoTsEmitter(val config: Config) extends Emitter {
         emitTypeDeclaration(decl)
     }
 
-  private def iotsTypeParams(typeParams: List[String]): TsImports.With[String] =
+  private def iotsTypeParams(typeParams: ListSet[String]): TsImports.With[String] =
     typeParams.joinTypeParams(p => s"$p extends " |+| imports.iotsMixed)
 
-  private def iotsTypeParamVals(typeParams: List[String]): TsImports.With[String] =
+  private def iotsTypeParamVals(typeParams: ListSet[String]): TsImports.With[String] =
     typeParams.joinParens(", ")(p => s"${typeAsValArg(p)}: $p")
 
-  private def iotsTypeParamArgs(typeParams: List[String]): TsImports.With[String] =
+  private def iotsTypeParamArgs(typeParams: ListSet[String]): TsImports.With[String] =
     if (typeParams.isEmpty) (imports.emptyStr)
     else iotsTypeParams(typeParams) |+| iotsTypeParamVals(typeParams) |+| " => "
 
-  private def interfaceTypeParamArgs(typeParams: List[String]): TsImports.With[String] =
+  private def interfaceTypeParamArgs(typeParams: ListSet[String]): TsImports.With[String] =
     if (typeParams.isEmpty) (imports.emptyStr) else typeParams.joinTypeParams(p => p)
 
   private case class CodecCtx(
     codecName: String,
     tpeName: String,
-    typeParams: List[String],
+    typeParams: ListSet[String],
     modType: String => String
   ) {
     def cType: String = modType(codecType(tpeName))
     def className = s"${codecName}C"
-    def tps: List[String] = typeParams
+    def tps: ListSet[String] = typeParams
     def hasTps: Boolean = typeParams.nonEmpty
     def tpe: TsImports.With[String] = modType(tpeName) |+| typeParams.joinTypeParams(identity)
     def classTpe: TsImports.With[String] = className |+| typeParams.joinTypeParams(identity)
@@ -103,7 +103,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     mkCodecName: String => String = codecName,
     modType: String => String = identity
   )(emit: CodecCtx => Lines): Lines =
-    emit(CodecCtx(mkCodecName(name), tpeName, list(typeParams), modType))
+    emit(CodecCtx(mkCodecName(name), tpeName, typeParams, modType))
 
   private def emitCodec(
     name: String,
@@ -147,14 +147,13 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     typeParams: ListSet[String],
     superInterface: Option[UnionDeclaration]
   )(newToOld: String => TsImports.With[String], oldToNew: String => TsImports.With[String]): Lines = {
-    val tps = list(typeParams)
     val (origCName, newCName) = (codecName(origName), codecName(newName))
-    val tpeOfTps = tps.joinTypeParams(imports.iotsTypeOf(_))
+    val tpeOfTps = typeParams.joinTypeParams(imports.iotsTypeOf(_))
     val (origTpeOfTpe, newTpeOfTpe) = (origTpeName |+| tpeOfTps, newTpeName |+| tpeOfTps)
 
     imports.fptsPipe.lines(
-      s"export const $newCName = " |+| iotsTypeParamArgs(tps) |+| _ |+| origCName |+|
-        (if (tps.nonEmpty) tps.joinParens(", ")(typeAsValArg) else "") |+|
+      s"export const $newCName = " |+| iotsTypeParamArgs(typeParams) |+| _ |+| origCName |+|
+        (if (typeParams.nonEmpty) typeParams.joinParens(", ")(typeAsValArg) else "") |+|
         ", c => new " |+| imports.iotsTypeType |+| List(newTpeOfTpe, origTpeOfTpe).joinTypeParams(identity) |+| "(",
       line(s"""$indent"${superInterface.fold("")(_.name ++ " ")}$newName",""") |+|
       line(s"$indent(u: unknown): u is " |+| newTpeOfTpe |+| " => " |+| imports.fptsEither("isRight(c.decode(u))") |+| ",") |+|
@@ -174,8 +173,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
 
   def emitInterfaceDeclaration(name: String, members: ListSet[Member], typeParams: ListSet[String], superInterface: Option[UnionDeclaration])(implicit ctx: TsImports.Ctx): Lines =
     if (!config.emitInterfaces) Nil else
-      line(s"export interface ${interfaceName(name)}" |+| interfaceTypeParamArgs(list(typeParams)) |+|
-        superInterface.fold((imports.emptyStr))(i => s" extends ${interfaceName(i.name)}" |+| interfaceTypeParamArgs(list(i.typeParams))) |+| " {") |+|
+      line(s"export interface ${interfaceName(name)}" |+| interfaceTypeParamArgs(typeParams) |+|
+        superInterface.fold((imports.emptyStr))(i => s" extends ${interfaceName(i.name)}" |+| interfaceTypeParamArgs(i.typeParams)) |+| " {") |+|
       emitMembers(members, getTypeWrappedVal(_, _, true)) |+|
       line("}") |+|
       line()
@@ -193,7 +192,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     val codecs = union(memberCodec, "[", ", ", "]")
     val (allCName, allNamesConst, nameType, tpeMap) = (s"all${name}C", s"all${name}Names", s"${name}Name", s"${name}Map")
 
-    line(s"export const $allCName = " |+| iotsTypeParamArgs(list(typeParams)) |+| codecs |+| " as const;") |+|
+    line(s"export const $allCName = " |+| iotsTypeParamArgs(typeParams) |+| codecs |+| " as const;") |+|
     line(s"export const $allNamesConst = " |+| possibilities.joinArray(p => s""""${p.name}"""") |+| " as const;") |+|
     line(s"export type $nameType = (typeof $allNamesConst)[number];") |+|
     emitCodec(name, name, typeParams, tsUnionName, _ ++ "U")(unionCodec(possibilities)) |+|
@@ -225,7 +224,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     val TypeDeclaration(name, typeRef, typeParams) = decl
     val typeVal = codecName(name)
 
-    line(s"export const $typeVal = " |+| iotsTypeParamArgs(list(typeParams)) |+| getIoTsTypeString(typeRef) |+| ";") |+|
+    line(s"export const $typeVal = " |+| iotsTypeParamArgs(typeParams) |+| getIoTsTypeString(typeRef) |+| ";") |+|
     (if (typeParams.isEmpty) line(s"export type $name = " |+| imports.iotsTypeOf(s"typeof $typeVal") |+| ";") else Nil ) |+|
     line()
   }
