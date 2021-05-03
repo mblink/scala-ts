@@ -3,6 +3,7 @@
 *.log
 
 # Scala generated files
+.bsp
 *.class
 target
 

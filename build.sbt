@@ -3,9 +3,9 @@ import sbt.Keys._
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
 val publishSettings = Seq(
-  skip in publish := false,
+  publish / skip := false,
   publishMavenStyle := true,
-  publishArtifact in Test := false,
+  Test / publishArtifact := false,
   gitPublishDir := file("/src/maven-repo"),
   licenses += ("MIT", url("https://opensource.org/licenses/MIT"))
 )
@@ -51,5 +51,5 @@ libraryDependencies ++= Seq(
   "org.scala-lang" % "scala-reflect" % scalaVersion.value,
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "org.scalatest" %% "scalatest" % "3.1.0" % "test",
-  "org.typelevel" %% "cats-core" % "2.4.2"
+  "org.typelevel" %% "cats-core" % "2.6.0"
 )
