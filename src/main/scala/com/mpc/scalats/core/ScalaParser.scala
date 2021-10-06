@@ -211,15 +211,14 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
         StringRef
       case "Nil" =>
         SeqRef(UnknownTypeRef("Nothing", typeOf[Nothing]))
-      case "List" | "Seq" | "Set" | "Vector" => // TODO: Iterable
-        val innerType = scalaType.typeArgs.head
-        SeqRef(getTypeRef(innerType, typeParams))
+      case "List" | "Seq" | "Vector" => // TODO: Iterable
+        SeqRef(getTypeRef(scalaType.typeArgs.head, typeParams))
+      case "Set" | "SortedSet" =>
+        SetRef(getTypeRef(scalaType.typeArgs.head, typeParams))
       case "NonEmptyList" =>
-        val innerType = scalaType.typeArgs.head
-        NonEmptySeqRef(getTypeRef(innerType, typeParams))
+        NonEmptySeqRef(getTypeRef(scalaType.typeArgs.head, typeParams))
       case "Option" =>
-        val innerType = scalaType.typeArgs.head
-        OptionRef(getTypeRef(innerType, typeParams))
+        OptionRef(getTypeRef(scalaType.typeArgs.head, typeParams))
       case "LocalDate" =>
         DateRef
       case "Instant" | "Timestamp" | "LocalDateTime" | "ZonedDateTime" | "DateTime" =>
@@ -238,8 +237,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
           scalaType)
       case _ if isCaseClass(scalaType) =>
         val caseClassName = scalaType.typeSymbol.name.toString
-        val typeArgs = scalaType.typeArgs
-        val typeArgRefs = typeArgs.map(getTypeRef(_, typeParams))
+        val typeArgRefs = scalaType.typeArgs.map(getTypeRef(_, typeParams))
 
         CaseClassRef(caseClassName, scalaType.toString, ListSet.empty ++ typeArgRefs, scalaType)
 

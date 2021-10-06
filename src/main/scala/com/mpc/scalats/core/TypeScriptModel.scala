@@ -20,6 +20,8 @@ object TypeScriptModel {
 
   case class ArrayRef(innerType: TypeRef) extends TypeRef
 
+  case class SetRef(innerType: TypeRef) extends TypeRef
+
   case class NonEmptyArrayRef(innerType: TypeRef) extends TypeRef
 
   case class InterfaceDeclaration(name: String, fields: ListSet[Member], typeParams: ListSet[String], superInterface: Option[UnionDeclaration]) extends Declaration

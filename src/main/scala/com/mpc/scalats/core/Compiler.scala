@@ -116,6 +116,8 @@ case class Compiler(config: Config) {
       TypeScriptModel.StringRef
     case ScalaModel.SeqRef(innerType) =>
       TypeScriptModel.ArrayRef(compileTypeRef(innerType, inInterfaceContext))
+    case ScalaModel.SetRef(innerType) =>
+      TypeScriptModel.SetRef(compileTypeRef(innerType, inInterfaceContext))
     case ScalaModel.NonEmptySeqRef(innerType) =>
       TypeScriptModel.NonEmptyArrayRef(compileTypeRef(innerType, inInterfaceContext))
 
@@ -166,6 +168,7 @@ case class Compiler(config: Config) {
       r match {
         case TypeScriptModel.CustomTypeRef(n, rs, _) => n == d.name || rs.exists(refersToRef(_, d))
         case TypeScriptModel.ArrayRef(r) => refersToRef(r, d)
+        case TypeScriptModel.SetRef(r) => refersToRef(r, d)
         case TypeScriptModel.NonEmptyArrayRef(r) => refersToRef(r, d)
         case TypeScriptModel.UnknownTypeRef(n) => n == d.name
         case TypeScriptModel.SimpleTypeRef(n) => n == d.name

@@ -113,13 +113,13 @@ object TypeScriptGenerator {
       val compiledTypes = Compiler(config).compile(scalaTypes)
       val compiledTypeNames = compiledTypes.map(_.name).toSet
       val (imports, lines) = emitter.emit(compiledTypes)(TsImports.Ctx((tpe, name) =>
-        typeToFile.get(tpe).filter(_ != file.toString).fold((TsImports.empty, name)) { f =>
+        typeToFile.get(tpe).map { f =>
           val alias = s"${f.split('/').last.split('.').head}_${name}"
           if (compiledTypeNames.contains(name)) (TsImports.names(f.toString, s"$name as $alias"), alias)
           else (TsImports.names(f.toString, name), name)
         }))
 
-      imports.foreach(i => outputStream.println(i.asString(file, typeToFile.allFiles)))
+      imports.foreach(i => i.asString(file, typeToFile.allFiles).foreach(outputStream.println(_)))
       outputStream.println()
 
       lines.foreach(outputStream.println)

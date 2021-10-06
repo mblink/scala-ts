@@ -1,4 +1,5 @@
-package com.mpc.scalats.core
+package com.mpc.scalats
+package core
 
 import cats.syntax.foldable._
 import com.mpc.scalats.configuration.Config
@@ -190,12 +191,16 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     val memberCodec = (t: CustomTypeRef) => codecName(t.name) |+|
       (if (t.typeArgs.isEmpty) "" else t.typeArgs.joinParens(", ")(getIoTsTypeString))
     val codecs = union(memberCodec, "[", ", ", "]")
-    val (allCName, allNamesConst, nameType, tpeMap) = (s"all${name}C", s"all${name}Names", s"${name}Name", s"${name}Map")
+    val (allCName, allNamesConst, nameType, ordInst, tpeMap) =
+      (s"all${name}C", s"all${name}Names", s"${name}Name", unionOrdName(name), s"${name}Map")
 
     line(s"export const $allCName = " |+| iotsTypeParamArgs(typeParams) |+| codecs |+| " as const;") |+|
     line(s"export const $allNamesConst = " |+| possibilities.joinArray(p => s""""${p.name}"""") |+| " as const;") |+|
     line(s"export type $nameType = (typeof $allNamesConst)[number];") |+|
     emitCodec(name, name, typeParams, tsUnionName, _ ++ "U")(unionCodec(possibilities)) |+|
+    (if (typeParams.isEmpty) line(s"export const $ordInst: " |+| imports.fptsOrd(s"Ord<${name}U>") |+| " = " |+| iotsTypeParamArgs(typeParams) |+| imports.fptsPipe(
+      imports.fptsString("Ord", Some("stringOrd")) |+| ", " |+| imports.fptsOrd("contramap(x => x._tag)")
+    )) else Nil) |+|
     (if (emitAll) line(s"export const all$name = " |+| union(p => objectName(p.name), "[", ", ", "]") |+| " as const;") else Nil) |+|
     (if (typeParams.isEmpty) line(s"export type $tpeMap<A> = { [K in $nameType]: A };") else Nil) |+|
     line()
@@ -251,6 +256,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case DateRef => imports.iotsLocalDate
     case DateTimeRef => imports.iotsDateTime
     case ArrayRef(innerType) => imports.iotsReadonlyArray(getIoTsTypeString(innerType))
+    case SetRef(innerType) =>
+      imports.iotsReadonlySetFromArray(getIoTsTypeString(innerType), imports.fptsOrdInstance(innerType))
     case NonEmptyArrayRef(innerType) => imports.iotsReadonlyNonEmptyArray(getIoTsTypeString(innerType))
     case CustomTypeRef(name, params, scalaType) =>
       customIoTsTypes(scalaType, name, codecName) |+|
@@ -259,7 +266,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case SimpleTypeRef(param) => (imports.empty, typeAsValArg(param))
     case UnionType(name, typeParams, possibilities, scalaType) =>
       imports.custom(scalaType, tsUnionName(name))
-        .orElse(imports.iotsUnion(possibilities.joinArray(getIoTsTypeString))) |+|
+        .getOrElse(imports.iotsUnion(possibilities.joinArray(getIoTsTypeString))) |+|
         (if (typeParams.isEmpty) imports.emptyStr else typeParams.joinParens(", ")(getIoTsTypeString))
     case OptionType(iT) =>
       imports.iotsOption(getIoTsTypeString(iT))
@@ -287,6 +294,9 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case DateRef => imports.iotsLiteral(s"`${value.toString.trim}`")
     case DateTimeRef => imports.iotsLiteral(s"new Date(`${value.toString.trim}`)")
     case ArrayRef(_) => imports.iotsLiteral(s"[$value]")
+    case SetRef(typeRef) => imports.iotsLiteral(imports.fptsReadonlySet(
+      s"fromReadonlyArray(" |+| imports.fptsOrdInstance(typeRef) |+| s")([$value])"
+    ))
     case NonEmptyArrayRef(_) => imports.iotsLiteral(imports.iotsReadonlyNonEmptyArray.value |+| s".of([$value])")
     case CustomTypeRef(name, params, scalaType) =>
       customIoTsTypes(scalaType, name, codecName) |+|
@@ -295,7 +305,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case SimpleTypeRef(param) => imports.iotsStrict(typeAsValArg(param))
     case UnionType(name, typeParams, possibilities, scalaType) =>
       imports.custom(scalaType, name)
-        .orElse(imports.iotsStrict(imports.iotsUnion(possibilities.joinArray(getIoTsTypeWrappedVal(value, _))))) |+|
+        .getOrElse(imports.iotsStrict(imports.iotsUnion(possibilities.joinArray(getIoTsTypeWrappedVal(value, _))))) |+|
         (if (typeParams.isEmpty) imports.emptyStr else typeParams.joinParens(", ")(getIoTsTypeWrappedVal(value, _)))
     case OptionType(iT) =>
       imports.iotsOption(getIoTsTypeWrappedVal(value, iT))
@@ -317,7 +327,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
 
   def customIoTsTypes(scalaType: Type, name: String, customName: String => String)(implicit ctx: TsImports.Ctx): TsImports.With[String] = name match {
     case "NonEmptyList" => imports.iotsReadonlyNonEmptyArray.value
-    case _ => imports.custom(scalaType, customName(name))
+    case _ => imports.custom(scalaType, customName(name)).getOrElse(imports.lift(customName(name)))
   }
 
   def getTypeWrappedVal(value: Any, typeRef: TypeRef, interfaceContext: Boolean)(implicit ctx: TsImports.Ctx): TsImports.With[String] = typeRef match {
@@ -327,10 +337,14 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case DateRef => s"`${value.toString.trim}`"
     case DateTimeRef => s"`${value.toString.trim}`"
     case ArrayRef(t) => value.asInstanceOf[Iterable[Any]].joinArray(getTypeWrappedVal(_, t, interfaceContext))
+    case SetRef(t) => imports.fptsReadonlySet(s"fromReadonlyArray(" |+| imports.fptsOrdInstance(t) |+| s")(" |+|
+      value.asInstanceOf[Iterable[Any]].joinArray(getTypeWrappedVal(_, t, interfaceContext)) |+|
+    ")")
     case NonEmptyArrayRef(t) =>
       imports.iotsReadonlyNonEmptyArray.value |+| ".of(" |+| getTypeWrappedVal(value, ArrayRef(t), interfaceContext) |+| ")"
     case CustomTypeRef(name, params, scalaType) =>
-      imports.custom(scalaType, if (interfaceContext) interfaceName(name) else objectName(name)) |+|
+      val typeName = if (interfaceContext) interfaceName(name) else objectName(name)
+      imports.custom(scalaType, typeName).getOrElse(imports.lift(typeName)) |+|
         (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
     case UnknownTypeRef(unknown) => unknown
     case SimpleTypeRef(param) => if (interfaceContext) param else typeAsValArg(param)
@@ -339,7 +353,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       val (customTypeName, customType) = possibilities.collectFirst {
         case CustomTypeRef(n, _, t) if t =:= valueType => (n, t)
       }.getOrElse(sys.error(s"Value $value of type $valueType is not a member of union $u"))
-      imports.custom(customType, objectName(customTypeName)) |+|
+      val objName = objectName(customTypeName)
+      imports.custom(customType, objName).getOrElse(imports.lift(objName)) |+|
         (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
     case OptionType(iT) => getIoTsTypeString(iT)
     case EitherType(lT, rT) => imports.iotsUnion(List(lT, rT).joinArray(getIoTsTypeString))

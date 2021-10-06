@@ -65,6 +65,8 @@ object ScalaModel {
 
   case class SeqRef(innerType: TypeRef) extends TypeRef
 
+  case class SetRef(innerType: TypeRef) extends TypeRef
+
   case class TupleRef(typeArgs: ListSet[TypeRef]) extends TypeRef
 
   case class TheseRef(leftType: TypeRef, rightType: TypeRef) extends TypeRef

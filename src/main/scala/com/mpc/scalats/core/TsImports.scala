@@ -1,4 +1,5 @@
-package com.mpc.scalats.core
+package com.mpc.scalats
+package core
 
 import cats.{Monoid, Semigroup, Show}
 import cats.syntax.foldable._
@@ -47,16 +48,17 @@ case class QualifiedImport(loc: String, run: TsImport) {
     if (woExt.startsWith(".")) woExt else s"./$woExt"
   }
 
-  def asString(currFile: File, allFiles: Set[String]): String =
-    show"""import $run from """" ++
+  def asString(currFile: File, allFiles: Set[String]): Option[String] =
+    if (file == currFile) None
+    else Some(show"""import $run from """" ++
       // Relativize paths to files that exist on the file system or are currently being generated
       (if (file.exists || allFiles.contains(file.toString))
         normalizePath(relPath(loc, currFile.getParent).replaceAll("\\.tsx?$", ""))
-      else loc) ++ """";"""
+      else loc) ++ """";""")
 }
 
 class TsImports private (private val m: Map[String, TsImport]) {
-  def isEmpty: Boolean = m.isEmpty
+  private[TsImports] def toList: List[(String, TsImport)] = m.toList
   def ++(other: TsImports): TsImports = new TsImports(m |+| other.m)
   def foreach(f: QualifiedImport => Unit): Unit = m.foreach { case (l, i) => f(QualifiedImport(l, i)) }
 }
@@ -88,12 +90,6 @@ object TsImports {
     implicit class TsImportsWithAOps[A](t: TsImports.With[A]) {
       def |+|(t2: TsImports.With[A])(implicit S: Semigroup[A]): TsImports.With[A] =
         (t._1 |+| t2._1, S.combine(t._2, t2._2))
-
-      def foldEmpty[B](fallback: => B)(f: TsImports.With[A] => B): B =
-        if (t._1.isEmpty) fallback else f(t)
-
-      def orElse(t2: TsImports.With[A]): TsImports.With[A] =
-        foldEmpty(t2)(identity)
     }
 
     implicit class TsImportsWithListAOps[A](t: TsImports.With[List[A]]) {
@@ -146,11 +142,17 @@ object TsImports {
     }
   }
 
-  case class CallableImport(tsImports: TsImports, private val name: String, prefix: String = "(", suffix: String = ")") {
+  case class CallableImport(tsImports: TsImports, private val name: String, prefix: String = "(", suffix: String = ")")
+  extends HelperSyntax {
     lazy val value: With[String] = (tsImports, name)
 
-    def apply(s: String): With[String] = (tsImports, name ++ prefix ++ s ++ suffix)
-    def apply(t: With[String]): With[String] = (tsImports ++ t._1, name ++ prefix ++ t._2 ++ suffix)
+    def apply(s: String*): With[String] =
+      (tsImports, name ++ prefix ++ s.mkString(", ") ++ suffix)
+
+    def apply(t: With[String]*)(implicit d: DummyImplicit): With[String] = {
+      val (i, s) = name |+| t.join(prefix, ", ", suffix)(identity)
+      (tsImports ++ i, s)
+    }
 
     def lines(
       firstLine: String => With[String],
@@ -169,7 +171,7 @@ object TsImports {
   }
 
   case class Ctx(
-    custom: (Type, String) => TsImports.With[String]
+    custom: (Type, String) => Option[TsImports.With[String]]
   )
 
   case class available(config: Config) {
@@ -179,13 +181,63 @@ object TsImports {
     def lift(s: String): With[String] = (empty, s)
     lazy val emptyStr: With[String] = lift("")
 
-    private def namedImport(t: (String, String)): With[String] = (names(t._2, t._1), t._1)
+    private def namedImport(loc: String, name: String, alias: Option[String] = None): With[String] =
+      (names(loc, alias.fold(name)(a => s"$name as $a")), alias.getOrElse(name))
+    private def namedImport(t: (String, String)): With[String] = namedImport(t._2, t._1)
     private def optImport(o: Option[(String, String)], tpeName: String, cfgKey: String): With[String] =
       o.map(namedImport).getOrElse(sys.error(s"$tpeName type requested but $cfgKey import config value missing"))
 
-    lazy val fptsOption = CallableImport(all(tsi.fptsOption, "O"), "O", ".", "")
+    def fptsOrdInstance(typeRef: TypeScriptModel.TypeRef)(implicit ctx: Ctx): With[String] = {
+      @annotation.nowarn("msg=dead code") lazy val err = sys.error(s"`Ord` instance requested for $typeRef but not found")
+
+      // First check `getOrdInstance` config to see if user has specified an `Ord` instance for the given type
+      config.getOrdInstance.applyOrElse(typeRef, (_: TypeScriptModel.TypeRef) match {
+        // `Ord` instances that are built into fp-ts
+        case TypeScriptModel.ArrayRef(t) => fptsReadonlyArray(lift("Ord(") |+| fptsOrdInstance(t) |+| lift(")"))
+        case TypeScriptModel.BooleanRef => fptsBoolean("Ord", Some("boolOrd"))
+        case TypeScriptModel.DateRef | TypeScriptModel.DateTimeRef => fptsDate("Ord", Some("dateOrd"))
+        case TypeScriptModel.NumberRef => fptsNumber("Ord", Some("numberOrd"))
+        case TypeScriptModel.OptionType(t) => fptsOption(lift("Ord(") |+| fptsOrdInstance(t) |+| lift(")"))
+        case TypeScriptModel.StringRef => fptsString("Ord", Some("stringOrd"))
+
+        // Union types being generated have an `Ord` instance defined, import it from the same file as the type itself
+        case TypeScriptModel.UnionType(name, _, _, tpe) =>
+          ctx.custom(tpe, "ord").map(_._1.toList).collect {
+            case (file, TsImportNames(_)) :: Nil => namedImport(file, unionOrdName(name))
+          }.getOrElse(err)
+
+        // No sane `Ord` instances for these, would have have to be handled by the `getOrdInstance` config value
+        case (
+          TypeScriptModel.CustomTypeRef(_, _, _) |
+          TypeScriptModel.EitherType(_, _) |
+          TypeScriptModel.MapType(_, _) |
+          TypeScriptModel.NonEmptyArrayRef(_) |
+          TypeScriptModel.NullRef |
+          TypeScriptModel.SetRef(_) |
+          TypeScriptModel.SimpleTypeRef(_) |
+          TypeScriptModel.TheseType(_, _) |
+          TypeScriptModel.TupleType(_) |
+          TypeScriptModel.UndefinedRef |
+          TypeScriptModel.UnknownTypeRef(_)
+        ) => err
+      })
+    }
+
+    class FptsUtil(imprt: tsi.type => String) {
+      def apply(name: String, alias: Option[String] = None): With[String] = namedImport(imprt(tsi), name, alias)
+    }
+
+    lazy val fptsBoolean = new FptsUtil(_.fptsBoolean)
+    lazy val fptsDate = new FptsUtil(_.fptsDate)
+    lazy val fptsNumber = new FptsUtil(_.fptsNumber)
+    lazy val fptsString = new FptsUtil(_.fptsString)
+
     lazy val fptsEither = CallableImport(all(tsi.fptsEither, "E"), "E", ".", "")
+    lazy val fptsOption = CallableImport(all(tsi.fptsOption, "O"), "O", ".", "")
+    lazy val fptsOrd = CallableImport(all(tsi.fptsOrd, "Ord"), "Ord", ".", "")
     lazy val fptsPipe = CallableImport(namedImport(tsi.fptsPipe))
+    lazy val fptsReadonlyArray = CallableImport(all(tsi.fptsReadonlyArray, "RA"), "RA", ".", "")
+    lazy val fptsReadonlySet = CallableImport(all(tsi.fptsReadonlySet, "RS"), "RS", ".", "")
     lazy val fptsThese = CallableImport(all(tsi.fptsThese, "Th"), "Th", ".", "")
 
     lazy val iotsImport = all(tsi.iots, "t")
@@ -209,12 +261,13 @@ object TsImports {
 
     lazy val iotsDateTime = namedImport(tsi.iotsDateTime)
     lazy val iotsReadonlyNonEmptyArray = CallableImport(namedImport(tsi.iotsReadonlyNonEmptyArray))
+    lazy val iotsReadonlySetFromArray = CallableImport(namedImport(tsi.iotsReadonlySetFromArray))
     lazy val iotsNumberFromString = namedImport(tsi.iotsNumberFromString)
     lazy val iotsOption = CallableImport(namedImport(tsi.iotsOption))
     lazy val iotsEither = CallableImport(optImport(tsi.iotsEither, "Either", "iotsEither"))
     lazy val iotsLocalDate = optImport(tsi.iotsLocalDate, "LocalDate", "iotsLocalDate")
     lazy val iotsThese = CallableImport(optImport(tsi.iotsThese, "These", "iotsThese"))
 
-    def custom(scalaType: Type, name: String)(implicit ctx: Ctx): With[String] = ctx.custom(scalaType, name)
+    def custom(scalaType: Type, name: String)(implicit ctx: Ctx): Option[With[String]] = ctx.custom(scalaType, name)
   }
 }
