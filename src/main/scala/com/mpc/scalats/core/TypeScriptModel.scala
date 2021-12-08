@@ -51,6 +51,14 @@ object TypeScriptModel {
     val superInterface = None
   }
 
+  case class TaggedTypeDeclaration(
+    name: String,
+    baseTypeRef: TypeRef,
+    tagTypeName: String
+  ) extends Declaration {
+    val superInterface = None
+  }
+
   case class UnknownTypeRef(name: String) extends TypeRef
 
   case object NumberRef extends TypeRef {

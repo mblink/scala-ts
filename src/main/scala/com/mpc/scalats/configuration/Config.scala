@@ -12,7 +12,8 @@ case class Config(
   tsNamingConvention: Boolean = true,
   typescriptIndent: String = "  ",
   tsImports: TsImports = TsImports(),
-  getOrdInstance: PartialFunction[core.TypeScriptModel.TypeRef, core.TsImports.With[String]] = PartialFunction.empty
+  getOrdInstance: PartialFunction[core.TypeScriptModel.TypeRef, core.TsImports.With[String]] = PartialFunction.empty,
+  scalaTagTypeName: Option[String] = None,
 )
 
 case class TsImports(

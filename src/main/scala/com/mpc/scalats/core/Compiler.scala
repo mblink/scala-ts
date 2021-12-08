@@ -68,6 +68,9 @@ case class Compiler(config: Config) {
 
         case typeAlias: ScalaModel.TypeAlias =>
           ListSet[Declaration](compileTypeAlias(typeAlias))
+
+        case taggedType: ScalaModel.TaggedType =>
+          ListSet[Declaration](compileTaggedType(taggedType))
       }
     }
 
@@ -100,9 +103,17 @@ case class Compiler(config: Config) {
       compileTypeRef(scalaTypeAlias.typeRef, false),
       scalaTypeAlias.typeArgs)
 
+  private def compileTaggedType(
+    scalaTaggedType: ScalaModel.TaggedType
+  ): TypeScriptModel.TaggedTypeDeclaration =
+    TypeScriptModel.TaggedTypeDeclaration(
+      buildTypeName(scalaTaggedType.name, scalaTaggedType.fullTypeName),
+      compileTypeRef(scalaTaggedType.baseTypeRef, false),
+      scalaTaggedType.tagTypeName)
+
   private def compileTypeRef(
-      scalaTypeRef: ScalaModel.TypeRef,
-      inInterfaceContext: Boolean
+    scalaTypeRef: ScalaModel.TypeRef,
+    inInterfaceContext: Boolean
   ): TypeScriptModel.TypeRef = scalaTypeRef match {
     case ScalaModel.IntRef =>
       TypeScriptModel.NumberRef
@@ -133,6 +144,9 @@ case class Compiler(config: Config) {
 
     case ScalaModel.TypeParamRef(name, _) =>
       TypeScriptModel.SimpleTypeRef(name)
+
+    case ScalaModel.TaggedTypeRef(name, scalaType) =>
+      TypeScriptModel.CustomTypeRef(name, ListSet(), scalaType)
 
     case ScalaModel.OptionRef(innerType) =>
       TypeScriptModel.OptionType(compileTypeRef(innerType, inInterfaceContext))
@@ -195,6 +209,9 @@ case class Compiler(config: Config) {
           fs.exists(f => refersToRef(f.typeRef, d2)) || ps.exists(refersToRef(_, d2)) || si.fold(false)(refersTo(_, d2))
 
         case TypeScriptModel.TypeDeclaration(_, r, _) =>
+          refersToRef(r, d2)
+
+        case TypeScriptModel.TaggedTypeDeclaration(_, r, _) =>
           refersToRef(r, d2)
       }
 

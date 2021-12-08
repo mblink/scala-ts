@@ -45,6 +45,14 @@ object ScalaModel {
     scalaType: Type
   ) extends TypeDef
 
+  case class TaggedType(
+    name: String,
+    fullTypeName: String,
+    baseTypeRef: TypeRef,
+    tagTypeName: String,
+    scalaType: Type
+  ) extends TypeDef
+
   // ---
 
   sealed trait TypeRef
@@ -78,6 +86,8 @@ object ScalaModel {
   case class UnknownTypeRef(name: String, tpe: Type) extends TypeRef with HasType
 
   case class TypeParamRef(name: String, tpe: Type) extends TypeRef with HasType
+
+  case class TaggedTypeRef(name: String, tpe: Type) extends TypeRef with HasType
 
   case object IntRef extends TypeRef
 

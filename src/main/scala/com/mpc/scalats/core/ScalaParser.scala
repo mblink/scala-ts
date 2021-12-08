@@ -1,11 +1,12 @@
-package com.mpc.scalats.core
+package com.mpc.scalats
+package core
 
 import scala.annotation.tailrec
 import scala.collection.mutable.StringBuilder
 import scala.collection.immutable.ListSet
 import scala.reflect.runtime.universe._
 
-final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boolean) {
+final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boolean)(implicit config: configuration.Config) {
   import ScalaModel._
 
   def parseTypes(types: List[Type]): ListSet[TypeDef] =
@@ -17,6 +18,17 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
   private def getTypeParams(tpe: Type): Set[String] =
     tpe.typeParams.map(_.name.decodedName.toString).toSet
 
+  private object TaggedTypeExtractor {
+    def unapply(tpe: Type): Option[(Type, Type)] =
+      (config.scalaTagTypeName, tpe.typeSymbol, tpe.typeArgs, tpe.dealias.typeArgs) match {
+        case (Some(tagTpeName), sym, Nil, List(baseTpe, tagTpe)) if sym.isType &&
+                                                                    sym.asType.toType.typeConstructor.toString == tagTpeName =>
+          Some((baseTpe, tagTpe))
+
+        case _ => None
+      }
+  }
+
   private def parseType(tpe: Type): Option[TypeDef] = {
     if (isNotExcluded(tpe)) {
       tpe match {
@@ -25,6 +37,9 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
 
         case _ if (tpe.getClass.getName contains "ModuleType" /*Workaround*/) =>
           parseObject(tpe)
+
+        case TaggedTypeExtractor(baseTpe, tagTpe) =>
+          parseTaggedType(tpe, baseTpe, tagTpe)
 
         case _ if tpe.typeSymbol.isClass && !tpe.typeSymbol.name.toString.contains("NonEmptyList") =>
           if (isSealedUnion(tpe)) {
@@ -86,9 +101,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
     }
 
     val members = tpe.decls.sorted.collect {
-      case Field(m) if !m.isStatic => {
-        member(tpe, m, Set())
-      }
+      case Field(m) if !m.isStatic => member(m, Set())
     }
 
     Some(CaseObject(
@@ -102,7 +115,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
     // Members
     val members = tpe.members.sorted.collect {
       case m: MethodSymbol if isValidMethod(m) && !m.name.toString.endsWith("$") =>
-        member(tpe, m, Set())
+        member(m, Set())
     }
 
     directKnownSubclasses(tpe) match {
@@ -124,13 +137,11 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
 
     // Members
     val members = caseClassType.members.sorted.collect {
-      case Field(m) if m.isCaseAccessor =>
-        member(caseClassType, m, typeParams)
+      case Field(m) if m.isCaseAccessor => member(m, typeParams)
     }.toList
 
     val values = caseClassType.decls.sorted.collect {
-      case Field(m) =>
-        member(caseClassType, m, typeParams)
+      case Field(m) => member(m, typeParams)
     }.filterNot(members.contains)
 
     Some(CaseClass(
@@ -154,11 +165,19 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
       tpe))
   }
 
+  private def parseTaggedType(tpe: Type, baseTpe: Type, tagTpe: Type): Option[TaggedType] =
+    Some(TaggedType(
+      tpe.toString.split('.').last,
+      tpe.toString,
+      getTypeRef(baseTpe, Set()),
+      tagTpe.toString.split('.').last,
+      tpe))
+
   @inline private def trueType(tpe: Type, seenFrom: Option[Type]): Type =
     seenFrom.fold(tpe)(t => tpe.asSeenFrom(t, t.typeSymbol)).map(_.dealias)
 
-  @inline private def member(owner: Type, sym: MethodSymbol, typeParams: Set[String]): TypeMember =
-    TypeMember(sym.name.toString, getTypeRef(trueType(sym.returnType, Some(owner)), typeParams))
+  @inline private def member(sym: MethodSymbol, typeParams: Set[String]): TypeMember =
+    TypeMember(sym.name.toString, getTypeRef(sym.returnType, typeParams))
 
   @annotation.tailrec
   private def parse(types: List[Type], examined: ListSet[Type], parsed: ListSet[TypeDef]): ListSet[TypeDef] =
@@ -198,61 +217,62 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
 
   // TODO: resolve from implicit (typeclass)
   private def getTypeRef(scalaType: Type, typeParams: Set[String]): TypeRef = {
-    scalaType.typeSymbol.name.toString match {
-      case "Int" | "Byte" | "Short" =>
+    (scalaType, scalaType.typeSymbol.name.toString, scalaType.dealias.typeArgs) match {
+      case (_, "Int" | "Byte" | "Short", _) =>
         IntRef
-      case "Long" =>
+      case (_, "Long", _) =>
         LongRef
-      case "Double" =>
+      case (_, "Double", _) =>
         DoubleRef
-      case "Boolean" =>
+      case (_, "Boolean", _) =>
         BooleanRef
-      case "String" =>
+      case (_, "String", _) =>
         StringRef
-      case "Nil" =>
+      case (_, "Nil", _) =>
         SeqRef(UnknownTypeRef("Nothing", typeOf[Nothing]))
-      case "List" | "Seq" | "Vector" => // TODO: Iterable
-        SeqRef(getTypeRef(scalaType.typeArgs.head, typeParams))
-      case "Set" | "SortedSet" =>
-        SetRef(getTypeRef(scalaType.typeArgs.head, typeParams))
-      case "NonEmptyList" =>
-        NonEmptySeqRef(getTypeRef(scalaType.typeArgs.head, typeParams))
-      case "Option" =>
-        OptionRef(getTypeRef(scalaType.typeArgs.head, typeParams))
-      case "LocalDate" =>
+      case (_, "List" | "Seq" | "Vector", List(innerType)) => // TODO: Iterable
+        SeqRef(getTypeRef(innerType, typeParams))
+      case (_, "Set" | "SortedSet", List(innerType)) =>
+        SetRef(getTypeRef(innerType, typeParams))
+      case (_, "NonEmptyList", List(innerType)) =>
+        NonEmptySeqRef(getTypeRef(innerType, typeParams))
+      case (_, "Option", List(innerType)) =>
+        OptionRef(getTypeRef(innerType, typeParams))
+      case (_, "LocalDate", _) =>
         DateRef
-      case "Instant" | "Timestamp" | "LocalDateTime" | "ZonedDateTime" | "DateTime" =>
+      case (_, "Instant" | "Timestamp" | "LocalDateTime" | "ZonedDateTime" | "DateTime", _) =>
         DateTimeRef
-      case tupleName(_) =>
-        TupleRef(ListSet.empty ++ scalaType.typeArgs.map(getTypeRef(_, Set())))
-      case typeParam if typeParams.contains(typeParam) =>
+      case (_, tupleName(_), typeArgs) =>
+        TupleRef(ListSet.empty ++ typeArgs.map(getTypeRef(_, Set())))
+      case (_, typeParam, _) if typeParams.contains(typeParam) =>
         TypeParamRef(typeParam, scalaType)
       case _ if isAnyValChild(scalaType) =>
         getTypeRef(scalaType.members.filter(!_.isMethod).map(_.typeSignature).head, Set())
-      case _ if isSealedUnion(scalaType) =>
+      case (_, _, typeArgs) if isSealedUnion(scalaType) =>
         UnionRef(
           scalaType.typeSymbol.name.toString,
-          ListSet.empty ++ scalaType.typeArgs.map(getTypeRef(_, Set())),
+          ListSet.empty ++ typeArgs.map(getTypeRef(_, Set())),
           ListSet.empty ++ directKnownSubclasses(scalaType).map(getTypeRef(_, Set.empty)),
           scalaType)
-      case _ if isCaseClass(scalaType) =>
+      case (_, _, typeArgs) if isCaseClass(scalaType) =>
         val caseClassName = scalaType.typeSymbol.name.toString
-        val typeArgRefs = scalaType.typeArgs.map(getTypeRef(_, typeParams))
+        val typeArgRefs = typeArgs.map(getTypeRef(_, typeParams))
 
         CaseClassRef(caseClassName, scalaType.toString, ListSet.empty ++ typeArgRefs, scalaType)
 
-      case "Either" | """\/""" | "Disjunction" =>
-        EitherRef(getTypeRef(scalaType.typeArgs.head, typeParams), getTypeRef(scalaType.typeArgs.last, typeParams))
+      case (_, "Either" | """\/""" | "Disjunction", List(lType, rType)) =>
+        EitherRef(getTypeRef(lType, typeParams), getTypeRef(rType, typeParams))
 
-      case "Ior" | """\&/""" =>
-        TheseRef(getTypeRef(scalaType.typeArgs.head, typeParams), getTypeRef(scalaType.typeArgs.last, typeParams))
+      case (_, "Ior" | """\&/""", List(lType, rType)) =>
+        TheseRef(getTypeRef(lType, typeParams), getTypeRef(rType, typeParams))
 
-      case "Map" =>
-        val keyType = scalaType.typeArgs.head
-        val valueType = scalaType.typeArgs.last
-        MapRef(getTypeRef(keyType, typeParams), getTypeRef(valueType, typeParams))
+      case (_, "Map", List(kType, vType)) =>
+        MapRef(getTypeRef(kType, typeParams), getTypeRef(vType, typeParams))
 
-      case unknown =>
+      case (TaggedTypeExtractor(_, _), _, _) =>
+        TaggedTypeRef(scalaType.toString.split('.').last, scalaType)
+
+      case (_, unknown, _) =>
         UnknownTypeRef(unknown, scalaType)
     }
   }
