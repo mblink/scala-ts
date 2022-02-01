@@ -8,7 +8,6 @@ import scala.reflect.runtime.universe.Type
 
 final class IoTsEmitter(val config: Config) extends Emitter {
   import TypeScriptModel._
-  import Internals.list
 
   private def typeAsValArg(s: String): String = s"_${s}val"
 
@@ -115,29 +114,6 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     emitCodec0(name, tpeName, typeParams, mkCodecName, modType)(_.emit(body))
 
   private def _tagMember(name: String): Member = Member("_tag", StringRef, Some(name))
-
-  @annotation.nowarn("msg=never used")
-  private def emitDiscriminatedCodec(
-    name: String,
-    tpeName: String,
-    members: ListSet[Member],
-    typeParams: ListSet[String],
-    superInterface: UnionDeclaration,
-  )(
-    onNoVal: TypeRef => TsImports.With[String],
-    constantValue: Option[TsImports.With[String]] = None
-  )(implicit ctx: TsImports.Ctx): Lines = {
-    val (tps, hasTps) = (list(typeParams), typeParams.nonEmpty)
-    val idTps = tps.joinTypeParams(identity)
-    val (dscrName, dscrTpeName) = (s"${name}Discr", s"${tpeName}Discr")
-    val (cName, dscrCName) = (codecName(name), codecName(dscrName))
-    val (tpe, dscrTpe) = (tpeName |+| idTps, dscrTpeName |+| idTps)
-    val tpeOfTps = tps.joinTypeParams(imports.iotsTypeOf(_))
-    val (tpeOfTpe, tpeOfDscrTpe) = (tpeName |+| tpeOfTps, dscrTpeName |+| tpeOfTps)
-
-    emitCodec(name, tpeName, typeParams)(membersCodec(
-      ListSet(Member("_tag", StringRef, Some(name))) ++ members)(onNoVal))
-  }
 
   private def emitImappedCodec(
     origName: String,
