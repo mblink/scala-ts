@@ -1,6 +1,7 @@
 .idea
 .vscode
 *.log
+*.DS_Store
 
 # Scala generated files
 .bsp
