@@ -205,7 +205,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     val TaggedTypeDeclaration(name, baseTypeRef, tagTypeName) = decl
     val underlyingCodecName = s"${codecName(name)}Underlying"
 
-    line(s"interface $tagTypeName { readonly $tagTypeName: unique symbol; }") |+|
+    line(s"export interface $tagTypeName { readonly $tagTypeName: unique symbol; }") |+|
     line(s"const $underlyingCodecName = " |+| getIoTsTypeString(baseTypeRef) |+| ";") |+|
     emitCodec(name, name, ListSet())(_ => imports.iotsBrand.lines(
       identity,
