@@ -1,6 +1,7 @@
 package com.mpc.scalats
 package core
 
+import cats.data.NonEmptyList
 import cats.syntax.foldable._
 import com.mpc.scalats.configuration.Config
 import scala.collection.immutable.ListSet
@@ -324,7 +325,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       value.asInstanceOf[Iterable[Any]].joinArray(getTypeWrappedVal(_, t, interfaceContext)) |+|
     ")")
     case NonEmptyArrayRef(t) =>
-      imports.iotsReadonlyNonEmptyArray.value |+| ".of(" |+| getTypeWrappedVal(value, ArrayRef(t), interfaceContext) |+| ")"
+      imports.fptsReadonlyNonEmptyArray("fromReadonlyArray(" |+|
+        getTypeWrappedVal(value.asInstanceOf[NonEmptyList[Any]].toList, ArrayRef(t), interfaceContext) |+| ")")
     case CustomTypeRef(name, params, scalaType) =>
       val typeName = if (interfaceContext) interfaceName(name) else objectName(name)
       imports.custom(scalaType, typeName).getOrElse(imports.lift(typeName)) |+|
@@ -343,7 +345,9 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case EitherType(lT, rT) => imports.iotsUnion(List(lT, rT).joinArray(getIoTsTypeString))
     case TheseType(lT, rT) => imports.iotsUnion(List(lT, rT, TupleType(ListSet(lT, rT))).joinArray(getIoTsTypeString))
     case MapType(keyType, valueType) => imports.iotsRecord(List(keyType, valueType).join(", ")(getIoTsTypeString))
-    case TupleType(types) => imports.iotsTuple(types.joinArray(getIoTsTypeString))
+    case TupleType(types) =>
+      value.asInstanceOf[Product].productIterator.toList.zip(types.toList)
+        .joinArray { case (v, t) => getTypeWrappedVal(v, t, interfaceContext) }
     case NullRef => "null"
     case UndefinedRef => "undefined"
   }
