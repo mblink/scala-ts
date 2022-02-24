@@ -237,7 +237,6 @@ object TsImports {
     lazy val fptsOrd = CallableImport(all(tsi.fptsOrd, "Ord"), "Ord", ".", "")
     lazy val fptsPipe = CallableImport(namedImport(tsi.fptsPipe))
     lazy val fptsReadonlyArray = CallableImport(all(tsi.fptsReadonlyArray, "RA"), "RA", ".", "")
-    lazy val fptsReadonlyNonEmptyArray = CallableImport(all(tsi.fptsReadonlyNonEmptyArray, "RNA"), "RNA", ".", "")
     lazy val fptsReadonlySet = CallableImport(all(tsi.fptsReadonlySet, "RS"), "RS", ".", "")
     lazy val fptsThese = CallableImport(all(tsi.fptsThese, "Th"), "Th", ".", "")
 

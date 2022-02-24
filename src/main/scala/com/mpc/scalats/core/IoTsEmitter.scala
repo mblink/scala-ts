@@ -325,8 +325,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       value.asInstanceOf[Iterable[Any]].joinArray(getTypeWrappedVal(_, t, interfaceContext)) |+|
     ")")
     case NonEmptyArrayRef(t) =>
-      imports.fptsReadonlyNonEmptyArray("fromReadonlyArray(" |+|
-        getTypeWrappedVal(value.asInstanceOf[NonEmptyList[Any]].toList, ArrayRef(t), interfaceContext) |+| ")")
+      getTypeWrappedVal(value.asInstanceOf[NonEmptyList[Any]].toList, ArrayRef(t), interfaceContext)
     case CustomTypeRef(name, params, scalaType) =>
       val typeName = if (interfaceContext) interfaceName(name) else objectName(name)
       imports.custom(scalaType, typeName).getOrElse(imports.lift(typeName)) |+|

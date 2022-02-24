@@ -24,7 +24,6 @@ case class TsImports(
   fptsOption: String = "fp-ts/lib/Option",
   fptsOrd: String = "fp-ts/lib/Ord",
   fptsReadonlyArray: String = "fp-ts/lib/ReadonlyArray",
-  fptsReadonlyNonEmptyArray: String = "fp-ts/lib/ReadonlyNonEmptyArray",
   fptsReadonlySet: String = "fp-ts/lib/ReadonlySet",
   fptsString: String = "fp-ts/lib/string",
   fptsThese: String = "fp-ts/lib/These",
