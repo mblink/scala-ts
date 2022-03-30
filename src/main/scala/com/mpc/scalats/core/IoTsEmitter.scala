@@ -340,7 +340,10 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       val objName = objectName(customTypeName)
       imports.custom(customType, objName).getOrElse(imports.lift(objName)) |+|
         (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
-    case OptionType(iT) => getIoTsTypeString(iT)
+    case OptionType(iT) => value.asInstanceOf[Option[_]] match {
+      case Some(innerValue) => imports.fptsOption("some(") |+| getTypeWrappedVal(innerValue, iT, interfaceContext) |+| ")"
+      case None => imports.fptsOption("none")
+    }
     case EitherType(lT, rT) => imports.iotsUnion(List(lT, rT).joinArray(getIoTsTypeString))
     case TheseType(lT, rT) => imports.iotsUnion(List(lT, rT, TupleType(ListSet(lT, rT))).joinArray(getIoTsTypeString))
     case MapType(keyType, valueType) => imports.iotsRecord(List(keyType, valueType).join(", ")(getIoTsTypeString))
