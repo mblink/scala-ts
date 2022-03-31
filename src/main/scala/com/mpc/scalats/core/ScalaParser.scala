@@ -214,6 +214,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
     }
 
   private val tupleName = """^Tuple(\d+)$""".r
+  private val nothingTypeRef = UnknownTypeRef("Nothing", typeOf[Nothing])
 
   // TODO: resolve from implicit (typeclass)
   private def getTypeRef(scalaType: Type, typeParams: Set[String]): TypeRef = {
@@ -229,15 +230,17 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
       case (_, "String", _) =>
         StringRef
       case (_, "Nil", _) =>
-        SeqRef(UnknownTypeRef("Nothing", typeOf[Nothing]))
+        SeqRef(nothingTypeRef)
       case (_, "List" | "Seq" | "Vector", List(innerType)) => // TODO: Iterable
         SeqRef(getTypeRef(innerType, typeParams))
       case (_, "Set" | "SortedSet", List(innerType)) =>
         SetRef(getTypeRef(innerType, typeParams))
       case (_, "NonEmptyList", List(innerType)) =>
         NonEmptySeqRef(getTypeRef(innerType, typeParams))
-      case (_, "Option", List(innerType)) =>
+      case (_, "Option" | "Some", List(innerType)) =>
         OptionRef(getTypeRef(innerType, typeParams))
+      case (_, "None", Nil) =>
+        OptionRef(nothingTypeRef)
       case (_, "LocalDate", _) =>
         DateRef
       case (_, "Instant" | "Timestamp" | "LocalDateTime" | "ZonedDateTime" | "DateTime", _) =>
