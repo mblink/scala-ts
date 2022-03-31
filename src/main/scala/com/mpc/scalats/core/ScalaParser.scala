@@ -85,17 +85,18 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
       case t: TermSymbol if t.isVal && t.isStable && t.isStatic => {
         val sm = mirror.staticModule(tpe.typeSymbol.fullName.stripSuffix(".type"))
         val v = mirror.reflect(mirror.reflectModule(sm).instance).reflectField(t).get
-        val tp = (if (t.isClass) t.info.typeSymbol.asClass.typeParams else List[Symbol]()).map(_.name.toString)
-        TypeMember(t.name.toString, getTypeRef(t.info, tp.toSet), Some(v))
+        val symTpe = getTypeInfo(t)
+        val tp = (if (t.isClass) symTpe.typeSymbol.asClass.typeParams else List[Symbol]()).map(_.name.toString)
+        TypeMember(t.name.toString, getTypeRef(symTpe, tp.toSet), Some(v))
       }
       case m: MethodSymbol if isValidMethod(m) => {
         val sm = mirror.staticModule(tpe.typeSymbol.fullName.stripSuffix(".type"))
         val v = mirror.reflect(mirror.reflectModule(sm).instance).reflectMethod(m)
 
         if (m.paramLists.isEmpty) {
-          TypeMember(m.name.toString, getTypeRef(trueType(m.returnType, Some(tpe)), Set()), Some(v()))
+          TypeMember(m.name.toString, getTypeRef(trueType(getTypeInfo(m), Some(tpe)), Set()), Some(v()))
         } else {
-          TypeMember(m.name.toString, getTypeRef(m.returnType, Set.empty), None)
+          TypeMember(m.name.toString, getTypeRef(getTypeInfo(m), Set.empty), None)
         }
       }
     }
@@ -176,8 +177,31 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
   @inline private def trueType(tpe: Type, seenFrom: Option[Type]): Type =
     seenFrom.fold(tpe)(t => tpe.asSeenFrom(t, t.typeSymbol)).map(_.dealias)
 
+  /* The last overridden symbol is the furthest up the inheritance hierarchy, so it has the true type of the symbol, e.g.
+
+    sealed trait Foo { val x: Option[Int] }
+    sealed trait Bar { val x = Some(1) }
+    sealed trait Baz { override val x = Some(2) }
+
+    val bazX = typeOf[Baz].members.find(_.name.toString == "x").get
+
+    // Baz#x incorrectly has type `Some[Int]`
+    bazX.info // => Some[Int]
+    // Baz#x has two overridden symbols
+    bazX.overrides // => List(value x, value x)
+    // The last override of Baz#x refers to Foo#x with the correct type `Option[Int]`
+    bazX.overrides.map(_.info) // => List(Some[Int], Option[Int])
+  */
+  @annotation.tailrec
+  private def getTypeInfo(sym: Symbol): Type =
+    (sym, sym.overrides.lastOption) match {
+      case (_, Some(o)) => getTypeInfo(o)
+      case (m: MethodSymbol, None) => m.returnType
+      case (s, None) => s.info
+    }
+
   @inline private def member(sym: MethodSymbol, typeParams: Set[String]): TypeMember =
-    TypeMember(sym.name.toString, getTypeRef(sym.returnType, typeParams))
+    TypeMember(sym.name.toString, getTypeRef(getTypeInfo(sym), typeParams))
 
   @annotation.tailrec
   private def parse(types: List[Type], examined: ListSet[Type], parsed: ListSet[TypeDef]): ListSet[TypeDef] =
@@ -189,11 +213,10 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
             case m: MethodSymbol if isValidMethod(m) => m
           }
 
-          val memberTypes = relevantMemberSymbols.map(
-            _.typeSignature.map(_.dealias) match {
-              case NullaryMethodType(resultType) => resultType
-              case t => t.map(_.dealias)
-            })
+          val memberTypes = relevantMemberSymbols.map(sym => getTypeInfo(sym).map(_.dealias) match {
+            case NullaryMethodType(resultType) => resultType
+            case t => t
+          })
 
           val typeArgs = scalaType match {
             case t: scala.reflect.runtime.universe.TypeRef => t.args
