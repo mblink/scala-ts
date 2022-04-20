@@ -98,7 +98,7 @@ object TypeScriptGenerator {
       file.createNewFile()
       val outputStream = new PrintStream(file)
 
-      val excludeType = (t: Type) => typeToFile.get(t).exists(_ != file.toString)
+      val excludeType = (t: Type) => config.excludeType(t) || typeToFile.get(t).exists(_ != file.toString)
       val scalaParser = new ScalaParser(logger, mirror, excludeType)
       val scalaTypes = scalaParser.parseTypes(typeToFile.forFile(file.toString))
 

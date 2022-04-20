@@ -2,6 +2,7 @@ package com.mpc.scalats
 package configuration
 
 import java.io.PrintStream
+import scala.reflect.runtime.universe.Type
 
 case class Config(
   emitCodecs: Boolean = true,
@@ -14,6 +15,7 @@ case class Config(
   tsImports: TsImports = TsImports(),
   getOrdInstance: PartialFunction[core.TypeScriptModel.TypeRef, core.TsImports.With[String]] = PartialFunction.empty,
   scalaTagTypeName: Option[String] = None,
+  excludeType: Type => Boolean = _ => false,
 )
 
 case class TsImports(
