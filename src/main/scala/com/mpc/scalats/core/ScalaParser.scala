@@ -241,64 +241,66 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
 
   // TODO: resolve from implicit (typeclass)
   private def getTypeRef(scalaType: Type, typeParams: Set[String]): TypeRef = {
-    (scalaType, scalaType.typeSymbol.name.toString, scalaType.dealias.typeArgs) match {
-      case (_, "Int" | "Byte" | "Short", _) =>
+    (scalaType, scalaType.typeSymbol.fullName, scalaType.typeSymbol.name.toString, scalaType.dealias.typeArgs) match {
+      case (_, _, "Int" | "Byte" | "Short", _) =>
         IntRef
-      case (_, "Long", _) =>
+      case (_, _, "Long", _) =>
         LongRef
-      case (_, "Double", _) =>
+      case (_, _, "Double", _) =>
         DoubleRef
-      case (_, "Boolean", _) =>
+      case (_, _, "Boolean", _) =>
         BooleanRef
-      case (_, "String", _) =>
+      case (_, _, "String", _) =>
         StringRef
-      case (_, "Nil", _) =>
+      case (_, _, "Nil", _) =>
         SeqRef(nothingTypeRef)
-      case (_, "List" | "Seq" | "Vector", List(innerType)) => // TODO: Iterable
+      case (_, _, "List" | "Seq" | "Vector", List(innerType)) => // TODO: Iterable
         SeqRef(getTypeRef(innerType, typeParams))
-      case (_, "Set" | "SortedSet", List(innerType)) =>
+      case (_, "cats.data.Chain", _, List(innerType)) =>
+        SeqRef(getTypeRef(innerType, typeParams))
+      case (_, _, "Set" | "SortedSet", List(innerType)) =>
         SetRef(getTypeRef(innerType, typeParams))
-      case (_, "NonEmptyList", List(innerType)) =>
+      case (_, _, "NonEmptyList", List(innerType)) =>
         NonEmptySeqRef(getTypeRef(innerType, typeParams))
-      case (_, "Option" | "Some", List(innerType)) =>
+      case (_, _, "Option" | "Some", List(innerType)) =>
         OptionRef(getTypeRef(innerType, typeParams))
-      case (_, "None", Nil) =>
+      case (_, _, "None", Nil) =>
         OptionRef(nothingTypeRef)
-      case (_, "LocalDate", _) =>
+      case (_, _, "LocalDate", _) =>
         DateRef
-      case (_, "Instant" | "Timestamp" | "LocalDateTime" | "ZonedDateTime" | "DateTime", _) =>
+      case (_, _, "Instant" | "Timestamp" | "LocalDateTime" | "ZonedDateTime" | "DateTime", _) =>
         DateTimeRef
-      case (_, tupleName(_), typeArgs) =>
+      case (_, _, tupleName(_), typeArgs) =>
         TupleRef(ListSet.empty ++ typeArgs.map(getTypeRef(_, Set())))
-      case (_, typeParam, _) if typeParams.contains(typeParam) =>
+      case (_, _, typeParam, _) if typeParams.contains(typeParam) =>
         TypeParamRef(typeParam, scalaType)
       case _ if isAnyValChild(scalaType) =>
         getTypeRef(scalaType.members.filter(!_.isMethod).map(_.typeSignature).head, Set())
-      case (_, _, typeArgs) if isSealedUnion(scalaType) =>
+      case (_, _, _, typeArgs) if isSealedUnion(scalaType) =>
         UnionRef(
           scalaType.typeSymbol.name.toString,
           ListSet.empty ++ typeArgs.map(getTypeRef(_, Set())),
           ListSet.empty ++ directKnownSubclasses(scalaType).map(getTypeRef(_, Set.empty)),
           scalaType)
-      case (_, _, typeArgs) if isCaseClass(scalaType) =>
+      case (_, _, _, typeArgs) if isCaseClass(scalaType) =>
         val caseClassName = scalaType.typeSymbol.name.toString
         val typeArgRefs = typeArgs.map(getTypeRef(_, typeParams))
 
         CaseClassRef(caseClassName, scalaType.toString, ListSet.empty ++ typeArgRefs, scalaType)
 
-      case (_, "Either" | """\/""" | "Disjunction", List(lType, rType)) =>
+      case (_, _, "Either" | """\/""" | "Disjunction", List(lType, rType)) =>
         EitherRef(getTypeRef(lType, typeParams), getTypeRef(rType, typeParams))
 
-      case (_, "Ior" | """\&/""", List(lType, rType)) =>
+      case (_, _, "Ior" | """\&/""", List(lType, rType)) =>
         TheseRef(getTypeRef(lType, typeParams), getTypeRef(rType, typeParams))
 
-      case (_, "Map", List(kType, vType)) =>
+      case (_, _, "Map", List(kType, vType)) =>
         MapRef(getTypeRef(kType, typeParams), getTypeRef(vType, typeParams))
 
-      case (TaggedTypeExtractor(_, _), _, _) =>
+      case (TaggedTypeExtractor(_, _), _, _, _) =>
         TaggedTypeRef(scalaType.toString.split('.').last, scalaType)
 
-      case (_, unknown, _) =>
+      case (_, _, unknown, _) =>
         UnknownTypeRef(unknown, scalaType)
     }
   }
