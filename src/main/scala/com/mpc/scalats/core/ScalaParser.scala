@@ -288,7 +288,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
 
         CaseClassRef(caseClassName, scalaType.toString, ListSet.empty ++ typeArgRefs, scalaType)
 
-      case (_, _, "Either" | """\/""" | "Disjunction", List(lType, rType)) =>
+      case (_, _, "Either" | """\/""", List(lType, rType)) =>
         EitherRef(getTypeRef(lType, typeParams), getTypeRef(rType, typeParams))
 
       case (_, _, "Ior" | """\&/""", List(lType, rType)) =>

@@ -6,6 +6,7 @@ import cats.syntax.foldable._
 import com.mpc.scalats.configuration.Config
 import scala.collection.immutable.ListSet
 import scala.reflect.runtime.universe.Type
+import scala.util.Try
 
 final class IoTsEmitter(val config: Config) extends Emitter {
   import TypeScriptModel._
@@ -340,13 +341,35 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       val objName = objectName(customTypeName)
       imports.custom(customType, objName).getOrElse(imports.lift(objName)) |+|
         (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
-    case OptionType(iT) => value.asInstanceOf[Option[_]] match {
-      case Some(innerValue) => imports.fptsOption("some(") |+| getTypeWrappedVal(innerValue, iT, interfaceContext) |+| ")"
+    case OptionType(it) => value.asInstanceOf[Option[_]] match {
+      case Some(innerValue) => imports.fptsOption("some(") |+| getTypeWrappedVal(innerValue, it, interfaceContext) |+| ")"
       case None => imports.fptsOption("none")
     }
-    case EitherType(lT, rT) => imports.iotsUnion(List(lT, rT).joinArray(getIoTsTypeString))
-    case TheseType(lT, rT) => imports.iotsUnion(List(lT, rT, TupleType(ListSet(lT, rT))).joinArray(getIoTsTypeString))
-    case MapType(keyType, valueType) => imports.iotsRecord(List(keyType, valueType).join(", ")(getIoTsTypeString))
+    case EitherType(lt, rt) =>
+      Try(value.asInstanceOf[Either[_, _]]).orElse(Try(value.asInstanceOf[scalaz.\/[_, _]].toEither)).get match {
+        case Left(v) => imports.fptsEither("left(") |+| getTypeWrappedVal(v, lt, interfaceContext) |+| ")"
+        case Right(v) => imports.fptsEither("right(") |+| getTypeWrappedVal(v, rt, interfaceContext) |+| ")"
+      }
+    case TheseType(lt, rt) =>
+      Try(value.asInstanceOf[cats.data.Ior[_, _]].unwrap)
+        .orElse(Try(value.asInstanceOf[scalaz.\&/[_, _]]
+          .fold(a => Left(Left(a)), b => Left(Right(b)), (a, b) => Right((a, b)))))
+        .get match {
+          case Left(Left(lv)) =>
+            imports.fptsThese("left(") |+| getTypeWrappedVal(lv, lt, interfaceContext) |+| ")"
+
+          case Left(Right(rv)) =>
+            imports.fptsThese("right(") |+| getTypeWrappedVal(rv, rt, interfaceContext) |+| ")"
+
+          case Right((lv, rv)) =>
+            imports.fptsThese("both(") |+| getTypeWrappedVal(lv, lt, interfaceContext) |+| ", " |+|
+              getTypeWrappedVal(rv, rt, interfaceContext) |+| ")"
+        }
+    case MapType(kt, vt) =>
+      val m = value.asInstanceOf[Map[_, _]]
+      if (m.isEmpty) "{}" else m.join("{ ", ", ", " }") { case (k, v) =>
+        getTypeWrappedVal(k, kt, interfaceContext) |+| ": " |+| getTypeWrappedVal(v, vt, interfaceContext)
+      }
     case TupleType(types) =>
       value.asInstanceOf[Product].productIterator.toList.zip(types.toList)
         .joinArray { case (v, t) => getTypeWrappedVal(v, t, interfaceContext) }
