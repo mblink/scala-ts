@@ -111,12 +111,15 @@ object TypeScriptGenerator {
 
       val emitter = new IoTsEmitter(config)
       val compiledTypes = Compiler(config).compile(scalaTypes)
-      val compiledTypeNames = compiledTypes.map(_.name).toSet
+      val compiledTypeNames = compiledTypes.map(_.name.toLowerCase).toSet
       val (imports, lines) = emitter.emit(compiledTypes)(TsImports.Ctx((tpe, name) =>
         typeToFile.get(tpe).map { f =>
           val alias = s"${f.split('/').last.split('.').head}_${name}"
-          if (compiledTypeNames.contains(name)) (TsImports.names(f.toString, s"$name as $alias"), alias)
-          else (TsImports.names(f.toString, name), name)
+
+          if (compiledTypeNames.contains(name.toLowerCase) && f != file.toString)
+            (TsImports.names(f.toString, s"$name as $alias"), alias)
+          else
+            (TsImports.names(f.toString, name), name)
         }))
 
       imports.foreach(i => i.asString(file, typeToFile.allFiles).foreach(outputStream.println(_)))
