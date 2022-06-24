@@ -256,6 +256,8 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
         SeqRef(nothingTypeRef)
       case (_, _, "List" | "Seq" | "Vector", List(innerType)) => // TODO: Iterable
         SeqRef(getTypeRef(innerType, typeParams))
+      case (_, "cats.Eval", _, List(innerType)) =>
+        getTypeRef(innerType, getTypeParams(innerType))
       case (_, "cats.data.Chain", _, List(innerType)) =>
         SeqRef(getTypeRef(innerType, typeParams))
       case (_, _, "Set" | "SortedSet", List(innerType)) =>
