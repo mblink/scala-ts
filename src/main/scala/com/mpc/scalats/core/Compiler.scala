@@ -215,25 +215,13 @@ case class Compiler(config: Config) {
           refersToRef(r, d2)
       }
 
-    var seen = Set[String]()
-    var res = ListSet[TypeScriptModel.Declaration]()
-    var curr = 0
-
-    def addDecl(decl: TypeScriptModel.Declaration): Unit =
-      if (seen.contains(decl.name)) ()
-      else {
-        seen = seen + decl.name
-        // Any declarations that this declaration refers to go first
-        decls.filter(refersTo(decl, _)).foreach(addDecl)
-        // then this declaration
-        res += decl
+    decls.foldLeft((ListSet[TypeScriptModel.Declaration](), Set[String]())) { case ((acc, seen), decl) =>
+      if (seen.contains(decl.name)) {
+        (acc, seen)
+      } else {
+        val (refersToDecl, doesntReferToDecl) = acc.span(refersTo(_, decl))
+        (doesntReferToDecl ++ ListSet(decl) ++ refersToDecl, seen + decl.name)
       }
-
-    while (math.max(res.size, curr) < decls.size) {
-      addDecl(decls.toList(curr))
-      curr += 1
-    }
-
-    res
+    }._1
   }
 }
