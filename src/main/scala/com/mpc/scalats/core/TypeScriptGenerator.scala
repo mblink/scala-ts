@@ -79,7 +79,7 @@ object TypeScriptGenerator {
     files: Map[String, List[String]],
     logger: Logger,
     classLoader: ClassLoader = getClass.getClassLoader
-  )(implicit config: Config) = {
+  )(implicit config: Config): Unit = {
     val mirror = runtimeMirror(classLoader)
     var classNameToType = Map[String, Type]()
     val filePath = (n: String) => s"$basePath/$n"
@@ -128,5 +128,15 @@ object TypeScriptGenerator {
       lines.foreach(outputStream.println)
       outputStream.println()
     }
+  }
+
+  def generateFiles(
+    basePath: File,
+    types: Map[String, List[Type]],
+    logger: Logger,
+    classLoader: ClassLoader
+  )(implicit config: Config, d: DummyImplicit): Unit = {
+    val files: Map[String, List[String]] = types map { case (k,v) => k -> v.map(_.typeConstructor.toString()) }
+    generateFiles(basePath, files, logger, classLoader)(config)
   }
 }
