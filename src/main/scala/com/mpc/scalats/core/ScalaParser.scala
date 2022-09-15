@@ -260,7 +260,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
         SeqRef(getTypeRef(innerType, typeParams))
       case (_, _, "Set" | "SortedSet", List(innerType)) =>
         SetRef(getTypeRef(innerType, typeParams))
-      case (_, _, "NonEmptyList", List(innerType)) =>
+      case (_, _, "NonEmptyChain" | "NonEmptyList" | "NonEmptyVector", List(innerType)) =>
         NonEmptySeqRef(getTypeRef(innerType, typeParams))
       case (_, _, "Option" | "Some", List(innerType)) =>
         OptionRef(getTypeRef(innerType, typeParams))

@@ -1,7 +1,7 @@
 package com.mpc.scalats
 package core
 
-import cats.data.NonEmptyList
+import cats.data.{NonEmptyChain, NonEmptyList, NonEmptyVector}
 import cats.syntax.foldable._
 import com.mpc.scalats.configuration.Config
 import scala.collection.immutable.ListSet
@@ -311,7 +311,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
   }
 
   private def customIoTsTypes(scalaType: Type, name: String, customName: String => String)(implicit ctx: TsImports.Ctx): TsImports.With[String] = name match {
-    case "NonEmptyList" => imports.iotsReadonlyNonEmptyArray.value
+    case "NonEmptyChain" | "NonEmptyList" | "NonEmptyVector" => imports.iotsReadonlyNonEmptyArray.value
     case _ => imports.custom(scalaType, customName(name)).getOrElse(imports.lift(customName(name)))
   }
 
@@ -326,7 +326,10 @@ final class IoTsEmitter(val config: Config) extends Emitter {
       value.asInstanceOf[Iterable[Any]].joinArray(getTypeWrappedVal(_, t, interfaceContext)) |+|
     ")")
     case NonEmptyArrayRef(t) =>
-      getTypeWrappedVal(value.asInstanceOf[NonEmptyList[Any]].toList, ArrayRef(t), interfaceContext)
+      val l = Try(value.asInstanceOf[NonEmptyChain[Any]].toNonEmptyList.toList)
+        .orElse(Try(value.asInstanceOf[NonEmptyList[Any]].toList))
+        .orElse(Try(value.asInstanceOf[NonEmptyVector[Any]].toVector.toList)).get
+      getTypeWrappedVal(l, ArrayRef(t), interfaceContext)
     case CustomTypeRef(name, params, scalaType) =>
       val typeName = if (interfaceContext) interfaceName(name) else objectName(name)
       imports.custom(scalaType, typeName).getOrElse(imports.lift(typeName)) |+|
