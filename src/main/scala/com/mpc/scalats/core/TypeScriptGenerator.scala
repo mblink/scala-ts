@@ -3,52 +3,8 @@ package com.mpc.scalats.core
 import com.mpc.scalats.configuration.Config
 import java.io.{File, PrintStream}
 import scala.reflect.runtime.universe._
-import scala.util.{Failure, Success, Try}
 
 object TypeScriptGenerator {
-  def normalizeName(packagePath: Option[String], simpleName: String) =
-    s"${packagePath.getOrElse("")}.${Option(simpleName).getOrElse("")}".stripPrefix(".")
-
-  def reflectType(mirror: Mirror)(packagePath: Option[String], simpleName: String): Symbol =
-    (packagePath match {
-      case Some(p) => Try(mirror.staticModule(p)).getOrElse(mirror.staticPackage(p))
-      case None => mirror.staticPackage("scala")
-    }).typeSignature.member(TypeName(simpleName))
-
-  def reflectModule(mirror: Mirror)(packagePath: Option[String], simpleName: String): Symbol =
-    mirror.staticModule(normalizeName(packagePath, simpleName))
-
-  def reflectClass(mirror: Mirror)(packagePath: Option[String], simpleName: String): Symbol =
-    mirror.staticClass(normalizeName(packagePath, simpleName))
-
-  val reflectTypes = List("class" -> reflectClass _, "module" -> reflectModule _, "type" -> reflectType _)
-
-  def tryReflect(mirror: Mirror)(packagePath: Option[String], simpleName: String): Try[Symbol] = {
-    val name = normalizeName(packagePath, simpleName)
-    reflectTypes.zipWithIndex.foldLeft(Failure(new Throwable): Try[Symbol]) { case (acc, ((tpe, fn), i)) =>
-      acc.orElse {
-        reflectTypes.lift(i - 1).foreach { case (t, _) => println(s"Could not find $t $name, trying as $tpe") }
-        Try(fn(mirror)(packagePath, simpleName))
-      }
-    }
-  }
-
-  val classNameRx = """^((?:([^\.]+(?:\.[^\.]+)*)\.)?([a-zA-Z0-9]+))(?:\[(.*)\])?$""".r
-
-  def getTypeFromName(mirror: Mirror)(className: String): Type =
-    className match {
-      case classNameRx(_, packagePath, simpleName, typeParamsStr) =>
-        val typeParams = ScalaParser.parseTypeParams(typeParamsStr).map(getTypeFromName(mirror))
-        val tpe = tryReflect(mirror)(Option(packagePath), simpleName) match {
-          case Success(m: ModuleSymbol) => m.moduleClass.asType.toType
-          case Success(s) => appliedType(s, typeParams)
-          case Failure(th) => throw new Throwable(s"Failed to parse type $className", th)
-        }
-        if (typeParams.isEmpty && tpe.typeParams.nonEmpty) tpe.typeConstructor else tpe
-
-      case _ => sys.error(s"Something went wrong, unable to parse `$className`")
-    }
-
   def isTypeConstructor(t: Type): Boolean =
     t =:= t.typeConstructor && t.takesTypeArgs
 
@@ -76,20 +32,15 @@ object TypeScriptGenerator {
 
   def generateFiles(
     basePath: File,
-    files: Map[String, List[String]],
+    files: Map[String, List[Type]],
     logger: Logger,
     classLoader: ClassLoader = getClass.getClassLoader
   )(implicit config: Config): Unit = {
     val mirror = runtimeMirror(classLoader)
-    var classNameToType = Map[String, Type]()
     val filePath = (n: String) => s"$basePath/$n"
 
-    val typeToFile = new TypeToFile(files.toList.flatMap { case (f, classNames) =>
-      classNames.map { n =>
-        val tpe = getTypeFromName(mirror)(n)
-        classNameToType = classNameToType + (n -> tpe)
-        tpe -> filePath(f)
-      }
+    val typeToFile = new TypeToFile(files.toList.flatMap { case (f, types) =>
+      types.map(tpe => tpe -> filePath(f))
     })
 
     files.foreach { case (fileName, _) =>
@@ -128,15 +79,5 @@ object TypeScriptGenerator {
       lines.foreach(outputStream.println)
       outputStream.println()
     }
-  }
-
-  def generateFiles(
-    basePath: File,
-    types: Map[String, List[Type]],
-    logger: Logger,
-    classLoader: ClassLoader
-  )(implicit config: Config, d: DummyImplicit): Unit = {
-    val files: Map[String, List[String]] = types map { case (k,v) => k -> v.map(_.typeConstructor.toString()) }
-    generateFiles(basePath, files, logger, classLoader)(config)
   }
 }
