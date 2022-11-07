@@ -178,20 +178,21 @@ case class Compiler(config: Config) {
   }
 
   private def sortTypes(decls: ListSet[TypeScriptModel.Declaration]): ListSet[TypeScriptModel.Declaration] = {
-    def refersToRef(r: TypeScriptModel.TypeRef, d: TypeScriptModel.Declaration): Boolean =
+    def refersToRef(r: TypeScriptModel.TypeRef, d: TypeScriptModel.Declaration, filterUnionName: String => Option[String]): Boolean =
       r match {
-        case TypeScriptModel.CustomTypeRef(n, rs, _) => n == d.name || rs.exists(refersToRef(_, d))
-        case TypeScriptModel.ArrayRef(r) => refersToRef(r, d)
-        case TypeScriptModel.SetRef(r) => refersToRef(r, d)
-        case TypeScriptModel.NonEmptyArrayRef(r) => refersToRef(r, d)
+        case TypeScriptModel.CustomTypeRef(n, rs, _) => n == d.name || rs.exists(refersToRef(_, d, filterUnionName))
+        case TypeScriptModel.ArrayRef(r) => refersToRef(r, d, filterUnionName)
+        case TypeScriptModel.SetRef(r) => refersToRef(r, d, filterUnionName)
+        case TypeScriptModel.NonEmptyArrayRef(r) => refersToRef(r, d, filterUnionName)
         case TypeScriptModel.UnknownTypeRef(n) => n == d.name
         case TypeScriptModel.SimpleTypeRef(n) => n == d.name
-        case TypeScriptModel.UnionType(_, ps, rs, _) => ps.exists(refersToRef(_, d)) || rs.exists(refersToRef(_, d))
-        case TypeScriptModel.OptionType(i) => refersToRef(i, d)
-        case TypeScriptModel.EitherType(l, r) => refersToRef(l, d) || refersToRef(r, d)
-        case TypeScriptModel.TheseType(l, r) => refersToRef(l, d) || refersToRef(r, d)
-        case TypeScriptModel.MapType(k, v) => refersToRef(k, d) || refersToRef(v, d)
-        case TypeScriptModel.TupleType(rs) => rs.exists(refersToRef(_, d))
+        case TypeScriptModel.UnionType(n, typeParams, _, _) =>
+          filterUnionName(n) == Some(d.name) || typeParams.exists(refersToRef(_, d, filterUnionName))
+        case TypeScriptModel.OptionType(i) => refersToRef(i, d, filterUnionName)
+        case TypeScriptModel.EitherType(l, r) => refersToRef(l, d, filterUnionName) || refersToRef(r, d, filterUnionName)
+        case TypeScriptModel.TheseType(l, r) => refersToRef(l, d, filterUnionName) || refersToRef(r, d, filterUnionName)
+        case TypeScriptModel.MapType(k, v) => refersToRef(k, d, filterUnionName) || refersToRef(v, d, filterUnionName)
+        case TypeScriptModel.TupleType(rs) => rs.exists(refersToRef(_, d, filterUnionName))
         case TypeScriptModel.NumberRef | TypeScriptModel.StringRef | TypeScriptModel.BooleanRef |
              TypeScriptModel.DateRef | TypeScriptModel.DateTimeRef | TypeScriptModel.NullRef |
              TypeScriptModel.UndefinedRef => false
@@ -200,28 +201,48 @@ case class Compiler(config: Config) {
     def refersTo(d1: TypeScriptModel.Declaration, d2: TypeScriptModel.Declaration): Boolean =
       d1 match {
         case TypeScriptModel.InterfaceDeclaration(_, fs, _, si) =>
-          fs.exists(f => refersToRef(f.typeRef, d2)) || si.fold(false)(refersTo(_, d2))
+          lazy val fsRef = fs.exists(f => refersToRef(f.typeRef, d2, Some(_)))
+          if (si == d2.superInterface && !fsRef) false
+          else fsRef || si.fold(false)(refersTo(_, d2))
 
         case TypeScriptModel.SingletonDeclaration(_, vs, si) =>
-          vs.exists(v => refersToRef(v.typeRef, d2)) || si.fold(false)(refersTo(_, d2))
+          lazy val vsRef = vs.exists(v => refersToRef(v.typeRef, d2, Some(_)))
+          if (si == d2.superInterface && !vsRef) false
+          else vsRef || si.fold(false)(refersTo(_, d2))
 
-        case TypeScriptModel.UnionDeclaration(_, fs, _, ps, si, _) =>
-          fs.exists(f => refersToRef(f.typeRef, d2)) || ps.exists(refersToRef(_, d2)) || si.fold(false)(refersTo(_, d2))
+        case TypeScriptModel.UnionDeclaration(n, fs, _, ps, si, _) =>
+          fs.exists(f => refersToRef(f.typeRef, d2, Some(_).filterNot(_ == n))) ||
+            ps.exists(refersToRef(_, d2, Some(_).filterNot(_ == n))) ||
+            si.fold(false)(refersTo(_, d2))
 
         case TypeScriptModel.TypeDeclaration(_, r, _) =>
-          refersToRef(r, d2)
+          refersToRef(r, d2, Some(_))
 
         case TypeScriptModel.TaggedTypeDeclaration(_, r, _) =>
-          refersToRef(r, d2)
+          refersToRef(r, d2, Some(_))
       }
 
-    decls.foldLeft((ListSet[TypeScriptModel.Declaration](), Set[String]())) { case ((acc, seen), decl) =>
-      if (seen.contains(decl.name)) {
-        (acc, seen)
-      } else {
-        val (refersToDecl, doesntReferToDecl) = acc.span(refersTo(_, decl))
-        (doesntReferToDecl ++ ListSet(decl) ++ refersToDecl, seen + decl.name)
+    val distinctDecls = decls.toList.distinctBy(_.name).foldLeft(ListSet[TypeScriptModel.Declaration]())(_ + _)
+
+    val declsWithRefs: ListSet[(TypeScriptModel.Declaration, ListSet[String])] =
+      distinctDecls.foldLeft(ListSet[(TypeScriptModel.Declaration, ListSet[String])]()) { (acc, decl) =>
+        val referredToNames = distinctDecls.collect {
+          case d if d.name != decl.name && refersTo(decl, d) => d.name
+        }
+        acc + (decl -> referredToNames)
       }
-    }._1
+    val declsWithRefsByName = declsWithRefs.map { case t @ (d, _) => d.name -> t }.toMap
+
+    def addDecl(acc: ListSet[TypeScriptModel.Declaration], t: (TypeScriptModel.Declaration, ListSet[String])): ListSet[TypeScriptModel.Declaration] = {
+      val (decl, referredToNames) = t
+      if (acc.exists(_.name == decl.name))
+        acc
+      else
+        referredToNames.foldLeft(acc)(
+          (acc2, name) => declsWithRefsByName.get(name).fold(acc2)(addDecl(acc2, _))
+        ) + decl
+    }
+
+    declsWithRefs.foldLeft(ListSet[TypeScriptModel.Declaration]())(addDecl)
   }
 }
