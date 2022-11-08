@@ -236,7 +236,7 @@ case class Compiler(config: Config) {
           refersToRef(r, d2, Some(_))
       }
 
-    val distinctDecls = decls.toList.distinctBy(_.name).foldLeft(ListSet[TypeScriptModel.Declaration]())(_ + _)
+    val distinctDecls = decls.groupBy(_.name).map(_._2.head).foldLeft(ListSet[TypeScriptModel.Declaration]())(_ + _)
 
     def addDecl(acc: Eval[ListSet[TypeScriptModel.Declaration]], decl: TypeScriptModel.Declaration): Eval[ListSet[TypeScriptModel.Declaration]] =
       acc.flatMap { l =>
