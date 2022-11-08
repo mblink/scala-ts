@@ -4,6 +4,7 @@ package core
 import cats.data.{NonEmptyChain, NonEmptyList, NonEmptyVector}
 import cats.syntax.foldable._
 import com.mpc.scalats.configuration.Config
+import scala.annotation.tailrec
 import scala.collection.immutable.ListSet
 import scala.reflect.runtime.universe.Type
 import scala.util.Try
@@ -315,68 +316,76 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case _ => imports.custom(scalaType, customName(name)).getOrElse(imports.lift(customName(name)))
   }
 
-  private def getTypeWrappedVal(value: Any, typeRef: TypeRef, interfaceContext: Boolean)(implicit ctx: TsImports.Ctx): TsImports.With[String] = typeRef match {
-    case NumberRef => value.toString
-    case BooleanRef => value.toString
-    case StringRef => s"`${value.toString.trim}`"
-    case DateRef => s"`${value.toString.trim}`"
-    case DateTimeRef => s"`${value.toString.trim}`"
-    case ArrayRef(t) => value.asInstanceOf[Iterable[Any]].joinArray(getTypeWrappedVal(_, t, interfaceContext))
-    case SetRef(t) => imports.fptsReadonlySet(s"fromReadonlyArray(" |+| imports.fptsOrdInstance(t) |+| s")(" |+|
-      value.asInstanceOf[Iterable[Any]].joinArray(getTypeWrappedVal(_, t, interfaceContext)) |+|
-    ")")
-    case NonEmptyArrayRef(t) =>
-      val l = Try(value.asInstanceOf[NonEmptyChain[Any]].toNonEmptyList.toList)
-        .orElse(Try(value.asInstanceOf[NonEmptyList[Any]].toList))
-        .orElse(Try(value.asInstanceOf[NonEmptyVector[Any]].toVector.toList)).get
-      getTypeWrappedVal(l, ArrayRef(t), interfaceContext)
-    case CustomTypeRef(name, params, scalaType) =>
-      val typeName = if (interfaceContext) interfaceName(name) else objectName(name)
-      imports.custom(scalaType, typeName).getOrElse(imports.lift(typeName)) |+|
-        (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
-    case UnknownTypeRef(unknown) => unknown
-    case SimpleTypeRef(param) => if (interfaceContext) param else typeAsValArg(param)
-    case u @ UnionType(_, params, possibilities, _) =>
-      val valueType = scala.reflect.runtime.currentMirror.classSymbol(value.getClass).toType
-      val (customTypeName, customType) = possibilities.collectFirst {
-        case CustomTypeRef(n, _, t) if t =:= valueType => (n, t)
-      }.getOrElse(sys.error(s"Value $value of type $valueType is not a member of union $u"))
-      val objName = objectName(customTypeName)
-      imports.custom(customType, objName).getOrElse(imports.lift(objName)) |+|
-        (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
-    case OptionType(it) => value.asInstanceOf[Option[_]] match {
-      case Some(innerValue) => imports.fptsOption("some(") |+| getTypeWrappedVal(innerValue, it, interfaceContext) |+| ")"
-      case None => imports.fptsOption("none")
-    }
-    case EitherType(lt, rt) =>
-      Try(value.asInstanceOf[Either[_, _]]).orElse(Try(value.asInstanceOf[scalaz.\/[_, _]].toEither)).get match {
-        case Left(v) => imports.fptsEither("left(") |+| getTypeWrappedVal(v, lt, interfaceContext) |+| ")"
-        case Right(v) => imports.fptsEither("right(") |+| getTypeWrappedVal(v, rt, interfaceContext) |+| ")"
+  @tailrec private def normalizeEval(value: Any): Any = value match {
+    case e: cats.Eval[_] => normalizeEval(e.value)
+    case v => v
+  }
+
+  private def getTypeWrappedVal(value0: Any, typeRef: TypeRef, interfaceContext: Boolean)(implicit ctx: TsImports.Ctx): TsImports.With[String] = {
+    val value = normalizeEval(value0)
+    typeRef match {
+      case NumberRef => value.toString
+      case BooleanRef => value.toString
+      case StringRef => s"`${value.toString.trim}`"
+      case DateRef => s"`${value.toString.trim}`"
+      case DateTimeRef => s"`${value.toString.trim}`"
+      case ArrayRef(t) => value.asInstanceOf[Iterable[Any]].joinArray(getTypeWrappedVal(_, t, interfaceContext))
+      case SetRef(t) => imports.fptsReadonlySet(s"fromReadonlyArray(" |+| imports.fptsOrdInstance(t) |+| s")(" |+|
+        value.asInstanceOf[Iterable[Any]].joinArray(getTypeWrappedVal(_, t, interfaceContext)) |+|
+      ")")
+      case NonEmptyArrayRef(t) =>
+        val l = Try(value.asInstanceOf[NonEmptyChain[Any]].toNonEmptyList.toList)
+          .orElse(Try(value.asInstanceOf[NonEmptyList[Any]].toList))
+          .orElse(Try(value.asInstanceOf[NonEmptyVector[Any]].toVector.toList)).get
+        getTypeWrappedVal(l, ArrayRef(t), interfaceContext)
+      case CustomTypeRef(name, params, scalaType) =>
+        val typeName = if (interfaceContext) interfaceName(name) else objectName(name)
+        imports.custom(scalaType, typeName).getOrElse(imports.lift(typeName)) |+|
+          (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
+      case UnknownTypeRef(unknown) => unknown
+      case SimpleTypeRef(param) => if (interfaceContext) param else typeAsValArg(param)
+      case u @ UnionType(_, params, possibilities, _) =>
+        val valueType = scala.reflect.runtime.currentMirror.classSymbol(value.getClass).toType
+        val (customTypeName, customType) = possibilities.collectFirst {
+          case CustomTypeRef(n, _, t) if t =:= valueType => (n, t)
+        }.getOrElse(sys.error(s"Value $value of type $valueType is not a member of union $u"))
+        val objName = objectName(customTypeName)
+        imports.custom(customType, objName).getOrElse(imports.lift(objName)) |+|
+          (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
+      case OptionType(it) => value.asInstanceOf[Option[_]] match {
+        case Some(innerValue) => imports.fptsOption("some(") |+| getTypeWrappedVal(innerValue, it, interfaceContext) |+| ")"
+        case None => imports.fptsOption("none")
       }
-    case TheseType(lt, rt) =>
-      Try(value.asInstanceOf[cats.data.Ior[_, _]].unwrap)
-        .orElse(Try(value.asInstanceOf[scalaz.\&/[_, _]]
-          .fold(a => Left(Left(a)), b => Left(Right(b)), (a, b) => Right((a, b)))))
-        .get match {
-          case Left(Left(lv)) =>
-            imports.fptsThese("left(") |+| getTypeWrappedVal(lv, lt, interfaceContext) |+| ")"
-
-          case Left(Right(rv)) =>
-            imports.fptsThese("right(") |+| getTypeWrappedVal(rv, rt, interfaceContext) |+| ")"
-
-          case Right((lv, rv)) =>
-            imports.fptsThese("both(") |+| getTypeWrappedVal(lv, lt, interfaceContext) |+| ", " |+|
-              getTypeWrappedVal(rv, rt, interfaceContext) |+| ")"
+      case EitherType(lt, rt) =>
+        Try(value.asInstanceOf[Either[_, _]]).orElse(Try(value.asInstanceOf[scalaz.\/[_, _]].toEither)).get match {
+          case Left(v) => imports.fptsEither("left(") |+| getTypeWrappedVal(v, lt, interfaceContext) |+| ")"
+          case Right(v) => imports.fptsEither("right(") |+| getTypeWrappedVal(v, rt, interfaceContext) |+| ")"
         }
-    case MapType(kt, vt) =>
-      val m = value.asInstanceOf[Map[_, _]]
-      if (m.isEmpty) "{}" else m.join("{ ", ", ", " }") { case (k, v) =>
-        getTypeWrappedVal(k, kt, interfaceContext) |+| ": " |+| getTypeWrappedVal(v, vt, interfaceContext)
-      }
-    case TupleType(types) =>
-      value.asInstanceOf[Product].productIterator.toList.zip(types.toList)
-        .joinArray { case (v, t) => getTypeWrappedVal(v, t, interfaceContext) }
-    case NullRef => "null"
-    case UndefinedRef => "undefined"
+      case TheseType(lt, rt) =>
+        Try(value.asInstanceOf[cats.data.Ior[_, _]].unwrap)
+          .orElse(Try(value.asInstanceOf[scalaz.\&/[_, _]]
+            .fold(a => Left(Left(a)), b => Left(Right(b)), (a, b) => Right((a, b)))))
+          .get match {
+            case Left(Left(lv)) =>
+              imports.fptsThese("left(") |+| getTypeWrappedVal(lv, lt, interfaceContext) |+| ")"
+
+            case Left(Right(rv)) =>
+              imports.fptsThese("right(") |+| getTypeWrappedVal(rv, rt, interfaceContext) |+| ")"
+
+            case Right((lv, rv)) =>
+              imports.fptsThese("both(") |+| getTypeWrappedVal(lv, lt, interfaceContext) |+| ", " |+|
+                getTypeWrappedVal(rv, rt, interfaceContext) |+| ")"
+          }
+      case MapType(kt, vt) =>
+        val m = value.asInstanceOf[Map[_, _]]
+        if (m.isEmpty) "{}" else m.join("{ ", ", ", " }") { case (k, v) =>
+          getTypeWrappedVal(k, kt, interfaceContext) |+| ": " |+| getTypeWrappedVal(v, vt, interfaceContext)
+        }
+      case TupleType(types) =>
+        value.asInstanceOf[Product].productIterator.toList.zip(types.toList)
+          .joinArray { case (v, t) => getTypeWrappedVal(v, t, interfaceContext) }
+      case NullRef => "null"
+      case UndefinedRef => "undefined"
+    }
   }
 }

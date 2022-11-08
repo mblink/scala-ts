@@ -29,35 +29,35 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
       }
   }
 
-  private def parseType(tpe: Type): Option[TypeDef] = {
+  private def parseType(tpe: Type): (ListSet[Type], Option[TypeDef]) = {
     if (isNotExcluded(tpe)) {
       tpe match {
         case _: SingleTypeApi =>
-          parseObject(tpe)
+          (ListSet(tpe), parseObject(tpe))
 
         case _ if (tpe.getClass.getName contains "ModuleType" /*Workaround*/) =>
-          parseObject(tpe)
+          (ListSet(tpe), parseObject(tpe))
 
         case TaggedTypeExtractor(baseTpe, tagTpe) =>
-          parseTaggedType(tpe, baseTpe, tagTpe)
+          (ListSet(tpe), parseTaggedType(tpe, baseTpe, tagTpe))
 
         case _ if tpe.typeSymbol.isClass && !tpe.typeSymbol.name.toString.contains("NonEmptyList") =>
           if (isSealedUnion(tpe)) {
             parseSealedUnion(tpe)
           } else if (isCaseClass(tpe) && !isAnyValChild(tpe)) {
-            parseCaseClass(tpe)
+            (ListSet(tpe), parseCaseClass(tpe))
           } else if (tpe.dealias != tpe) { // if the dealiased type is different then it's a type alias
-            parseTypeAlias(tpe)
+            (ListSet(tpe), parseTypeAlias(tpe))
           } else {
-            None
+            (ListSet(), None)
           }
 
         case _ =>
           logger.warning(s"Unsupported Scala type: $tpe")
-          None
+          (ListSet(), None)
       }
     } else {
-      None
+      (ListSet(), None)
     }
   }
 
@@ -112,24 +112,29 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
       tpe))
   }
 
-  private def parseSealedUnion(tpe: Type): Option[SealedUnion] = {
+  private def parseSealedUnion(tpe: Type): (ListSet[Type], Option[SealedUnion]) = {
     // Members
     val members = tpe.members.sorted.collect {
       case m: MethodSymbol if isValidMethod(m) && !m.name.toString.endsWith("$") =>
         member(m, Set())
     }
 
-    directKnownSubclasses(tpe) match {
-      case possibilities @ (_ :: _ ) =>
-        Some(SealedUnion(
-          tpe.typeSymbol.name.toString,
-          tpe.toString,
-          ListSet.empty ++ members,
-          ListSet.empty ++ getTypeParams(tpe),
-          possibilities.foldLeft(ListSet[TypeDef]())((b, a) => b ++ parseType(a)),
-          tpe))
+    val (subclassExamined, subclassTypeDefs) = directKnownSubclasses(tpe).foldLeft((ListSet.empty[Type], ListSet.empty[TypeDef])) {
+      case ((accExamined, accTypeDefs), subclass) =>
+        val (examined, typeDef) = parseType(subclass)
+        (accExamined ++ examined, accTypeDefs ++ typeDef)
+    }
 
-      case _ => Option.empty[SealedUnion]
+    if (subclassTypeDefs.nonEmpty) {
+      (subclassExamined + tpe, Some(SealedUnion(
+        tpe.typeSymbol.name.toString,
+        tpe.toString,
+        ListSet.empty ++ members,
+        ListSet.empty ++ getTypeParams(tpe),
+        subclassTypeDefs,
+        tpe)))
+    } else {
+      (ListSet(tpe), Option.empty[SealedUnion])
     }
   }
 
@@ -203,35 +208,16 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
   @inline private def member(sym: MethodSymbol, typeParams: Set[String]): TypeMember =
     TypeMember(sym.name.toString, getTypeRef(getTypeInfo(sym), typeParams))
 
-  @annotation.tailrec
+  @tailrec
   private def parse(types: List[Type], examined: ListSet[Type], parsed: ListSet[TypeDef]): ListSet[TypeDef] =
     types.filter(isNotExcluded) match {
-      case scalaType :: tail => {
-        if (!examined.contains(scalaType) && !scalaType.typeSymbol.isParameter) {
-
-          val relevantMemberSymbols = scalaType.members.collect {
-            case m: MethodSymbol if isValidMethod(m) => m
-          }
-
-          val memberTypes = relevantMemberSymbols.map(sym => getTypeInfo(sym).map(_.dealias) match {
-            case NullaryMethodType(resultType) => resultType
-            case t => t
-          })
-
-          val typeArgs = scalaType match {
-            case t: scala.reflect.runtime.universe.TypeRef => t.args
-            case _ => List.empty[Type]
-          }
-
-          parse(
-            memberTypes ++: typeArgs ++: tail,
-            examined + scalaType,
-            parsed ++ parseType(scalaType))
-
+      case scalaType :: tail =>
+        if (examined.contains(scalaType) || scalaType.typeSymbol.isParameter) {
+          parse(tail, examined, parsed)
         } else {
-          parse(tail, examined + scalaType, parsed ++ parseType(scalaType))
+          val (parsedExamined, parsedTypeDef) = parseType(scalaType)
+          parse(tail, examined ++ parsedExamined, parsed ++ parsedTypeDef)
         }
-      }
 
       case _ => parsed
     }
@@ -256,6 +242,8 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
         SeqRef(nothingTypeRef)
       case (_, _, "List" | "Seq" | "Vector", List(innerType)) => // TODO: Iterable
         SeqRef(getTypeRef(innerType, typeParams))
+      case (_, "cats.Eval", _, List(innerType)) =>
+        getTypeRef(innerType, getTypeParams(innerType))
       case (_, "cats.data.Chain", _, List(innerType)) =>
         SeqRef(getTypeRef(innerType, typeParams))
       case (_, _, "Set" | "SortedSet", List(innerType)) =>

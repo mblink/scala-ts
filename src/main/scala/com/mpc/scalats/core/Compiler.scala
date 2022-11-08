@@ -1,5 +1,8 @@
 package com.mpc.scalats.core
 
+import cats.{Apply, Eval, Functor}
+import cats.syntax.foldable._
+import cats.syntax.traverseFilter._
 import com.mpc.scalats.configuration.Config
 import com.mpc.scalats.core.TypeScriptModel.{
   CustomTypeRef,
@@ -177,63 +180,78 @@ case class Compiler(config: Config) {
       TypeScriptModel.UnknownTypeRef(u)
   }
 
+  private implicit class BooleanOps(b: Boolean) {
+    def andM[M[_]](mb: M[Boolean])(implicit M: Functor[M]): M[Boolean] = M.map(mb)(b && _)
+    def orM[M[_]](mb: M[Boolean])(implicit M: Functor[M]): M[Boolean] = M.map(mb)(b || _)
+  }
+
+  private implicit class MBooleanOps[M[_]](b: M[Boolean]) {
+    def orM(mb: M[Boolean])(implicit M: Apply[M]): M[Boolean] = M.map2(b, mb)(_ || _)
+  }
+
   private def sortTypes(decls: ListSet[TypeScriptModel.Declaration]): ListSet[TypeScriptModel.Declaration] = {
-    def refersToRef(r: TypeScriptModel.TypeRef, d: TypeScriptModel.Declaration): Boolean =
+    def refersToRef(r: TypeScriptModel.TypeRef, d: TypeScriptModel.Declaration, filterUnionName: String => Option[String]): Eval[Boolean] =
       r match {
-        case TypeScriptModel.CustomTypeRef(n, rs, _) => n == d.name || rs.exists(refersToRef(_, d))
-        case TypeScriptModel.ArrayRef(r) => refersToRef(r, d)
-        case TypeScriptModel.SetRef(r) => refersToRef(r, d)
-        case TypeScriptModel.NonEmptyArrayRef(r) => refersToRef(r, d)
-        case TypeScriptModel.UnknownTypeRef(n) => n == d.name
-        case TypeScriptModel.SimpleTypeRef(n) => n == d.name
-        case TypeScriptModel.UnionType(_, ps, rs, _) => ps.exists(refersToRef(_, d)) || rs.exists(refersToRef(_, d))
-        case TypeScriptModel.OptionType(i) => refersToRef(i, d)
-        case TypeScriptModel.EitherType(l, r) => refersToRef(l, d) || refersToRef(r, d)
-        case TypeScriptModel.TheseType(l, r) => refersToRef(l, d) || refersToRef(r, d)
-        case TypeScriptModel.MapType(k, v) => refersToRef(k, d) || refersToRef(v, d)
-        case TypeScriptModel.TupleType(rs) => rs.exists(refersToRef(_, d))
+        case TypeScriptModel.CustomTypeRef(n, rs, _) => (n == d.name).orM(rs.toList.existsM(refersToRef(_, d, filterUnionName)))
+        case TypeScriptModel.ArrayRef(r) => refersToRef(r, d, filterUnionName)
+        case TypeScriptModel.SetRef(r) => refersToRef(r, d, filterUnionName)
+        case TypeScriptModel.NonEmptyArrayRef(r) => refersToRef(r, d, filterUnionName)
+        case TypeScriptModel.UnknownTypeRef(n) => Eval.now(n == d.name)
+        case TypeScriptModel.SimpleTypeRef(n) => Eval.now(n == d.name)
+        case TypeScriptModel.UnionType(n, typeParams, _, _) =>
+          (filterUnionName(n) == Some(d.name)).orM(typeParams.toList.existsM(refersToRef(_, d, filterUnionName)))
+        case TypeScriptModel.OptionType(i) => refersToRef(i, d, filterUnionName)
+        case TypeScriptModel.EitherType(l, r) => refersToRef(l, d, filterUnionName).orM(refersToRef(r, d, filterUnionName))
+        case TypeScriptModel.TheseType(l, r) => refersToRef(l, d, filterUnionName).orM(refersToRef(r, d, filterUnionName))
+        case TypeScriptModel.MapType(k, v) => refersToRef(k, d, filterUnionName).orM(refersToRef(v, d, filterUnionName))
+        case TypeScriptModel.TupleType(rs) => rs.toList.existsM(refersToRef(_, d, filterUnionName))
         case TypeScriptModel.NumberRef | TypeScriptModel.StringRef | TypeScriptModel.BooleanRef |
              TypeScriptModel.DateRef | TypeScriptModel.DateTimeRef | TypeScriptModel.NullRef |
-             TypeScriptModel.UndefinedRef => false
+             TypeScriptModel.UndefinedRef => Eval.now(false)
       }
 
-    def refersTo(d1: TypeScriptModel.Declaration, d2: TypeScriptModel.Declaration): Boolean =
+    def refersTo(d1: TypeScriptModel.Declaration, d2: TypeScriptModel.Declaration): Eval[Boolean] =
       d1 match {
         case TypeScriptModel.InterfaceDeclaration(_, fs, _, si) =>
-          fs.exists(f => refersToRef(f.typeRef, d2)) || si.fold(false)(refersTo(_, d2))
+          fs.toList.existsM(f => refersToRef(f.typeRef, d2, Some(_))).flatMap { fsRef =>
+            if (si == d2.superInterface && !fsRef) Eval.now(false)
+            else fsRef.orM(si.fold(Eval.now(false))(refersTo(_, d2)))
+          }
 
         case TypeScriptModel.SingletonDeclaration(_, vs, si) =>
-          vs.exists(v => refersToRef(v.typeRef, d2)) || si.fold(false)(refersTo(_, d2))
+          vs.toList.existsM(v => refersToRef(v.typeRef, d2, Some(_))).flatMap { vsRef =>
+            if (si == d2.superInterface && !vsRef) Eval.now(false)
+            else vsRef.orM(si.fold(Eval.now(false))(refersTo(_, d2)))
+          }
 
-        case TypeScriptModel.UnionDeclaration(_, fs, _, ps, si, _) =>
-          fs.exists(f => refersToRef(f.typeRef, d2)) || ps.exists(refersToRef(_, d2)) || si.fold(false)(refersTo(_, d2))
+        case TypeScriptModel.UnionDeclaration(n, fs, _, ps, si, _) =>
+          fs.toList.existsM(f => refersToRef(f.typeRef, d2, Some(_).filterNot(_ == n)))
+            .orM(ps.toList.existsM(refersToRef(_, d2, Some(_).filterNot(_ == n))))
+            .orM(si.fold(Eval.now(false))(refersTo(_, d2)))
 
         case TypeScriptModel.TypeDeclaration(_, r, _) =>
-          refersToRef(r, d2)
+          refersToRef(r, d2, Some(_))
 
         case TypeScriptModel.TaggedTypeDeclaration(_, r, _) =>
-          refersToRef(r, d2)
+          refersToRef(r, d2, Some(_))
       }
 
-    var seen = Set[String]()
-    var res = ListSet[TypeScriptModel.Declaration]()
-    var curr = 0
+    val distinctDecls = decls.toList.distinctBy(_.name).foldLeft(ListSet[TypeScriptModel.Declaration]())(_ + _)
 
-    def addDecl(decl: TypeScriptModel.Declaration): Unit =
-      if (seen.contains(decl.name)) ()
-      else {
-        seen = seen + decl.name
-        // Any declarations that this declaration refers to go first
-        decls.filter(refersTo(decl, _)).foreach(addDecl)
-        // then this declaration
-        res += decl
+    def addDecl(acc: Eval[ListSet[TypeScriptModel.Declaration]], decl: TypeScriptModel.Declaration): Eval[ListSet[TypeScriptModel.Declaration]] =
+      acc.flatMap { l =>
+        // If this decl is already in the result set, we don't need to do anything
+        if (l.exists(_.name == decl.name))
+          Eval.now(l)
+        else
+          // Otherwise, get the list of decls that this decl refers to, add each of them first, then add this decl
+          for {
+            referredToDecls <- distinctDecls.toList.traverseFilter(d =>
+              (d.name != decl.name).andM(refersTo(decl, d)).map(b => if (b) Some(d) else None))
+            res <- referredToDecls.foldLeft(Eval.now(l))(addDecl).map(_ + decl)
+          } yield res
       }
 
-    while (math.max(res.size, curr) < decls.size) {
-      addDecl(decls.toList(curr))
-      curr += 1
-    }
-
-    res
+    distinctDecls.foldLeft(Eval.now(ListSet[TypeScriptModel.Declaration]()))(addDecl).value
   }
 }
