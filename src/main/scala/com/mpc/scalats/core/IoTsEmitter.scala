@@ -161,8 +161,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     val memberCodec = (t: CustomTypeRef) => codecName(t.name) |+|
       (if (t.typeArgs.isEmpty) "" else t.typeArgs.joinParens(", ")(getIoTsTypeString))
     val codecs = union(memberCodec, "[", ", ", "]")
-    val (allCName, allNamesConst, nameType, ordInst, tpeMap) =
-      (s"all${name}C", s"all${name}Names", s"${name}Name", unionOrdName(name), s"${name}Map")
+    val (allCName, allNamesConst, nameType, ordInst) =
+      (s"all${name}C", s"all${name}Names", s"${name}Name", unionOrdName(name))
 
     line(s"export const $allCName = " |+| iotsTypeParamArgs(typeParams) |+| codecs |+| " as const;") |+|
     line(s"export const $allNamesConst = " |+| possibilities.joinArray(p => s""""${p.name}"""") |+| " as const;") |+|
@@ -171,8 +171,9 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     (if (typeParams.isEmpty) line(s"export const $ordInst: " |+| imports.fptsOrd(s"Ord<${name}U>") |+| " = " |+| iotsTypeParamArgs(typeParams) |+| imports.fptsPipe(
       imports.fptsString("Ord", Some("stringOrd")) |+| ", " |+| imports.fptsOrd("contramap(x => x._tag)")
     )) else Nil) |+|
-    (if (emitAll) line(s"export const all$name = " |+| union(p => objectName(p.name), "[", ", ", "]") |+| " as const;") else Nil) |+|
-    (if (typeParams.isEmpty) line(s"export type $tpeMap<A> = { [K in $nameType]: A };") else Nil) |+|
+    (if (emitAll)
+      line(s"export const all$name = " |+| union(p => s""""${p.name}": ${objectName(p.name)}""", "{\n  ", ",\n  ", "\n}") |+| " as const;")
+    else Nil) |+|
     line()
   }
 
