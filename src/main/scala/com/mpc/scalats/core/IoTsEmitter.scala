@@ -161,6 +161,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     val memberCodec = (t: CustomTypeRef) => codecName(t.name) |+|
       (if (t.typeArgs.isEmpty) "" else t.typeArgs.joinParens(", ")(getIoTsTypeString))
     val codecs = union(memberCodec, "[", ", ", "]")
+    val tpeName = s"${name}U"
     val (allCName, allNamesConst, nameType, ordInst) =
       (s"all${name}C", s"all${name}Names", s"${name}Name", unionOrdName(name))
 
@@ -170,10 +171,18 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     emitCodec(name, name, typeParams, tsUnionName, _ ++ "U")(unionCodec(possibilities)) |+|
     (if (typeParams.isEmpty) line(s"export const $ordInst: " |+| imports.fptsOrd(s"Ord<${name}U>") |+| " = " |+| iotsTypeParamArgs(typeParams) |+| imports.fptsPipe(
       imports.fptsString("Ord", Some("stringOrd")) |+| ", " |+| imports.fptsOrd("contramap(x => x._tag)")
-    )) else Nil) |+|
+    ) |+| ";") else Nil) |+|
     (if (emitAll)
-      line(s"export const all$name = " |+| union(p => s""""${p.name}": ${objectName(p.name)}""", "{\n  ", ",\n  ", "\n}") |+| " as const;")
+      line(s"export const all$name = " |+| union(p => objectName(p.name), "[", ", ", "]") |+| " as const;") |+|
+      line(s"export const all${name}ByTag = " |+| union(p => s"[${objectName(p.name)}._tag]: ${objectName(p.name)}", "{\n  ", ",\n  ", "\n}") |+| " as const;")
     else Nil) |+|
+    line(s"export const ${tpeName}Entity = {") |+| (
+      Map("codec" -> tsUnionName(name)) ++
+      Some("getAll" -> s"all$name").filter(_ => emitAll) ++
+      Some("byTag" -> s"all${name}ByTag").filter(_ => emitAll) ++
+      Some("ord" -> ordInst).filter(_ => typeParams.isEmpty)
+    ).joinLines(",") { case (k, v) => s"  $k: $v" } |+|
+    line("} as const;") |+|
     line()
   }
 
