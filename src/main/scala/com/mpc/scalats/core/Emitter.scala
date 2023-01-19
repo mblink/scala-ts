@@ -38,7 +38,8 @@ trait Emitter extends TsImports.HelperSyntax {
   def codecType(name: String): String = s"${interfaceName(name)}C"
 
   def getTypeRefString(typeRef: TypeRef)(implicit ctx: TsImports.Ctx): TsImports.With[String] = typeRef match {
-    case NumberRef => "number"
+    case NumberRef => imports.iotsBigNumber
+    case BigNumberRef => "number"
     case BooleanRef => "boolean"
     case StringRef => "string"
     case DateRef => imports.iotsLocalDate

@@ -124,6 +124,8 @@ case class Compiler(config: Config) {
       TypeScriptModel.NumberRef
     case ScalaModel.DoubleRef =>
       TypeScriptModel.NumberRef
+    case ScalaModel.BigDecimalRef =>
+      TypeScriptModel.BigNumberRef
     case ScalaModel.BooleanRef =>
       TypeScriptModel.BooleanRef
     case ScalaModel.StringRef =>
@@ -205,8 +207,13 @@ case class Compiler(config: Config) {
         case TypeScriptModel.TheseType(l, r) => refersToRef(l, d, filterUnionName).orM(refersToRef(r, d, filterUnionName))
         case TypeScriptModel.MapType(k, v) => refersToRef(k, d, filterUnionName).orM(refersToRef(v, d, filterUnionName))
         case TypeScriptModel.TupleType(rs) => rs.toList.existsM(refersToRef(_, d, filterUnionName))
-        case TypeScriptModel.NumberRef | TypeScriptModel.StringRef | TypeScriptModel.BooleanRef |
-             TypeScriptModel.DateRef | TypeScriptModel.DateTimeRef | TypeScriptModel.NullRef |
+        case TypeScriptModel.NumberRef |
+             TypeScriptModel.BigNumberRef |
+             TypeScriptModel.StringRef |
+             TypeScriptModel.BooleanRef |
+             TypeScriptModel.DateRef |
+             TypeScriptModel.DateTimeRef |
+             TypeScriptModel.NullRef |
              TypeScriptModel.UndefinedRef => Eval.now(false)
       }
 

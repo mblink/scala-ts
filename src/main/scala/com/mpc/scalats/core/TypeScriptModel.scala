@@ -65,6 +65,10 @@ object TypeScriptModel {
     override def toString = "number"
   }
 
+  case object BigNumberRef extends TypeRef {
+    override def toString = "BigNumber"
+  }
+
   case object StringRef extends TypeRef {
     override def toString = "string"
   }

@@ -208,6 +208,7 @@ object TsImports {
 
         // No sane `Ord` instances for these, would have have to be handled by the `getOrdInstance` config value
         case (
+          TypeScriptModel.BigNumberRef |
           TypeScriptModel.CustomTypeRef(_, _, _) |
           TypeScriptModel.EitherType(_, _) |
           TypeScriptModel.MapType(_, _) |
@@ -266,6 +267,7 @@ object TsImports {
     lazy val iotsReadonlySetFromArray = CallableImport(namedImport(tsi.iotsReadonlySetFromArray))
     lazy val iotsNumberFromString = namedImport(tsi.iotsNumberFromString)
     lazy val iotsOption = CallableImport(namedImport(tsi.iotsOption))
+    lazy val iotsBigNumber = optImport(tsi.iotsBigNumber, "BigNumber", "iotsBigNumber")
     lazy val iotsEither = CallableImport(optImport(tsi.iotsEither, "Either", "iotsEither"))
     lazy val iotsLocalDate = optImport(tsi.iotsLocalDate, "LocalDate", "iotsLocalDate")
     lazy val iotsThese = CallableImport(optImport(tsi.iotsThese, "These", "iotsThese"))

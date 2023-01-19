@@ -36,6 +36,7 @@ case class TsImports(
   iotsReadonlySetFromArray: (String, String) = ("readonlySetFromArray", "io-ts-types/lib/readonlySetFromArray"),
   iotsNumberFromString: (String, String) = ("NumberFromString", "io-ts-types/lib/NumberFromString"),
   iotsOption: (String, String) = ("optionFromNullable", "io-ts-types/lib/optionFromNullable"),
+  iotsBigNumber: Option[(String, String)] = None,
   iotsEither: Option[(String, String)] = None,
   iotsLocalDate: Option[(String, String)] = None,
   iotsThese: Option[(String, String)] = None

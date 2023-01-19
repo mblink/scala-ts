@@ -234,6 +234,8 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
         LongRef
       case (_, _, "Double", _) =>
         DoubleRef
+      case (_, _, "BigDecimal", _) =>
+        BigDecimalRef
       case (_, _, "Boolean", _) =>
         BooleanRef
       case (_, _, "String", _) =>
