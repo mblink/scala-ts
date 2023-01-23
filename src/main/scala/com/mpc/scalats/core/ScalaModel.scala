@@ -104,4 +104,6 @@ object ScalaModel {
   case object DateRef extends TypeRef
 
   case object DateTimeRef extends TypeRef
+
+  case object JsonRef extends TypeRef
 }

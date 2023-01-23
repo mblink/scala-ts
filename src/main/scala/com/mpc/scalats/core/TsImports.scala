@@ -208,6 +208,7 @@ object TsImports {
 
         // No sane `Ord` instances for these, would have have to be handled by the `getOrdInstance` config value
         case (
+          TypeScriptModel.JsonRef |
           TypeScriptModel.BigNumberRef |
           TypeScriptModel.CustomTypeRef(_, _, _) |
           TypeScriptModel.EitherType(_, _) |
@@ -261,6 +262,7 @@ object TsImports {
     lazy val iotsTypeOf = CallableImport(iotsImport, "t.TypeOf", "<", ">")
     lazy val iotsUndefined = (iotsImport, "t.undefined")
     lazy val iotsUnion = CallableImport(iotsImport, "t.union")
+    lazy val iotsUnknown = (iotsImport, "t.unknown")
 
     lazy val iotsDateTime = namedImport(tsi.iotsDateTime)
     lazy val iotsReadonlyNonEmptyArray = CallableImport(namedImport(tsi.iotsReadonlyNonEmptyArray))

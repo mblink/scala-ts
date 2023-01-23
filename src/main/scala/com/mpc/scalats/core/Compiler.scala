@@ -118,6 +118,8 @@ case class Compiler(config: Config) {
     scalaTypeRef: ScalaModel.TypeRef,
     inInterfaceContext: Boolean
   ): TypeScriptModel.TypeRef = scalaTypeRef match {
+    case ScalaModel.JsonRef =>
+      TypeScriptModel.JsonRef
     case ScalaModel.IntRef =>
       TypeScriptModel.NumberRef
     case ScalaModel.LongRef =>
@@ -214,7 +216,8 @@ case class Compiler(config: Config) {
              TypeScriptModel.DateRef |
              TypeScriptModel.DateTimeRef |
              TypeScriptModel.NullRef |
-             TypeScriptModel.UndefinedRef => Eval.now(false)
+             TypeScriptModel.UndefinedRef |
+             TypeScriptModel.JsonRef => Eval.now(false)
       }
 
     def refersTo(d1: TypeScriptModel.Declaration, d2: TypeScriptModel.Declaration): Eval[Boolean] =

@@ -61,6 +61,8 @@ object TypeScriptModel {
 
   case class UnknownTypeRef(name: String) extends TypeRef
 
+  case object JsonRef extends TypeRef
+
   case object NumberRef extends TypeRef {
     override def toString = "number"
   }
