@@ -37,7 +37,7 @@ lazy val pomSettings = Seq(
     </developers>
 )
 
-lazy val scalaVersions = Seq("2.12.15", "2.13.8")
+lazy val scalaVersions = Seq("2.12.17", "2.13.10")
 
 lazy val root = (project in file(".")).
   settings(Seq(
