@@ -295,23 +295,25 @@ case class Compiler(config: Config) {
     */
     def addDecl(
       acc: Eval[(ListSet[TypeScriptModel.Declaration], Set[String])],
+      tmpSkip: Set[String],
       decl: TypeScriptModel.Declaration,
     ): Eval[(ListSet[TypeScriptModel.Declaration], Set[String])] =
       acc.flatMap { case (accDecls, accSkip) =>
         // If this decl has already been processed, we don't need to do anything
-        if (accSkip.contains(decl.name))
+        if (accSkip.contains(decl.name) || tmpSkip.contains(decl.name))
           Eval.now((accDecls, accSkip))
         else
           // Otherwise, get the list of decls that this decl refers to, add each of them first, then add this decl
           for {
             referredToDecls <- distinctDecls.toList.traverseFilter(d =>
               (d.name != decl.name).andM(refersTo(decl, d)).map(b => if (b) Some(d) else None))
-            res <- referredToDecls.foldLeft(Eval.now((accDecls, accSkip + decl.name)))(addDecl).map { case (x, y) => (x + decl, y) }
+            res <- referredToDecls.foldLeft(Eval.now((accDecls, accSkip + decl.name)))(
+              addDecl(_, decl.superInterface.map(_.name).toSet, _)).map { case (x, y) => (x + decl, y) }
           } yield res
       }
 
     distinctDecls.foldLeft(
       Eval.now((ListSet.empty[TypeScriptModel.Declaration], Set.empty[String]))
-    )(addDecl).value._1
+    )(addDecl(_, Set(), _)).value._1
   }
 }
