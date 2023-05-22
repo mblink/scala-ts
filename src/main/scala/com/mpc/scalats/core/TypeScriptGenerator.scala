@@ -17,17 +17,47 @@ object TypeScriptGenerator {
       (t1.typeSymbol.isClass && t1.typeSymbol.asClass.isSealed && maybeTypeConstructor(t2) <:< maybeTypeConstructor(t1))
 
   class TypeToFile(pairs: List[(Type, String)]) {
-    def get(tpe: Type): Option[String] =
-      pairs.collect { case (t, f) if looseTpeEq(t, tpe) => f }.distinct match {
-        case s :: Nil => Option(s)
-        case ss @ (_ :: _ :: _) => sys.error(s"Type $tpe found in more than one file: ${ss.mkString(", ")}")
+    def getT(tpe: Type): Option[(Type, String)] =
+      pairs.collect { case (t, f) if looseTpeEq(t, tpe) => (t, f) }.groupBy(_._2).map(_._2.head).toList match {
+        case t :: Nil => Option(t)
+        case ts @ (_ :: _ :: _) => sys.error(s"Type $tpe found in more than one file: ${ts.map(_._2).mkString(", ")}")
         case Nil => None
       }
+
+    def get(tpe: Type): Option[String] = getT(tpe).map(_._2)
 
     def forFile(file: String): List[Type] =
       pairs.collect { case (t, f) if f == file => t }
 
     lazy val allFiles: Set[String] = pairs.map(_._2).toSet
+  }
+
+  object TypeToFile {
+    def build(basePath: File, files: Map[String, List[Type]]): TypeToFile =
+      new TypeToFile(files.toList.flatMap { case (f, types) => types.map(tpe => tpe -> (s"$basePath/$f")) })
+  }
+
+  def referenceCode(
+    basePath: File,
+    currFile: File,
+    generatedFiles: Map[String, List[Type]],
+    tpe: Type,
+    logger: Logger,
+    classLoader: ClassLoader = getClass.getClassLoader,
+    customImport: (String, String) => (TsImports, String) = (file, name) => (TsImports.names(file, name), name),
+  )(implicit config: Config): (Map[String, TsImport], String) = {
+    val typeToFile = TypeToFile.build(basePath, generatedFiles)
+    val scalaParser = new ScalaParser(logger, runtimeMirror(classLoader), config.excludeType)
+    val scalaType = typeToFile.getT(tpe).fold(tpe.dealias)(_._1)
+    val scalaTypeRef = scalaParser.getTypeRef(scalaType, scalaParser.getTypeParams(scalaType))
+    val tsTypeRef = Compiler(config).compileTypeRef(scalaTypeRef, false)
+    val emitter = new IoTsEmitter(config)
+    val (imports, code) = emitter.getIoTsTypeString(tsTypeRef)(
+      TsImports.Ctx((tpe, name) => typeToFile.get(tpe).map(customImport(_, name))))
+    (
+      imports.foldLeft(Map.empty[String, TsImport])((acc, i) => acc + (i.path(currFile, typeToFile.allFiles) -> i.run)),
+      code,
+    )
   }
 
   def generateFiles(
@@ -37,14 +67,10 @@ object TypeScriptGenerator {
     classLoader: ClassLoader = getClass.getClassLoader
   )(implicit config: Config): Unit = {
     val mirror = runtimeMirror(classLoader)
-    val filePath = (n: String) => s"$basePath/$n"
-
-    val typeToFile = new TypeToFile(files.toList.flatMap { case (f, types) =>
-      types.map(tpe => tpe -> filePath(f))
-    })
+    val typeToFile = TypeToFile.build(basePath, files)
 
     files.foreach { case (fileName, _) =>
-      val file = new File(filePath(fileName))
+      val file = new File(s"$basePath/$fileName")
       file.getParentFile.mkdirs()
       file.createNewFile()
       val outputStream = new PrintStream(file)

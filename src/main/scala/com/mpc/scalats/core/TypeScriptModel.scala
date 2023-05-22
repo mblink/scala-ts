@@ -59,7 +59,7 @@ object TypeScriptModel {
     val superInterface = None
   }
 
-  case class UnknownTypeRef(name: String) extends TypeRef
+  case class UnknownTypeRef(name: String, scalaType: Type) extends TypeRef
 
   case object JsonRef extends TypeRef
 

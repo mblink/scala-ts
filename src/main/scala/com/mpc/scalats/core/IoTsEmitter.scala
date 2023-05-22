@@ -235,7 +235,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
   )(implicit ctx: TsImports.Ctx): Lines =
     emitMembers(members, onVal, getTypeRefString, identity)
 
-  private def getIoTsTypeString(typeRef: TypeRef)(implicit ctx: TsImports.Ctx): TsImports.With[String] = typeRef match {
+  def getIoTsTypeString(typeRef: TypeRef)(implicit ctx: TsImports.Ctx): TsImports.With[String] = typeRef match {
     case JsonRef => imports.iotsUnknown
     case BigNumberRef => imports.iotsBigNumber
     case NumberRef => imports.iotsNumber
@@ -250,7 +250,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case CustomTypeRef(name, params, scalaType) =>
       customIoTsTypes(scalaType, name, codecName) |+|
         (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
-    case UnknownTypeRef(unknown) => (imports.empty, unknown)
+    case UnknownTypeRef(name, scalaType) =>
+      customIoTsTypes(scalaType, name, codecName)
     case SimpleTypeRef(param) => (imports.empty, typeAsValArg(param))
     case UnionType(name, typeParams, possibilities, scalaType) =>
       imports.custom(scalaType, tsUnionName(name))
@@ -291,7 +292,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     case CustomTypeRef(name, params, scalaType) =>
       customIoTsTypes(scalaType, name, codecName) |+|
         (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeWrappedVal(value, _)))
-    case UnknownTypeRef(unknown) => unknown
+    case UnknownTypeRef(name, scalaType) =>
+      customIoTsTypes(scalaType, name, codecName)
     case SimpleTypeRef(param) => imports.iotsStrict(typeAsValArg(param))
     case UnionType(name, typeParams, possibilities, scalaType) =>
       imports.custom(scalaType, name)
@@ -348,7 +350,9 @@ final class IoTsEmitter(val config: Config) extends Emitter {
         val typeName = if (interfaceContext) interfaceName(name) else objectName(name)
         imports.custom(scalaType, typeName).getOrElse(imports.lift(typeName)) |+|
           (if (params.isEmpty) "" else params.joinParens(", ")(getIoTsTypeString))
-      case UnknownTypeRef(unknown) => unknown
+      case UnknownTypeRef(name, scalaType) =>
+        val typeName = if (interfaceContext) interfaceName(name) else objectName(name)
+        imports.custom(scalaType, typeName).getOrElse(imports.lift(typeName))
       case SimpleTypeRef(param) => if (interfaceContext) param else typeAsValArg(param)
       case u @ UnionType(_, params, possibilities, _) =>
         val valueType = scala.reflect.runtime.currentMirror.classSymbol(value.getClass).toType

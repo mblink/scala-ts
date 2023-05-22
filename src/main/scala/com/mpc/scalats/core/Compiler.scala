@@ -114,7 +114,7 @@ case class Compiler(config: Config) {
       compileTypeRef(scalaTaggedType.baseTypeRef, false),
       scalaTaggedType.tagTypeName)
 
-  private def compileTypeRef(
+  def compileTypeRef(
     scalaTypeRef: ScalaModel.TypeRef,
     inInterfaceContext: Boolean
   ): TypeScriptModel.TypeRef = scalaTypeRef match {
@@ -180,8 +180,8 @@ case class Compiler(config: Config) {
         compileTypeRef(lT, inInterfaceContext),
         compileTypeRef(rT, inInterfaceContext))
 
-    case ScalaModel.UnknownTypeRef(u, _) =>
-      TypeScriptModel.UnknownTypeRef(u)
+    case ScalaModel.UnknownTypeRef(u, t) =>
+      TypeScriptModel.UnknownTypeRef(u, t)
   }
 
   private implicit class BooleanOps(b: Boolean) {
@@ -200,7 +200,7 @@ case class Compiler(config: Config) {
         case TypeScriptModel.ArrayRef(r) => refersToRef(r, d, filterUnionName)
         case TypeScriptModel.SetRef(r) => refersToRef(r, d, filterUnionName)
         case TypeScriptModel.NonEmptyArrayRef(r) => refersToRef(r, d, filterUnionName)
-        case TypeScriptModel.UnknownTypeRef(n) => Eval.now(n == d.name)
+        case TypeScriptModel.UnknownTypeRef(n, _) => Eval.now(n == d.name)
         case TypeScriptModel.SimpleTypeRef(n) => Eval.now(n == d.name)
         case TypeScriptModel.UnionType(n, typeParams, _, _) =>
           (filterUnionName(n) == Some(d.name)).orM(typeParams.toList.existsM(refersToRef(_, d, filterUnionName)))
