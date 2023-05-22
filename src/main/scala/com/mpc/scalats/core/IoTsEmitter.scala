@@ -236,6 +236,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     emitMembers(members, onVal, getTypeRefString, identity)
 
   private def getIoTsTypeString(typeRef: TypeRef)(implicit ctx: TsImports.Ctx): TsImports.With[String] = typeRef match {
+    case JsonRef => imports.iotsUnknown
+    case BigNumberRef => imports.iotsBigNumber
     case NumberRef => imports.iotsNumber
     case BooleanRef => imports.iotsBoolean
     case StringRef => imports.iotsString
@@ -274,6 +276,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
   }
 
   private def getIoTsTypeWrappedVal(value: Any, typeRef: TypeRef)(implicit ctx: TsImports.Ctx): TsImports.With[String] = typeRef match {
+    case JsonRef => imports.iotsLiteral(value.asInstanceOf[io.circe.Json].noSpaces)
+    case BigNumberRef => imports.iotsLiteral(value.toString)
     case NumberRef => imports.iotsLiteral(value.toString)
     case BooleanRef => imports.iotsLiteral(value.toString)
     case StringRef => imports.iotsLiteral(s"`${value.toString.trim}`")
@@ -324,6 +328,8 @@ final class IoTsEmitter(val config: Config) extends Emitter {
   private def getTypeWrappedVal(value0: Any, typeRef: TypeRef, interfaceContext: Boolean)(implicit ctx: TsImports.Ctx): TsImports.With[String] = {
     val value = normalizeEval(value0)
     typeRef match {
+      case JsonRef => value.asInstanceOf[io.circe.Json].noSpaces
+      case BigNumberRef => value.toString
       case NumberRef => value.toString
       case BooleanRef => value.toString
       case StringRef => s"`${value.toString.trim}`"

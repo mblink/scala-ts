@@ -37,7 +37,7 @@ lazy val pomSettings = Seq(
     </developers>
 )
 
-lazy val scalaVersions = Seq("2.12.15", "2.13.8")
+lazy val scalaVersions = Seq("2.12.17", "2.13.10")
 
 lazy val root = (project in file(".")).
   settings(Seq(
@@ -50,8 +50,9 @@ lazy val root = (project in file(".")).
 libraryDependencies ++= Seq(
   "org.scala-lang" % "scala-reflect" % scalaVersion.value,
   "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "io.circe" %% "circe-core" % "0.14.3",
   "org.scalatest" %% "scalatest" % "3.1.0" % "test",
-  "org.typelevel" %% "cats-core" % "2.7.0",
+  "org.typelevel" %% "cats-core" % "2.9.0",
   // Scalaz is just needed for trying to cast values to types like `\/` and `\&/`
   "org.scalaz" %% "scalaz-core" % "7.3.6",
 )

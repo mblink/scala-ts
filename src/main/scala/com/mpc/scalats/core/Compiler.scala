@@ -118,12 +118,16 @@ case class Compiler(config: Config) {
     scalaTypeRef: ScalaModel.TypeRef,
     inInterfaceContext: Boolean
   ): TypeScriptModel.TypeRef = scalaTypeRef match {
+    case ScalaModel.JsonRef =>
+      TypeScriptModel.JsonRef
     case ScalaModel.IntRef =>
       TypeScriptModel.NumberRef
     case ScalaModel.LongRef =>
       TypeScriptModel.NumberRef
     case ScalaModel.DoubleRef =>
       TypeScriptModel.NumberRef
+    case ScalaModel.BigDecimalRef =>
+      TypeScriptModel.BigNumberRef
     case ScalaModel.BooleanRef =>
       TypeScriptModel.BooleanRef
     case ScalaModel.StringRef =>
@@ -205,9 +209,15 @@ case class Compiler(config: Config) {
         case TypeScriptModel.TheseType(l, r) => refersToRef(l, d, filterUnionName).orM(refersToRef(r, d, filterUnionName))
         case TypeScriptModel.MapType(k, v) => refersToRef(k, d, filterUnionName).orM(refersToRef(v, d, filterUnionName))
         case TypeScriptModel.TupleType(rs) => rs.toList.existsM(refersToRef(_, d, filterUnionName))
-        case TypeScriptModel.NumberRef | TypeScriptModel.StringRef | TypeScriptModel.BooleanRef |
-             TypeScriptModel.DateRef | TypeScriptModel.DateTimeRef | TypeScriptModel.NullRef |
-             TypeScriptModel.UndefinedRef => Eval.now(false)
+        case TypeScriptModel.NumberRef |
+             TypeScriptModel.BigNumberRef |
+             TypeScriptModel.StringRef |
+             TypeScriptModel.BooleanRef |
+             TypeScriptModel.DateRef |
+             TypeScriptModel.DateTimeRef |
+             TypeScriptModel.NullRef |
+             TypeScriptModel.UndefinedRef |
+             TypeScriptModel.JsonRef => Eval.now(false)
       }
 
     def refersTo(d1: TypeScriptModel.Declaration, d2: TypeScriptModel.Declaration): Eval[Boolean] =
@@ -238,20 +248,72 @@ case class Compiler(config: Config) {
 
     val distinctDecls = decls.groupBy(_.name).map(_._2.head).foldLeft(ListSet[TypeScriptModel.Declaration]())(_ + _)
 
-    def addDecl(acc: Eval[ListSet[TypeScriptModel.Declaration]], decl: TypeScriptModel.Declaration): Eval[ListSet[TypeScriptModel.Declaration]] =
-      acc.flatMap { l =>
-        // If this decl is already in the result set, we don't need to do anything
-        if (l.exists(_.name == decl.name))
-          Eval.now(l)
+    /*
+    `acc` is the accumulated value of
+
+      1. The declarations in the order they should be output
+      2. The names of the declarations that have already been processed
+
+    It's necessary to carry these around as separate sets to avoid an infinite loop when exporting a type that refers
+    to itself, e.g.
+
+    ```scala
+    sealed trait Test { val parent: Option[Test] }
+    case object Foo extends Test { val parent = None }
+    ```
+
+    The proper order to export these types is:
+
+      2. Foo
+      3. Test
+
+    But the order they're processed is reversed:
+
+      1. Test
+      2. Foo
+
+    If we just look at `accDecls` to determine if a decl has already been processed, we encounter a loop because
+    `decl` is only added after all `referredToDecls` have been processed:
+
+      1. Process `Test`
+        a. `accDecls == ListSet()`
+        b. `referredToDecls == List(Foo)` -- because an ADT refers to all of its members
+          i. Process `Foo`
+            1. `accDecls == ListSet()`
+            2. `referredToDecls == List(Test)` -- because `val parent` refers to `Test`
+              a. Process `Test` -- INFINITE LOOP, go back to step 1
+
+    To avoid this, we also keep track of `accSkip` which adds `decl` *before* recursively calling `addDecl`
+
+      1. Process `Test`
+        a. `accSkip == Set()`
+        b. `referredToDecls == List(Foo)`
+          i. Process `Foo`
+            1. `accSkip == Set(Test)`
+            2. `referredToDecls == List(Test)`
+              a. Process `Test` -- short circuits and avoids the loop
+    */
+    def addDecl(
+      acc: Eval[(ListSet[TypeScriptModel.Declaration], Set[String])],
+      tmpSkip: Set[String],
+      decl: TypeScriptModel.Declaration,
+    ): Eval[(ListSet[TypeScriptModel.Declaration], Set[String])] =
+      acc.flatMap { case (accDecls, accSkip) =>
+        // If this decl has already been processed, we don't need to do anything
+        if (accSkip.contains(decl.name) || tmpSkip.contains(decl.name))
+          Eval.now((accDecls, accSkip))
         else
           // Otherwise, get the list of decls that this decl refers to, add each of them first, then add this decl
           for {
             referredToDecls <- distinctDecls.toList.traverseFilter(d =>
               (d.name != decl.name).andM(refersTo(decl, d)).map(b => if (b) Some(d) else None))
-            res <- referredToDecls.foldLeft(Eval.now(l))(addDecl).map(_ + decl)
+            res <- referredToDecls.foldLeft(Eval.now((accDecls, accSkip + decl.name)))(
+              addDecl(_, decl.superInterface.map(_.name).toSet, _)).map { case (x, y) => (x + decl, y) }
           } yield res
       }
 
-    distinctDecls.foldLeft(Eval.now(ListSet[TypeScriptModel.Declaration]()))(addDecl).value
+    distinctDecls.foldLeft(
+      Eval.now((ListSet.empty[TypeScriptModel.Declaration], Set.empty[String]))
+    )(addDecl(_, Set(), _)).value._1
   }
 }

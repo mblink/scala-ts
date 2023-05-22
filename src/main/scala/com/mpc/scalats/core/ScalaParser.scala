@@ -228,12 +228,16 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
   // TODO: resolve from implicit (typeclass)
   private def getTypeRef(scalaType: Type, typeParams: Set[String]): TypeRef = {
     (scalaType, scalaType.typeSymbol.fullName, scalaType.typeSymbol.name.toString, scalaType.dealias.typeArgs) match {
+      case (_, _, "Json", _) =>
+        JsonRef
       case (_, _, "Int" | "Byte" | "Short", _) =>
         IntRef
       case (_, _, "Long", _) =>
         LongRef
       case (_, _, "Double", _) =>
         DoubleRef
+      case (_, _, "BigDecimal", _) =>
+        BigDecimalRef
       case (_, _, "Boolean", _) =>
         BooleanRef
       case (_, _, "String", _) =>

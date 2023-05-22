@@ -95,6 +95,8 @@ object ScalaModel {
 
   case object DoubleRef extends TypeRef
 
+  case object BigDecimalRef extends TypeRef
+
   case object BooleanRef extends TypeRef
 
   case object StringRef extends TypeRef
@@ -102,4 +104,6 @@ object ScalaModel {
   case object DateRef extends TypeRef
 
   case object DateTimeRef extends TypeRef
+
+  case object JsonRef extends TypeRef
 }
