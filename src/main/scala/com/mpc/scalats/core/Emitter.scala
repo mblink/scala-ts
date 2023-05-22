@@ -51,7 +51,8 @@ trait Emitter extends TsImports.HelperSyntax {
     case CustomTypeRef(name, params, scalaType) =>
       val custom = imports.custom(scalaType, name).getOrElse(imports.lift(name))
       if (params.isEmpty) custom else custom |+| params.joinTypeParams(getTypeRefString)
-    case UnknownTypeRef(typeName) => typeName
+    case UnknownTypeRef(name, scalaType) =>
+      imports.custom(scalaType, name).getOrElse(imports.lift(name))
     case SimpleTypeRef(param) => param
 
     case UnionType(name, typeParams, possibilities, scalaType) =>

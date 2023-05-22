@@ -48,19 +48,26 @@ case class QualifiedImport(loc: String, run: TsImport) {
     if (woExt.startsWith(".")) woExt else s"./$woExt"
   }
 
+  def path(currFile: File, allFiles: Set[String]): String =
+    // Relativize paths to files that exist on the file system or are currently being generated
+    if (file.exists || allFiles.contains(file.toString)) normalizePath(relPath(loc, currFile.getParent))
+    else loc
+
   def asString(currFile: File, allFiles: Set[String]): Option[String] =
     if (file == currFile) None
-    else Some(show"""import $run from """" ++
-      // Relativize paths to files that exist on the file system or are currently being generated
-      (if (file.exists || allFiles.contains(file.toString))
-        normalizePath(relPath(loc, currFile.getParent).replaceAll("\\.tsx?$", ""))
-      else loc) ++ """";""")
+    else Some(show"""import $run from """" ++ path(currFile, allFiles) ++ """";""")
 }
 
 class TsImports private (private val m: Map[String, TsImport]) {
   private[TsImports] def toList: List[(String, TsImport)] = m.toList
+
   def ++(other: TsImports): TsImports = new TsImports(m |+| other.m)
-  def foreach(f: QualifiedImport => Unit): Unit = m.foreach { case (l, i) => f(QualifiedImport(l, i)) }
+
+  def foldLeft[A](init: A)(f: (A, QualifiedImport) => A): A =
+    m.foldLeft(init) { case (acc, (l, i)) => f(acc, QualifiedImport(l, i)) }
+
+  def foreach(f: QualifiedImport => Unit): Unit =
+    foldLeft(())((_, i) => f(i))
 }
 
 object TsImports {
@@ -220,7 +227,7 @@ object TsImports {
           TypeScriptModel.TheseType(_, _) |
           TypeScriptModel.TupleType(_) |
           TypeScriptModel.UndefinedRef |
-          TypeScriptModel.UnknownTypeRef(_)
+          TypeScriptModel.UnknownTypeRef(_, _)
         ) => err
       })
     }

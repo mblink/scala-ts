@@ -15,8 +15,8 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
   def isNotExcluded(tpe: Type): Boolean =
     !excludeType(tpe)
 
-  private def getTypeParams(tpe: Type): Set[String] =
-    tpe.typeParams.map(_.name.decodedName.toString).toSet
+  def getTypeParams(tpe: Type): ListSet[String] =
+    ListSet(tpe.typeParams.map(_.name.decodedName.toString):_*)
 
   private object TaggedTypeExtractor {
     def unapply(tpe: Type): Option[(Type, Type)] =
@@ -87,22 +87,22 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
         val v = mirror.reflect(mirror.reflectModule(sm).instance).reflectField(t).get
         val symTpe = getTypeInfo(t)
         val tp = (if (t.isClass) symTpe.typeSymbol.asClass.typeParams else List[Symbol]()).map(_.name.toString)
-        TypeMember(t.name.toString, getTypeRef(symTpe, tp.toSet), Some(v))
+        TypeMember(t.name.toString, getTypeRef(symTpe, ListSet(tp:_*)), Some(v))
       }
       case m: MethodSymbol if isValidMethod(m) => {
         val sm = mirror.staticModule(tpe.typeSymbol.fullName.stripSuffix(".type"))
         val v = mirror.reflect(mirror.reflectModule(sm).instance).reflectMethod(m)
 
         if (m.paramLists.isEmpty) {
-          TypeMember(m.name.toString, getTypeRef(trueType(getTypeInfo(m), Some(tpe)), Set()), Some(v()))
+          TypeMember(m.name.toString, getTypeRef(trueType(getTypeInfo(m), Some(tpe)), ListSet.empty), Some(v()))
         } else {
-          TypeMember(m.name.toString, getTypeRef(getTypeInfo(m), Set.empty), None)
+          TypeMember(m.name.toString, getTypeRef(getTypeInfo(m), ListSet.empty), None)
         }
       }
     }
 
     val members = tpe.decls.sorted.collect {
-      case Field(m) if !m.isStatic => member(m, Set())
+      case Field(m) if !m.isStatic => member(m, ListSet.empty)
     }
 
     Some(CaseObject(
@@ -115,8 +115,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
   private def parseSealedUnion(tpe: Type): (ListSet[Type], Option[SealedUnion]) = {
     // Members
     val members = tpe.members.sorted.collect {
-      case m: MethodSymbol if isValidMethod(m) && !m.name.toString.endsWith("$") =>
-        member(m, Set())
+      case m: MethodSymbol if isValidMethod(m) && !m.name.toString.endsWith("$") => member(m, ListSet.empty)
     }
 
     val (subclassExamined, subclassTypeDefs) = directKnownSubclasses(tpe).foldLeft((ListSet.empty[Type], ListSet.empty[TypeDef])) {
@@ -175,7 +174,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
     Some(TaggedType(
       tpe.toString.split('.').last,
       tpe.toString,
-      getTypeRef(baseTpe, Set()),
+      getTypeRef(baseTpe, ListSet.empty),
       tagTpe.toString.split('.').last,
       tpe))
 
@@ -205,7 +204,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
       case (s, None) => s.info
     }
 
-  @inline private def member(sym: MethodSymbol, typeParams: Set[String]): TypeMember =
+  @inline private def member(sym: MethodSymbol, typeParams: ListSet[String]): TypeMember =
     TypeMember(sym.name.toString, getTypeRef(getTypeInfo(sym), typeParams))
 
   @tailrec
@@ -226,7 +225,7 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
   private val nothingTypeRef = UnknownTypeRef("Nothing", typeOf[Nothing])
 
   // TODO: resolve from implicit (typeclass)
-  private def getTypeRef(scalaType: Type, typeParams: Set[String]): TypeRef = {
+  def getTypeRef(scalaType: Type, typeParams: ListSet[String]): TypeRef = {
     (scalaType, scalaType.typeSymbol.fullName, scalaType.typeSymbol.name.toString, scalaType.dealias.typeArgs) match {
       case (_, _, "Json", _) =>
         JsonRef
@@ -263,16 +262,16 @@ final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boo
       case (_, _, "Instant" | "Timestamp" | "LocalDateTime" | "ZonedDateTime" | "DateTime", _) =>
         DateTimeRef
       case (_, _, tupleName(_), typeArgs) =>
-        TupleRef(ListSet.empty ++ typeArgs.map(getTypeRef(_, Set())))
+        TupleRef(ListSet.empty ++ typeArgs.map(getTypeRef(_, ListSet.empty)))
       case (_, _, typeParam, _) if typeParams.contains(typeParam) =>
         TypeParamRef(typeParam, scalaType)
       case _ if isAnyValChild(scalaType) =>
-        getTypeRef(scalaType.members.filter(!_.isMethod).map(_.typeSignature).head, Set())
+        getTypeRef(scalaType.members.filter(!_.isMethod).map(_.typeSignature).head, ListSet.empty)
       case (_, _, _, typeArgs) if isSealedUnion(scalaType) =>
         UnionRef(
           scalaType.typeSymbol.name.toString,
-          ListSet.empty ++ typeArgs.map(getTypeRef(_, Set())),
-          ListSet.empty ++ directKnownSubclasses(scalaType).map(getTypeRef(_, Set.empty)),
+          ListSet.empty ++ typeArgs.map(getTypeRef(_, ListSet.empty)),
+          ListSet.empty ++ directKnownSubclasses(scalaType).map(getTypeRef(_, ListSet.empty)),
           scalaType)
       case (_, _, _, typeArgs) if isCaseClass(scalaType) =>
         val caseClassName = scalaType.typeSymbol.name.toString
