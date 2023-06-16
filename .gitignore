@@ -1,0 +1,14 @@
+.idea
+.vscode
+*.log
+*.DS_Store
+
+# Scala generated files
+.bsp
+*.class
+target
+
+# Metals generated files
+metals.sbt
+.bloop
+.metals
