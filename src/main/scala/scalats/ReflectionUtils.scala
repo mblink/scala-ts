@@ -1,4 +1,4 @@
-package scalats
+package sts
 
 import scala.annotation.tailrec
 import scala.deriving._

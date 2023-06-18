@@ -1,25 +1,33 @@
-package scalats
+package sts
 
 import cats.{Eval, Monoid}
 import cats.data.{Chain, Ior, NonEmptyChain, NonEmptyList, NonEmptyVector}
 import cats.syntax.foldable._
-import cats.syntax.semigroup._
 import io.circe.Json
 import java.time.{Instant, LocalDate => JLocalDate, LocalDateTime, ZonedDateTime}
 import org.joda.time.{DateTime, LocalDate}
 import scala.collection.immutable.SortedSet
 import scala.quoted._
-import scala.util.chaining._
 
-private case class ScalaTs(config: Expr[Config])(using override val ctx: Quotes) extends ReflectionUtils {
+private case class ScalaTs(
+  customType: Expr[ScalaTs.CustomType],
+  tagTypeName0: Expr[Option[String]],
+  imports: Expr[TsImports.available],
+)(using override val ctx: Quotes) extends ReflectionUtils {
   import ctx.reflect._
+  import ScalaTs._
 
-  final val imports = '{ TsImports.available(${config}) }
+  // final val config = configExpr.valueOrAbort
+
+  @annotation.unused private val tagTypeName = tagTypeName0.valueOrAbort
+
+  private def fullTypeName(tpe: TypeRepr): String =
+    tpe.show.split('[').head
 
   private def baseTypeName(tpe: TypeRepr): String =
-    tpe.show.split('[').head.split('.').last
+    fullTypeName(tpe).split('.').last
 
-  private def ordInstance[A: Type]: Expr[TsImports.With[String]] = {
+  private def ordInstance[A: Type]: Expr[Generated] = {
     val typeRepr = TypeRepr.of[A]
     typeRepr.asType match {
       case '[String] => '{ $imports.fptsString("Ord", Some("stringOrd")) }
@@ -29,7 +37,7 @@ private case class ScalaTs(config: Expr[Config])(using override val ctx: Quotes)
       case _ =>
         Mirror(typeRepr) match {
           case Some(m) if m.mirrorType == MirrorType.Sum =>
-            '{ $imports.custom(TypeName(${ Expr(typeRepr.show) }), ScalaTs.unionOrdName(${ Expr(baseTypeName(typeRepr)) })) }
+            '{ $imports.custom(TypeName(${ Expr(fullTypeName(typeRepr)) }), unionOrdName(${ Expr(baseTypeName(typeRepr)) })) }
 
           case _ =>
             report.errorAndAbort(s"`Ord` instance requested for ${typeRepr.show} but not found")
@@ -38,7 +46,7 @@ private case class ScalaTs(config: Expr[Config])(using override val ctx: Quotes)
   }
 
   private def mkCodecName(tpe: TypeRepr): String =
-    ScalaTs.decapitalize(baseTypeName(tpe)) ++ "C"
+    decap(baseTypeName(tpe)) + "C"
 
   private object NumberType {
     def unapply[A](t: Type[A]): Boolean =
@@ -48,55 +56,54 @@ private case class ScalaTs(config: Expr[Config])(using override val ctx: Quotes)
       }
   }
 
-  private def tsRecordKeyType[A: Type]: Expr[TsImports.With[String]] =
+  private def tsRecordKeyType[A: Type](state: GenerateState): Expr[Generated] =
     TypeRepr.of[A].asType match {
-      case '[String] => '{ $imports.iotsString }
       case NumberType() => '{ $imports.iotsNumberFromString }
-      case _ => report.errorAndAbort(s"Unknown record key type: `${Type.show[A]}`")
+      case _ => generate[A](state)
     }
 
-  private def tsValue(expr: Expr[Any]): Expr[TsImports.With[String]] =
+  private def tsValue(expr: Expr[Any]): Expr[Generated] =
     expr match {
-      case '{ ${x}: Json } => '{ $imports.lift($x.noSpaces) }
-      case '{ ${x}: (Byte | Short | Int | Long | Double | Float | BigDecimal | Boolean) } => '{ $imports.lift($x.toString) }
-      case '{ ${x}: (String | LocalDate | JLocalDate | DateTime | LocalDateTime | ZonedDateTime | Instant) } => '{ $imports.lift("`" ++ $x.toString ++ "`") }
-      case '{ ${x}: Eval[_] } => tsValue('{ $x.value })
-      case '{ ${x}: Chain[_] } =>
+      case '{ $x: Json } => '{ $imports.lift($x.noSpaces) }
+      case '{ $x: (Byte | Short | Int | Long | Double | Float | BigDecimal | Boolean) } => '{ $imports.lift($x.toString) }
+      case '{ $x: (String | LocalDate | JLocalDate | DateTime | LocalDateTime | ZonedDateTime | Instant) } => '{ $imports.lift("`" + $x.toString + "`") }
+      case '{ $x: Eval[_] } => tsValue('{ $x.value })
+      case '{ $x: Chain[_] } =>
         '{ $imports.lift("[") |+| $x.intercalateMap($imports.lift(", "))(a => ${ tsValue('a) }) |+| $imports.lift("]") }
-      case '{ ${x}: List[_] } =>
+      case '{ $x: List[_] } =>
         '{ $imports.lift("[") |+| $x.intercalateMap($imports.lift(", "))(a => ${ tsValue('a) }) |+| $imports.lift("]") }
-      case '{ ${x}: Vector[_] } =>
+      case '{ $x: Vector[_] } =>
         '{ $imports.lift("[") |+| $x.intercalateMap($imports.lift(", "))(a => ${ tsValue('a) }) |+| $imports.lift("]") }
-      case '{ ${x}: Seq[_] } =>
+      case '{ $x: Seq[_] } =>
         '{ $imports.lift("[") |+| $x.intercalateMap($imports.lift(", "))(a => ${ tsValue('a) }) |+| $imports.lift("]") }
-      case '{ ${x}: Set[a] } =>
+      case '{ $x: Set[a] } =>
         '{
           $imports.fptsReadonlySet(
             $imports.lift("fromReadonlyArray(") |+|
               ${ ordInstance[a] } |+|
-              $imports.lift(")([") |+|
+              ")([" |+|
               $x.toList.intercalateMap($imports.lift(", "))(a => ${ tsValue('a) }) |+|
-              $imports.lift("])")
+              "])"
           )
         }
-      case '{ ${x}: NonEmptyChain[a] } => tsValue('{ $x.toChain })
-      case '{ ${x}: NonEmptyList[_] } => tsValue('{ $x.toList })
-      case '{ ${x}: NonEmptyVector[_] } => tsValue('{ $x.toVector })
-      case '{ ${x}: scalaz.NonEmptyList[_] } => tsValue('{ $x.list.toList })
-      case '{ ${x}: Option[_] } =>
+      case '{ $x: NonEmptyChain[a] } => tsValue('{ $x.toChain })
+      case '{ $x: NonEmptyList[_] } => tsValue('{ $x.toList })
+      case '{ $x: NonEmptyVector[_] } => tsValue('{ $x.toVector })
+      case '{ $x: scalaz.NonEmptyList[_] } => tsValue('{ $x.list.toList })
+      case '{ $x: Option[_] } =>
         '{
           $imports.fptsOption($x.fold($imports.lift("none"))(
             _ => $imports.lift("some(") |+| ${ tsValue('{ $x.get }) } |+| $imports.lift(")")))
         }
-      case '{ ${x}: Either[_, _] } =>
+      case '{ $x: Either[_, _] } =>
         '{
           $imports.fptsEither($x.fold(
             _ => $imports.lift("left(") |+| ${ tsValue('{ $x.swap.toOption.get }) } |+| $imports.lift(")"),
             _ => $imports.lift("right(") |+| ${ tsValue('{ $x.toOption.get }) } |+| $imports.lift(")"),
           ))
         }
-      case '{ ${x}: scalaz.\/[_, _] } => tsValue('{ $x.toEither })
-      case '{ ${x}: Ior[_, _] } =>
+      case '{ $x: scalaz.\/[_, _] } => tsValue('{ $x.toEither })
+      case '{ $x: Ior[_, _] } =>
         '{
           $imports.fptsThese($x.fold(
             _ => $imports.lift("left(") |+| ${ tsValue('{ $x.left.get }) } |+| $imports.lift(")"),
@@ -104,18 +111,18 @@ private case class ScalaTs(config: Expr[Config])(using override val ctx: Quotes)
             (_, _) => $imports.lift("both(") |+| ${ tsValue('{ $x.left.get }) } |+| $imports.lift(", ") |+| ${ tsValue('{ $x.right.get }) } |+| $imports.lift(")"),
           ))
         }
-      case '{ ${x}: scalaz.\&/[_, _] } =>
+      case '{ $x: scalaz.\&/[_, _] } =>
         tsValue('{ $x.fold(_ => Ior.Left($x.a.get), _ => Ior.Right($x.b.get), (_, _) => Ior.Both($x.a.get, $x.b.get)) })
-      case '{ ${x}: Map[_, _] } =>
+      case '{ $x: Map[_, _] } =>
         '{
           $imports.lift("{") |+|
             $x.toList.intercalateMap($imports.lift(", ")) { case (k, v) =>
               ${ tsValue('k) } |+| $imports.lift(": ") |+| ${ tsValue('v) }
             } |+|
-            $imports.lift("}")
+            "}"
         }
-      case '{ ${x}: t } =>
-        '{ $imports.custom(TypeName(${ Expr(TypeRepr.of[t].widen.show) }), ScalaTs.decapitalize($x.toString)) }
+      case '{ $x: t } =>
+        '{ $imports.custom(TypeName(${ Expr(fullTypeName(TypeRepr.of[t].widen)) }), decap($x.toString())) }
     }
 
   private val excludeMethods = Set(
@@ -131,144 +138,176 @@ private case class ScalaTs(config: Expr[Config])(using override val ctx: Quotes)
     "wait",
   )
 
-  def generateEnum[A: Type](mirror: Mirror, state: GenerateState): Expr[TsImports.With[String]] = {
+  def generateEnum[A: Type](mirror: Mirror, state: GenerateState): Expr[Generated] = {
     val typeRepr = TypeRepr.of[A]
     val valueType = Expr(baseTypeName(typeRepr))
-    given mb: Monoid[Boolean] = Monoid.instance(false, _ || _)
-    val (memberNames, memberCodecNames, memberCodecs, anyDynamic) = mirror.types.zipWithIndex.foldMap { case (t, i) =>
+
+    def parseMembers(m: Mirror): (List[String], List[String], List[String], Boolean) = {
+      given mb: Monoid[Boolean] = Monoid.instance(true, _ && _)
+
+      m.mirrorType match {
+        case MirrorType.Sum => m.types.toList.zipWithIndex.foldMap { case (t, i) =>
+          t.asType match {
+            case '[t] => Expr.summon[ValueOf[t]] match {
+              case Some(_) =>
+                val tag = m.labels(i)
+                val constName = decap(tag)
+                val codecName = constName + "C"
+                (List(tag), List(constName), List(codecName), true)
+
+              case None =>
+                Mirror(t).fold((Nil, Nil, Nil, false))(parseMembers)
+            }
+          }
+        }
+        case MirrorType.Product => (Nil, Nil, Nil, false)
+      }
+    }
+
+    val (memberNames, memberConstNames, memberCodecNames, allConstant) = parseMembers(mirror)
+    val memberCodecs = mirror.types.zipWithIndex.map { case (t, i) =>
       t.asType match {
         case '[t] =>
           val typeSym = t.typeSymbol
-          val tag = Expr(mirror.labels(i))
-          val constName = '{ ScalaTs.decapitalize($tag) }
-          val codecName = '{ $constName ++ "C" }
-          val valueType = '{ $constName.capitalize }
-          val taggedCodecName = '{ $constName ++ "TaggedC" }
-          val taggedValueType = '{ $taggedCodecName.capitalize.stripSuffix("C") }
-          val (codec, dynamic) = Expr.summon[ValueOf[t]] match {
+          val tag = mirror.labels(i)
+          val tagExpr = Expr(tag)
+          val constName = decap(tag)
+          val constNameExpr = Expr(constName)
+          val codecNameExpr = Expr(constName + "C")
+          val valueTypeExpr = Expr(cap(constName))
+          val taggedCodecName = constName + "TaggedC"
+          val taggedCodecNameExpr = Expr(taggedCodecName)
+          val taggedValueTypeExpr = Expr(cap(taggedCodecName).stripSuffix("C"))
+          Expr.summon[ValueOf[t]] match {
             case Some(v) =>
               val members = (typeSym.fieldMembers ++ typeSym.methodMembers).filter(s =>
                 !s.isClassConstructor &&
                   (s.isValDef || (s.isDefDef && s.signature.paramSigs.isEmpty)) &&
-                  !(s.flags.is(Flags.Private) || s.flags.is(Flags.PrivateLocal) || s.flags.is(Flags.Protected)) &&
+                  !(
+                    s.privateWithin.nonEmpty ||
+                    s.protectedWithin.nonEmpty ||
+                    s.flags.is(Flags.Private) ||
+                    s.flags.is(Flags.PrivateLocal) ||
+                    s.flags.is(Flags.Protected)
+                  ) &&
                   !excludeMethods.contains(s.name)
               ).sortBy(_.name)
               val memberVals = Expr.ofList(members.map(s =>
                 '{
-                  $imports.lift("  \"" ++ ${ Expr(s.name) } ++ "\": ") |+|
+                  $imports.lift("  " + ${ Expr(s.name) } + ": ") |+|
                     ${ tsValue(Select('{ $v.value }.asTerm, s).asExpr) }
                 }
               ))
               val codec = '{
                 // Const with all values
-                $imports.lift("export const " ++ $constName ++ " = {\n") |+|
-                  $imports.lift("  _tag: `" ++ $tag ++ "`,\n") |+|
-                  $memberVals.intercalate($imports.lift(",\n")) |+|
-                  $imports.lift("\n} as const;\n\n") |+|
+                $imports.lift("export const " + $constNameExpr + " = {\n") |+|
+                  ("  _tag: `" + $tagExpr + "`,\n") |+|
+                  intercalate($imports.lift(",\n"))($memberVals) |+|
+                  "\n} as const;\n\n" |+|
                   // Const with only `_tag` value
-                  $imports.lift("export const " ++ $taggedCodecName ++ " = ") |+|
+                  ("export const " + $taggedCodecNameExpr + " = ") |+|
                   $imports.iotsTypeFunction(
                     $imports.lift("{ _tag: ") |+|
-                      $imports.iotsLiteral("`" ++ $tag ++ "`") |+|
-                      $imports.lift(" }")
+                      $imports.iotsLiteral("`" + $tagExpr + "`") |+|
+                      " }"
                   ) |+|
-                  $imports.lift(";\n") |+|
+                  ";\n" |+|
                   // Tagged codec type
-                  $imports.lift("export type " ++ $taggedCodecName.capitalize ++ " = typeof " ++ $taggedCodecName ++ ";\n") |+|
+                  ("export type " + cap($taggedCodecNameExpr) + " = typeof " + $taggedCodecNameExpr + ";\n") |+|
                   // Tagged value type
-                  $imports.lift("export type " ++ $taggedValueType ++ " = ") |+|
-                  $imports.iotsTypeOf($taggedCodecName.capitalize) |+|
-                  $imports.lift(";\n") |+|
+                  ("export type " + $taggedValueTypeExpr + " = ") |+|
+                  $imports.iotsTypeOf(cap($taggedCodecNameExpr)) |+|
+                  ";\n" |+|
                   // Full value type
-                  $imports.lift("export type " ++ $valueType ++ " = " ++
-                    $taggedValueType ++ " & typeof " ++ $constName ++ ";\n") |+|
+                  ("export type " + $valueTypeExpr + " = " +
+                    $taggedValueTypeExpr + " & typeof " + $constNameExpr + ";\n") |+|
                   // Full codec type
-                  $imports.lift("export const " ++ $codecName ++ " = ") |+|
+                  ("export const " + $codecNameExpr + " = ") |+|
                   $imports.fptsPipe(
-                    $imports.lift($taggedCodecName ++ ", c => new ") |+|
+                    $imports.lift($taggedCodecNameExpr + ", c => new ") |+|
                       $imports.iotsTypeType |+|
-                      $imports.lift("<" ++ $valueType ++ ", " ++ $taggedValueType ++ ">(\n") |+|
-                      $imports.lift("  `" ++ ${ Expr(baseTypeName(typeRepr)) } ++ " " ++ $tag ++ "`,\n") |+|
-                      $imports.lift("  (u: unknown): u is " ++ $valueType ++ " => ") |+| $imports.fptsEither("isRight(c.decode(u)),\n") |+|
-                      $imports.lift("  (u: unknown): ") |+|
-                      $imports.fptsEither("Either<") |+| $imports.iotsErrors |+| $imports.lift(", " ++ $valueType ++ "> => ") |+|
+                      ("<" + $valueTypeExpr + ", " + $taggedValueTypeExpr + ">(\n") |+|
+                      ${ Expr("  `" + baseTypeName(typeRepr) + " " + tag + "`,\n") } |+|
+                      ("  (u: unknown): u is " + $valueTypeExpr + " => ") |+| $imports.fptsEither("isRight(c.decode(u)),\n") |+|
+                      ("  (u: unknown): ") |+|
+                      $imports.fptsEither("Either<") |+| $imports.iotsErrors |+| $imports.lift(", " + $valueTypeExpr + "> => ") |+|
                       $imports.fptsPipe(
                         $imports.lift("c.decode(u), ") |+|
-                        $imports.fptsEither("map(x => ({ ...x, ..." ++ $constName ++ " }))")
+                        $imports.fptsEither("map(x => ({ ...x, ..." + $constNameExpr + " }))")
                       ) |+|
-                      $imports.lift(",\n") |+|
-                      $imports.lift("  (x: " ++ $valueType ++ "): " ++ $taggedValueType ++ " => ({ ...x, _tag: `" ++ $tag ++ "` }),\n") |+|
-                      $imports.lift(")")
+                      ",\n" |+|
+                      ("  (x: " + $valueTypeExpr + "): " + $taggedValueTypeExpr + " => ({ ...x, _tag: `" + $tagExpr + "` }),\n") |+|
+                      ")"
                   ) |+|
-                  $imports.lift(";")
+                  ";"
               }
-              (codec, false)
+              codec
 
             case None =>
-              (generateTopLevel[t](true), true)
+              generateTopLevel[t](true)
           }
-          (List(tag), List(codecName), List(codec), dynamic)
-      }: @annotation.nowarn("msg=match may not be exhaustive")
+      }
     }
 
     val allMemberCodecs =
       if (state.typeParamNames.isEmpty) memberCodecNames
-      else memberCodecNames.map(n => '{ $n ++ "(" ++ ${ Expr(state.typeParamNames.mkString(", ")) } ++ ")" })
-    val allMemberCodecsArr = '{ "[" ++ ${ Expr.ofList(allMemberCodecs) }.mkString(", ") ++ "]" }
-    val allNamesConstName = '{ "all" ++ $valueType ++ "Names" }
+      else memberCodecNames.map(n => n + "(" + state.typeParamNames.mkString(", ") + ")")
+    val allMemberCodecsArr = '{ "[" + ${ Expr(allMemberCodecs.mkString(", ")) } + "]" }
+    val allNamesConstName = '{ "all" + $valueType + "Names" }
     lazy val ordInst = '{
-      $imports.lift("export const " ++ ScalaTs.decapitalize($valueType) ++ "Ord: ") |+|
-        $imports.fptsOrd("Ord<" ++ $valueType ++ "> = ") |+|
+      $imports.lift("export const " + decap($valueType) + "Ord: ") |+|
+        $imports.fptsOrd("Ord<" + $valueType + "> = ") |+|
         $imports.fptsPipe(
           $imports.fptsString("Ord", Some("stringOrd")) |+|
-            $imports.lift(", ") |+|
+            ", " |+|
             $imports.fptsOrd("contramap(x => x._tag)")
         ) |+|
-        $imports.lift(";\n")
+        ";\n"
     }
 
     '{
-      ${ Expr.ofList(memberCodecs) }.intercalate($imports.lift("\n\n")) |+|
-      $imports.lift("\n\n") |+|
-      $imports.lift("export const all" ++ $valueType ++ "C = ") |+|
+      intercalate($imports.lift("\n\n"))(${ Expr.ofList(memberCodecs) }) |+|
+      "\n\n" |+|
+      ("export const all" + $valueType + "C = ") |+|
       ${ state.typeParamsTypes } |+|
-      $imports.lift(${ state.typeParamsFnArgs }) |+|
-      $imports.lift(if (${ Expr(state.typeParamNames.nonEmpty) }) " => " else "") |+|
-      $imports.lift($allMemberCodecsArr ++ " as const;\n") |+|
-      $imports.lift("export const " ++ $allNamesConstName ++ " = [" ++
-        ${ Expr.ofList(memberNames) }.map(s => s"`$s`").mkString(", ") ++ "] as const;\n") |+|
-      $imports.lift("export type " ++ $valueType ++ "Name = (typeof " ++ $allNamesConstName ++ ")[number];\n") |+|
-      $imports.lift("\n") |+|
+      ${ state.typeParamsFnArgs } |+|
+      (if (${ Expr(state.typeParamNames.nonEmpty) }) " => " else "") |+|
+      ($allMemberCodecsArr + " as const;\n") |+|
+      ("export const " + $allNamesConstName + " = [" +
+        ${ Expr(memberNames.map(s => s"`$s`").mkString(", ")) } + "] as const;\n") |+|
+      ("export type " + $valueType + "Name = (typeof " + $allNamesConstName + ")[number];\n") |+|
+      "\n" |+|
       ${ state.wrapCodec('{ $imports.iotsUnion($allMemberCodecsArr) }) } |+|
-      $imports.lift("\n") |+|
-      (if (${ Expr(state.typeParamNames.isEmpty) }) $ordInst else $imports.emptyStr) |+|
+      "\n" |+|
+      (if (${ Expr(state.typeParamNames.isEmpty) }) $ordInst else Generated.empty) |+|
       (
-        if (${ Expr(anyDynamic) }) $imports.emptyStr
-        else $imports.lift("export const all" ++ $valueType ++ " = [" ++
-          ${ Expr.ofList(memberNames) }.map(ScalaTs.decapitalize).mkString(", ") ++ "] as const;\n")
+        if (${ Expr(allConstant) })
+          $imports.lift("export const all" + $valueType + " = [" +
+            ${ Expr(memberConstNames.mkString(", ")) } + "] as const;\n")
+        else Generated.empty
       ) |+|
       (
         if (${ Expr(state.typeParamNames.isEmpty) })
-          $imports.lift("export type " ++ $valueType ++ "Map<A> = { [K in " ++ $valueType ++ "Name]: A };\n")
+          $imports.lift("export type " + $valueType + "Map<A> = { [K in " + $valueType + "Name]: A };\n")
         else
-          $imports.emptyStr
+          Generated.empty
       )
     }
   }
 
-  def generateCaseClass[A: Type](mirror: Mirror, state: GenerateState): Expr[TsImports.With[String]] = {
+  private def generateCaseClass[A: Type](mirror: Mirror, state: GenerateState): Expr[Generated] = {
     val typesAndLabels0 = mirror.types.toList.zip(mirror.labels).map {
       case (tpe, label) =>
         val res = tpe.asType match {
-          case '[t] => '{ $imports.lift("  " ++ ${Expr(label)} ++ ": ") |+| ${ generate[t](state.copy(top = false)) } }
-        }: @annotation.nowarn("msg=match may not be exhaustive")
+          case '[t] => '{ $imports.lift("  " + ${Expr(label)} + ": ") |+| ${ generate[t](state.copy(top = false)) } }
+        }
         res
     }
     val typesAndLabels = Expr.ofList(
       if (state.inEnum)
         '{
           $imports.lift("  _tag: ") |+|
-          $imports.iotsLiteral("`" ++ ${ Expr(baseTypeName(TypeRepr.of[A])) } ++ "`")
+          $imports.iotsLiteral("`" + ${ Expr(baseTypeName(TypeRepr.of[A])) } + "`")
         } :: typesAndLabels0
       else
         typesAndLabels0
@@ -277,29 +316,54 @@ private case class ScalaTs(config: Expr[Config])(using override val ctx: Quotes)
     state.wrapCodec('{
       $imports.iotsTypeFunction(
         $imports.lift("{\n") |+|
-        $typesAndLabels.intercalate($imports.lift(",\n")) |+|
-        $imports.lift("\n}")
+        intercalate($imports.lift(",\n"))($typesAndLabels) |+|
+        "\n}"
       )
     })
   }
 
-  // def generateCaseObject[A: Type](top: Boolean): GeneratedCode = ???
-
-  type WrapCodec = Expr[TsImports.With[String]] => Expr[TsImports.With[String]]
+  @annotation.unused
+  private def generateTaggedType(state: GenerateState, tpe: TypeRepr, underlyingType: TypeRepr, tagType: TypeRepr): Expr[Generated] = {
+    val tagTypeNameExpr = Expr(baseTypeName(tagType))
+    val codecName = mkCodecName(tpe)
+    val codecNameExpr = Expr(codecName)
+    val codecTypeExpr = Expr(cap(codecName))
+    val valueTypeExpr = Expr(cap(codecName).stripSuffix("C"))
+    val underlyingCodecNameExpr = Expr(codecName + "Underlying")
+    '{
+      $imports.lift("export interface " + $tagTypeNameExpr + " { readonly " + $tagTypeNameExpr + ": unique symbol; }\n") |+|
+      ("const " + $underlyingCodecNameExpr + " = ") |+|
+      ${ (underlyingType.asType match { case '[t] => generate[t](state.copy(top = false)) }) } |+|
+      ";\n" |+|
+      ("export const " + $codecNameExpr + " = ") |+|
+      $imports.iotsBrand(
+        $imports.lift("\n  " + $underlyingCodecNameExpr + ",\n") |+|
+        "  (x): x is " |+|
+        $imports.iotsBrandedType($imports.iotsTypeOf("typeof " + $underlyingCodecNameExpr) |+| ", " |+| $tagTypeNameExpr) |+|
+        (" => " + $underlyingCodecNameExpr + ".is(x),\n") |+|
+        ("  \"" + $tagTypeNameExpr + "\"\n")
+      ) |+|
+      ";\n" |+|
+      ("export type " + $codecTypeExpr + " = typeof " + $codecNameExpr + ";\n") |+|
+      ("export type " + $valueTypeExpr + " = ") |+|
+      $imports.iotsTypeOf($codecTypeExpr) |+|
+      ";"
+    }
+  }
 
   case class GenerateState(
     top: Boolean,
     inEnum: Boolean,
     typeParamNames: List[String],
-    typeParamsTypes: Expr[TsImports.With[String]],
+    typeParamsTypes: Expr[Generated],
     typeParamsFnArgs: Expr[String],
-    wrapCodec: WrapCodec,
+    wrapCodec: Expr[Generated] => Expr[Generated],
   )
 
-  def generate[A: Type](state: GenerateState): Expr[TsImports.With[String]] = {
+  def generate[A: Type](state: GenerateState): Expr[Generated] = {
     val typeRepr = TypeRepr.of[A]
     typeRepr.asType match {
-      case '[ScalaTs.TypeParam[a]] =>
+      case '[TypeParam[a]] =>
         TypeRepr.of[a] match {
           case ConstantType(c) => c.value match { case s: String => '{ $imports.lift(${ Expr(s) }) } }
         }: @annotation.nowarn("msg=match may not be exhaustive")
@@ -331,7 +395,17 @@ private case class ScalaTs(config: Expr[Config])(using override val ctx: Quotes)
       case '[scalaz.\/[l, r]] => '{ $imports.iotsEither(${ generate[l](state.copy(top = false)) }, ${ generate[r](state.copy(top = false)) }) }
       case '[Ior[l, r]] => '{ $imports.iotsThese(${ generate[l](state.copy(top = false)) }, ${ generate[r](state.copy(top = false)) }) }
       case '[scalaz.\&/[l, r]] => '{ $imports.iotsThese(${ generate[l](state.copy(top = false)) }, ${ generate[r](state.copy(top = false)) }) }
-      case '[Map[k, v]] => '{ $imports.iotsRecord(${tsRecordKeyType[k]}, ${ generate[v](state.copy(top = false)) }) }
+      case '[Map[k, v]] => '{ $imports.iotsRecord(${ tsRecordKeyType[k](state) }, ${ generate[v](state.copy(top = false)) }) }
+      // case _ if tagTypeName.exists(_ == fullTypeName(typeRepr.dealias)) =>
+      //   typeRepr.dealias match {
+      //     case AppliedType(_, underlyingType :: tagType :: Nil) =>
+      //       if (state.top) generateTaggedType(state, typeRepr, underlyingType, tagType)
+      //       else {
+      //         println(s"************** referencing tagged type: ${typeRepr.show}")
+      //         '{ $imports.custom(TypeName(${ Expr(fullTypeName(typeRepr)) }), ${ Expr(mkCodecName(typeRepr)) }) }
+      //       }
+      //     case t => report.errorAndAbort(s"Expected tagged type to have two type parameters, got `${t.show}`")
+      //   }
       case _ =>
         if (state.top) {
           Mirror(typeRepr) match {
@@ -347,104 +421,124 @@ private case class ScalaTs(config: Expr[Config])(using override val ctx: Quotes)
         } else {
           val typeParams = typeRepr match {
             case AppliedType(_, params) =>
-              @annotation.nowarn("msg=match may not be exhaustive")
               val tpeParamVals = Expr.ofList(params.map(_.asType match { case '[t] => generate[t](state.copy(top = false)) }))
 
               '{
                 $imports.lift("(") |+|
-                  ($tpeParamVals.foldMap { case (i, s) => (i, List(s)) }.pipe { case (i, l) => (i, l.mkString(", ")) }) |+|
-                  $imports.lift(")")
+                  intercalate($imports.lift(", "))($tpeParamVals) |+|
+                  ")"
               }
 
             case _ =>
-              '{ $imports.emptyStr }
+              '{ Generated.empty }
           }
 
-          '{ $imports.custom(TypeName(${ Expr(typeRepr.show) }), ${ Expr(mkCodecName(typeRepr)) }) |+| $typeParams }
+          '{
+            $customType(${ Expr(typeRepr.show) })
+              .getOrElse($imports.custom(TypeName(${ Expr(fullTypeName(typeRepr)) }), ${ Expr(mkCodecName(typeRepr)) }) |+| $typeParams)
+          }
         }
     }
   }
 
   private val typeParamTypes = IndexedSeq(
-    TypeRepr.of[ScalaTs.TypeParam["A1"]],
-    TypeRepr.of[ScalaTs.TypeParam["A2"]],
-    TypeRepr.of[ScalaTs.TypeParam["A3"]],
-    TypeRepr.of[ScalaTs.TypeParam["A4"]],
-    TypeRepr.of[ScalaTs.TypeParam["A5"]],
-    TypeRepr.of[ScalaTs.TypeParam["A6"]],
-    TypeRepr.of[ScalaTs.TypeParam["A7"]],
-    TypeRepr.of[ScalaTs.TypeParam["A8"]],
-    TypeRepr.of[ScalaTs.TypeParam["A9"]],
-    TypeRepr.of[ScalaTs.TypeParam["A10"]],
+    TypeRepr.of[TypeParam["A1"]],
+    TypeRepr.of[TypeParam["A2"]],
+    TypeRepr.of[TypeParam["A3"]],
+    TypeRepr.of[TypeParam["A4"]],
+    TypeRepr.of[TypeParam["A5"]],
+    TypeRepr.of[TypeParam["A6"]],
+    TypeRepr.of[TypeParam["A7"]],
+    TypeRepr.of[TypeParam["A8"]],
+    TypeRepr.of[TypeParam["A9"]],
+    TypeRepr.of[TypeParam["A10"]],
   )
 
-  def generateTopLevel[A: Type](inEnum: Boolean): Expr[TsImports.With[String]] = {
+  private def generatedTypeNames[A: Type]: Set[String] = {
+    val typeRepr = TypeRepr.of[A]
+    val typeName = fullTypeName(typeRepr)
+    Mirror(typeRepr) match {
+      case Some(m) =>
+        m.mirrorType match {
+          case MirrorType.Sum =>
+            m.types.flatMap(_.asType match { case '[t] => generatedTypeNames[t] }).toSet + typeName
+          case MirrorType.Product =>
+            Set(typeName)
+        }
+      case None =>
+        Set(typeName)
+    }
+  }
+
+  def generatedTypes[A: Type]: Expr[Set[TypeName]] =
+    '{ ${ Expr(generatedTypeNames[A]) }.map(TypeName(_)) }
+
+  def generateTopLevel[A: Type](inEnum: Boolean): Expr[Generated] = {
     val typeRepr = TypeRepr.of[A]
     val (typeParamNames, typeParams, fnArgs, genCodec) = typeRepr match {
       case AppliedType(tpe, params) if params.nonEmpty =>
         val tps = params.zipWithIndex.map { case (_, i) => typeParamTypes(i) }
         val tpNames = tps.map(_.asType match {
-          case '[ScalaTs.TypeParam[a]] =>
+          case '[TypeParam[a]] =>
             TypeRepr.of[a] match { case ConstantType(c) => c.value match { case s: String => s } }
         }): @annotation.nowarn("msg=match may not be exhaustive")
-        val tpTypes = Expr.ofList(tpNames.map(t => '{ $imports.lift(${ Expr(t) } ++ " extends ") |+| $imports.iotsMixed }))
-        val tpVals = Expr.ofList(tpNames.map(t => '{ ${ Expr(t) } ++ ": " ++ ${ Expr(t) } }))
+        val tpTypes = Expr.ofList(tpNames.map(t => '{ $imports.lift(${ Expr(t) } + " extends ") |+| $imports.iotsMixed }))
+        val tpVals = Expr.ofList(tpNames.map(t => '{ ${ Expr(t) } + ": " + ${ Expr(t) } }))
         val tpsCode = '{
           $imports.lift("<") |+|
-            ($tpTypes.foldMap { case (i, s) => (i, List(s)) }.pipe { case (i, l) => (i, l.mkString(", ")) }) |+|
-            $imports.lift(">")
+            intercalate($imports.lift(", "))($tpTypes) |+|
+            ">"
         }
         val fnArgsCode = '{ $tpVals.mkString("(", ", ", ")") }
-        @annotation.nowarn("msg=match may not be exhaustive")
         val codec = AppliedType(tpe, tps).asType match { case '[t] => generate[t] }
         (tpNames, tpsCode, fnArgsCode, codec)
 
       case _ =>
-        (Nil, '{ $imports.emptyStr }, '{""}, generate[A])
+        (Nil, '{ Generated.empty }, '{""}, generate[A])
     }
 
     val codecName0 = mkCodecName(typeRepr)
     val codecName = Expr(codecName0)
-    val codecType = Expr(codecName0.capitalize)
-    val valueType = Expr(codecName0.capitalize.stripSuffix("C"))
-    val className = Expr(codecName0 ++ "C")
+    val codecType = Expr(cap(codecName0))
+    val valueType = Expr(cap(codecName0).stripSuffix("C"))
+    val className = Expr(codecName0 + "C")
     val joinedTPNames = Expr(typeParamNames.mkString(", "))
     val genState = GenerateState(true, inEnum, typeParamNames, typeParams, fnArgs, _)
 
     if (typeParamNames.nonEmpty)
       genCodec(genState(codec => '{
-        $imports.lift("export class " ++ $className) |+|
+        $imports.lift("export class " + $className) |+|
           $typeParams |+|
-          $imports.lift(" { codec = ") |+|
-          $imports.lift($fnArgs) |+|
-          $imports.lift(" => ") |+|
+          " { codec = " |+|
+          $fnArgs |+|
+          " => " |+|
           $codec |+|
-          $imports.lift("}\n") |+|
-          $imports.lift("export const " ++ $codecName ++ " = ") |+|
+          "}\n" |+|
+          ("export const " + $codecName + " = ") |+|
           $typeParams |+|
-          $imports.lift($fnArgs) |+|
-          $imports.lift(" => new " ++ $codecName ++ "C<" ++ $joinedTPNames ++ ">().codec(" ++ $joinedTPNames ++ ");\n") |+|
-          $imports.lift("export type " ++ $codecType) |+|
+          $fnArgs |+|
+          (" => new " + $codecName + "C<" + $joinedTPNames + ">().codec(" + $joinedTPNames + ");\n") |+|
+          ("export type " + $codecType) |+|
           $typeParams |+|
-          $imports.lift(" = ReturnType<" ++ $className ++ "<" ++ $joinedTPNames ++ ">[\"codec\"]>;\n") |+|
-          $imports.lift("export type " ++ $valueType ++ "<" ++ $joinedTPNames ++ "> = ") |+|
+          (" = ReturnType<" + $className + "<" + $joinedTPNames + ">[\"codec\"]>;\n") |+|
+          ("export type " + $valueType + "<" + $joinedTPNames + "> = ") |+|
           $imports.iotsTypeOf(
-            $imports.lift($codecType ++ "<") |+|
+            $imports.lift($codecType + "<") |+|
               ${ Expr(typeParamNames) }.intercalateMap($imports.lift(", "))(
-                t => $imports.iotsTypeType |+| $imports.lift("<" ++ t ++ ">")) |+|
-              $imports.lift(">")
+                t => $imports.iotsTypeType |+| $imports.lift("<" + t + ">")) |+|
+              ">"
           ) |+|
-          $imports.lift(";")
+          ";"
       }))
     else
       genCodec(genState(codec => '{
-        $imports.lift("export const " ++ $codecName ++ " = ") |+|
+        $imports.lift("export const " + $codecName + " = ") |+|
           $codec |+|
-          $imports.lift(";\n") |+|
-          $imports.lift("export type " ++ $codecType ++ " = typeof " ++ $codecName ++ ";\n") |+|
-          $imports.lift("export type " ++ $valueType ++ " = ") |+|
+          ";\n" |+|
+          ("export type " + $codecType + " = typeof " + $codecName + ";\n") |+|
+          ("export type " + $valueType + " = ") |+|
           $imports.iotsTypeOf($codecType) |+|
-          $imports.lift(";\n")
+          ";\n"
       }))
   }
 }
@@ -452,12 +546,39 @@ private case class ScalaTs(config: Expr[Config])(using override val ctx: Quotes)
 object ScalaTs {
   private[ScalaTs] case class TypeParam[Name]()
 
-  def decapitalize(s: String): String = s.take(1).toLowerCase ++ s.drop(1)
-  def unionOrdName(s: String): String = decapitalize(s) ++ "Ord"
+  def intercalate(glue: Generated)(xs: List[Generated]): Generated =
+    xs match {
+      case Nil => Generated.empty
+      case h :: t => t.foldLeft(h)((acc, x) => acc |+| glue |+| x)
+    }
 
-  private def generateImpl[A: Type](config: Expr[Config])(using ctx: Quotes): Expr[TsImports.With[String]] =
-    new ScalaTs(config).generateTopLevel[A](false)
+  def cap(s: String): String = s.take(1).toUpperCase + s.drop(1)
+  def decap(s: String): String = s.take(1).toLowerCase + s.drop(1)
+  def unionOrdName(s: String): String = decap(s) + "Ord"
 
-  inline def generate[A](inline config: Config): TsImports.With[String] =
-    ${ generateImpl[A]('config) }
+  private def generateImpl[A: Type](customType: Expr[CustomType], tagTypeName: Expr[Option[String]], imports: Expr[TsImports.available])(using ctx: Quotes): Expr[(Set[TypeName], Generated)] = {
+    val sts = new ScalaTs(customType, tagTypeName, imports)
+    Expr.ofTuple((
+      sts.generatedTypes[A],
+      sts.generateTopLevel[A](false),
+    ))
+  }
+
+  trait CustomType {
+    def apply(name: String): Option[Generated]
+    // def apply(quotes: Quotes)(typeRepr: quotes.reflect.TypeRepr): Option[Generated]
+  }
+
+  object CustomType {
+    val none = new CustomType {
+      def apply(name: String) = None
+    }
+  }
+
+  inline def generate[A](
+    inline customType: CustomType,
+    inline tagTypeName: Option[String],
+    inline imports: TsImports.available,
+  ): (Set[TypeName], Generated) =
+    ${ generateImpl[A]('customType, 'tagTypeName, 'imports) }
 }

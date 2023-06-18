@@ -1,11 +1,33 @@
-package scalats
+package sts
+
+import scala.quoted.*
 
 case class Config(
   tsImports: TsImportsConfig = TsImportsConfig(),
   // getOrdInstance: PartialFunction[core.TypeScriptModel.TypeRef, core.TsImports.With[String]] = PartialFunction.empty,
-  // scalaTagTypeName: Option[String] = None,
+  scalaTagTypeName: Option[String] = None,
   // excludeType: Type => Boolean = _ => false,
 )
+
+object Config {
+  given fromExpr: FromExpr[Config] = new FromExpr[Config] {
+    def unapply(x: Expr[Config])(using Quotes): Option[Config] = x match {
+      case '{ Config(${ Expr(imports) }, ${ Expr(tagTypeName) }) } => Some(Config(imports, tagTypeName))
+      case _ => None
+    }
+  }
+}
+
+/*
+  given OptionFromExpr[T](using Type[T], FromExpr[T]): FromExpr[Option[T]] with {
+    def unapply(x: Expr[Option[T]])(using Quotes) = x match {
+      case '{ Option[T](${Expr(y)}) } => Some(Option(y))
+      case '{ None } => Some(None)
+      case '{ ${Expr(opt)} : Some[T] } => Some(opt)
+      case _ => None
+    }
+  }
+*/
 
 case class TsImportsConfig(
   fptsBoolean: String = "fp-ts/lib/boolean",
@@ -30,3 +52,58 @@ case class TsImportsConfig(
   iotsLocalDate: Option[(String, String)] = None,
   iotsThese: Option[(String, String)] = None
 )
+
+object TsImportsConfig {
+  given fromExpr: FromExpr[TsImportsConfig] = new FromExpr[TsImportsConfig] {
+    def unapply(x: Expr[TsImportsConfig])(using Quotes): Option[TsImportsConfig] = x match {
+      case '{
+        TsImportsConfig(
+          ${ Expr(fptsBoolean) },
+          ${ Expr(fptsDate) },
+          ${ Expr(fptsEither) },
+          ${ Expr(fptsNumber) },
+          ${ Expr(fptsOption) },
+          ${ Expr(fptsOrd) },
+          ${ Expr(fptsReadonlyArray) },
+          ${ Expr(fptsReadonlySet) },
+          ${ Expr(fptsString) },
+          ${ Expr(fptsThese) },
+          ${ Expr(fptsPipe) },
+          ${ Expr(iots) },
+          ${ Expr(iotsDateTime) },
+          ${ Expr(iotsReadonlyNonEmptyArray) },
+          ${ Expr(iotsReadonlySetFromArray) },
+          ${ Expr(iotsNumberFromString) },
+          ${ Expr(iotsOption) },
+          ${ Expr(iotsBigNumber) },
+          ${ Expr(iotsEither) },
+          ${ Expr(iotsLocalDate) },
+          ${ Expr(iotsThese) },
+        )
+      } => Some(TsImportsConfig(
+        fptsBoolean,
+        fptsDate,
+        fptsEither,
+        fptsNumber,
+        fptsOption,
+        fptsOrd,
+        fptsReadonlyArray,
+        fptsReadonlySet,
+        fptsString,
+        fptsThese,
+        fptsPipe,
+        iots,
+        iotsDateTime,
+        iotsReadonlyNonEmptyArray,
+        iotsReadonlySetFromArray,
+        iotsNumberFromString,
+        iotsOption,
+        iotsBigNumber,
+        iotsEither,
+        iotsLocalDate,
+        iotsThese,
+      ))
+      case _ => None
+    }
+  }
+}

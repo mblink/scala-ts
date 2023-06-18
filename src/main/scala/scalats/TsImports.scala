@@ -1,9 +1,23 @@
-package scalats
+package sts
 
 import cats.{Monoid, Semigroup, Show}
 import cats.syntax.foldable._
-import cats.syntax.functor._
 import cats.syntax.semigroup._
+
+case class Generated(imports: TsImports, data: String) {
+  def |+|(other: Generated): Generated =
+    Generated(TsImports.monoid.combine(imports, other.imports), data + other.data)
+
+  def |+|(other: String): Generated =
+    Generated(imports, data + other)
+}
+
+object Generated {
+  implicit val monoid: Monoid[Generated] =
+    Monoid.instance(Generated(TsImports.monoid.empty, ""), _ |+| _)
+
+  lazy val empty: Generated = monoid.empty
+}
 
 case class TypeName(name: String) {
   override final lazy val toString: String = name
@@ -70,13 +84,21 @@ class TsImports private (private val m: Map[TsImport.Location, TsImport]) {
       case (TsImport.Unresolved(_), i) => s"""import $i from <unresolved>"""
     }.mkString(", ")})"
 
-  def ++(other: TsImports): TsImports = new TsImports(m |+| other.m)
+  final def ++(other: TsImports): TsImports = new TsImports(m |+| other.m)
 
   // def foldLeft[A](init: A)(f: (A, QualifiedImport) => A): A =
   //   m.foldLeft(init) { case (acc, (l, i)) => f(acc, QualifiedImport(l, i)) }
 
   // def foreach(f: QualifiedImport => Unit): Unit =
   //   foldLeft(())((_, i) => f(i))
+
+  final def resolve(allTypes: Map[String, Set[TypeName]]): TsImports = {
+    val typeToFile = allTypes.flatMap { case (file, typeNames) => typeNames.map((_, file)) }
+    new TsImports(m.map {
+      case (r @ TsImport.Resolved(_), i) => (r, i)
+      case (TsImport.Unresolved(t), i) => (TsImport.Resolved(typeToFile(t)), i)
+    })
+  }
 }
 
 
@@ -94,64 +116,48 @@ object TsImports {
 
   implicit val monoid: Monoid[TsImports] = Monoid.instance(empty, _ ++ _)
 
-  type With[A] = (TsImports, A)
-
-  def lift[A](a: A): TsImports.With[A] = (empty, a)
+  def lift(s: String): Generated = Generated(empty, s)
 
   case class CallableImport(tsImports: TsImports, private val name: String, prefix: String = "(", suffix: String = ")") {
-    lazy val value: With[String] = (tsImports, name)
+    lazy val value: Generated = Generated(tsImports, name)
 
-    def apply(s: String*): With[String] =
-      (tsImports, name ++ prefix ++ s.mkString(", ") ++ suffix)
+    def apply(s: String*): Generated =
+      Generated(tsImports, name ++ prefix ++ s.mkString(", ") ++ suffix)
 
-    def apply(t: With[String]*)(implicit d: DummyImplicit): With[String] = {
-      val (i, s) = lift(name ++ prefix) |+| t.intercalate(lift(", ")) |+| lift(suffix)
-      (tsImports ++ i, s)
-    }
-
-    def lines(
-      firstLine: String => With[String],
-      t: With[List[String]],
-      lastLine: String => With[String]
-    ): With[List[String]] = {
-      val (fli, fl) = firstLine(name ++ prefix)
-      val (lli, ll) = lastLine(suffix)
-      (tsImports ++ t._1 ++ fli ++ lli, List(fl) ++ t._2 ++ List(ll))
+    def apply(t: Generated*)(implicit d: DummyImplicit): Generated = {
+      val w = lift(name ++ prefix) |+| t.intercalate(lift(", ")) |+| lift(suffix)
+      Generated(tsImports ++ w.imports, w.data)
     }
   }
 
   object CallableImport {
-    def apply(t: With[String]): CallableImport = CallableImport(t._1, t._2)
-    def apply(t: With[String], p: String, s: String): CallableImport = CallableImport(t._1, t._2, p, s)
+    def apply(t: Generated): CallableImport = CallableImport(t._1, t._2)
+    def apply(t: Generated, p: String, s: String): CallableImport = CallableImport(t._1, t._2, p, s)
   }
 
-  case class available(config: Config) {
+  case class available(tsi: TsImportsConfig) {
     final lazy val empty: TsImports = TsImports.empty
-    final lazy val tsi = config.tsImports
 
-    def lift(s: String): With[String] = TsImports.lift(s)
-    lazy val emptyStr: With[String] = lift("")
+    def lift(s: String): Generated = TsImports.lift(s)
 
-    private def namedImport(loc: String, valueName: String, alias: Option[String]): With[String] =
-      (names(loc, alias.fold(valueName)(a => s"$valueName as $a")), alias.getOrElse(valueName))
+    private def namedImport(loc: String, valueName: String, alias: Option[String]): Generated =
+      Generated(names(loc, alias.fold(valueName)(a => s"$valueName as $a")), alias.getOrElse(valueName))
 
-    private def namedImport(loc: String, valueName: String): With[String] = namedImport(loc, valueName, None)
+    private def namedImport(loc: String, valueName: String): Generated = namedImport(loc, valueName, None)
 
-    private def namedImport(typeName: TypeName, valueName: String, alias: Option[String]): With[String] =
-      (names(typeName, alias.fold(valueName)(a => s"$valueName as $a")), alias.getOrElse(valueName))
+    private def namedImport(typeName: TypeName, valueName: String, alias: Option[String]): Generated =
+      Generated(names(typeName, alias.fold(valueName)(a => s"$valueName as $a")), alias.getOrElse(valueName))
 
     @annotation.unused
-    private def namedImport(typeName: TypeName, valueName: String): With[String] = namedImport(typeName, valueName, None)
+    private def namedImport(typeName: TypeName, valueName: String): Generated = namedImport(typeName, valueName, None)
 
-    private def namedImport(t: (String, String)): With[String] = namedImport(t._2, t._1)
+    private def namedImport(t: (String, String)): Generated = namedImport(t._2, t._1)
 
-    // private def namedImport(t: (String, String)): With[String] = namedImport(t._2, t._1)
-
-    private def optImport(o: Option[(String, String)], tpeName: String, cfgKey: String): With[String] =
+    private def optImport(o: Option[(String, String)], tpeName: String, cfgKey: String): Generated =
       o.map(namedImport).getOrElse(sys.error(s"$tpeName type requested but $cfgKey import config value missing"))
 
     class FptsUtil(imprt: tsi.type => String) {
-      def apply(name: String, alias: Option[String] = None): With[String] = namedImport(imprt(tsi), name, alias)
+      def apply(name: String, alias: Option[String] = None): Generated = namedImport(imprt(tsi), name, alias)
     }
 
     lazy val fptsBoolean = new FptsUtil(_.fptsBoolean)
@@ -168,26 +174,26 @@ object TsImports {
     lazy val fptsThese = CallableImport(all(tsi.fptsThese, "Th"), "Th", ".", "")
 
     lazy val iotsImport = all(tsi.iots, "t")
-    lazy val iotsBoolean = (iotsImport, "t.boolean")
+    lazy val iotsBoolean = Generated(iotsImport, "t.boolean")
     lazy val iotsBrand = CallableImport(iotsImport, "t.brand")
     lazy val iotsBrandedType = CallableImport(iotsImport, "t.Branded", "<", ">")
-    lazy val iotsErrors = (iotsImport, "t.Errors")
+    lazy val iotsErrors = Generated(iotsImport, "t.Errors")
     lazy val iotsLiteral = CallableImport(iotsImport, "t.literal")
-    lazy val iotsMixed = (iotsImport, "t.Mixed")
-    lazy val iotsNull = (iotsImport, "t.null")
-    lazy val iotsNumber = (iotsImport, "t.number")
+    lazy val iotsMixed = Generated(iotsImport, "t.Mixed")
+    lazy val iotsNull = Generated(iotsImport, "t.null")
+    lazy val iotsNumber = Generated(iotsImport, "t.number")
     lazy val iotsReadonlyArray = CallableImport(iotsImport, "t.readonlyArray")
     lazy val iotsRecord = CallableImport(iotsImport, "t.record")
     lazy val iotsStrict = CallableImport(iotsImport, "t.strict")
-    lazy val iotsString = (iotsImport, "t.string")
+    lazy val iotsString = Generated(iotsImport, "t.string")
     lazy val iotsTuple = CallableImport(iotsImport, "t.tuple")
     lazy val iotsTypeFunction = CallableImport(iotsImport, "t.type")
-    lazy val iotsTypeType = (iotsImport, "t.Type")
-    lazy val iotsTypeTypeC = (iotsImport, "t.TypeC")
+    lazy val iotsTypeType = Generated(iotsImport, "t.Type")
+    lazy val iotsTypeTypeC = Generated(iotsImport, "t.TypeC")
     lazy val iotsTypeOf = CallableImport(iotsImport, "t.TypeOf", "<", ">")
-    lazy val iotsUndefined = (iotsImport, "t.undefined")
+    lazy val iotsUndefined = Generated(iotsImport, "t.undefined")
     lazy val iotsUnion = CallableImport(iotsImport, "t.union")
-    lazy val iotsUnknown = (iotsImport, "t.unknown")
+    lazy val iotsUnknown = Generated(iotsImport, "t.unknown")
 
     lazy val iotsDateTime = namedImport(tsi.iotsDateTime)
     lazy val iotsReadonlyNonEmptyArray = CallableImport(namedImport(tsi.iotsReadonlyNonEmptyArray))
@@ -199,6 +205,6 @@ object TsImports {
     lazy val iotsLocalDate = optImport(tsi.iotsLocalDate, "LocalDate", "iotsLocalDate")
     lazy val iotsThese = CallableImport(optImport(tsi.iotsThese, "These", "iotsThese"))
 
-    def custom(typeName: TypeName, valueName: String): With[String] = namedImport(typeName, valueName)
+    def custom(typeName: TypeName, valueName: String): Generated = namedImport(typeName, valueName)
   }
 }
