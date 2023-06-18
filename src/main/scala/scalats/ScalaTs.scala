@@ -378,12 +378,7 @@ private case class ScalaTs(
           val typeParams = typeRepr match {
             case AppliedType(_, params) =>
               val tpeParamVals = Expr.ofList(params.map(_.asType match { case '[t] => generate[t](state.copy(top = false)) }))
-
-              '{
-                $imports.lift("(") |+|
-                  intercalate($imports.lift(", "))($tpeParamVals) |+|
-                  ")"
-              }
+              '{ $imports.lift("(") |+| intercalate($imports.lift(", "))($tpeParamVals) |+| ")" }
 
             case _ =>
               '{ Generated.empty }
@@ -453,11 +448,11 @@ private case class ScalaTs(
         (Nil, '{ Generated.empty }, '{""}, generate[A])
     }
 
-    val codecName0 = mkCodecName(typeRepr)
-    val codecName = Expr(codecName0)
-    val codecType = Expr(cap(codecName0))
-    val valueType = Expr(cap(codecName0).stripSuffix("C"))
-    val className = Expr(codecName0 + "C")
+    val codecName = mkCodecName(typeRepr)
+    val codecNameExpr = Expr(codecName)
+    val codecType = Expr(cap(codecName))
+    val valueType = Expr(cap(codecName).stripSuffix("C"))
+    val className = Expr(codecName + "C")
     val joinedTPNames = Expr(typeParamNames.mkString(", "))
     val genState = GenerateState(true, inEnum, typeParamNames, typeParams, fnArgs, _)
 
@@ -470,10 +465,10 @@ private case class ScalaTs(
           " => " |+|
           $codec |+|
           "}\n" |+|
-          ("export const " + $codecName + " = ") |+|
+          ("export const " + $codecNameExpr + " = ") |+|
           $typeParams |+|
           $fnArgs |+|
-          (" => new " + $codecName + "C<" + $joinedTPNames + ">().codec(" + $joinedTPNames + ");\n") |+|
+          (" => new " + $codecNameExpr + "C<" + $joinedTPNames + ">().codec(" + $joinedTPNames + ");\n") |+|
           ("export type " + $codecType) |+|
           $typeParams |+|
           (" = ReturnType<" + $className + "<" + $joinedTPNames + ">[\"codec\"]>;\n") |+|
@@ -488,10 +483,10 @@ private case class ScalaTs(
       }))
     else
       genCodec(genState(codec => '{
-        $imports.lift("export const " + $codecName + " = ") |+|
+        $imports.lift("export const " + $codecNameExpr + " = ") |+|
           $codec |+|
           ";\n" |+|
-          ("export type " + $codecType + " = typeof " + $codecName + ";\n") |+|
+          ("export type " + $codecType + " = typeof " + $codecNameExpr + ";\n") |+|
           ("export type " + $valueType + " = ") |+|
           $imports.iotsTypeOf($codecType) |+|
           ";\n"
