@@ -11,15 +11,10 @@ import scala.quoted._
 
 private case class ScalaTs(
   customType: Expr[ScalaTs.CustomType],
-  tagTypeName0: Expr[Option[String]],
   imports: Expr[TsImports.available],
 )(using override val ctx: Quotes) extends ReflectionUtils {
   import ctx.reflect._
   import ScalaTs._
-
-  // final val config = configExpr.valueOrAbort
-
-  @annotation.unused private val tagTypeName = tagTypeName0.valueOrAbort
 
   private def fullTypeName(tpe: TypeRepr): String =
     tpe.show.split('[').head
@@ -322,35 +317,6 @@ private case class ScalaTs(
     })
   }
 
-  @annotation.unused
-  private def generateTaggedType(state: GenerateState, tpe: TypeRepr, underlyingType: TypeRepr, tagType: TypeRepr): Expr[Generated] = {
-    val tagTypeNameExpr = Expr(baseTypeName(tagType))
-    val codecName = mkCodecName(tpe)
-    val codecNameExpr = Expr(codecName)
-    val codecTypeExpr = Expr(cap(codecName))
-    val valueTypeExpr = Expr(cap(codecName).stripSuffix("C"))
-    val underlyingCodecNameExpr = Expr(codecName + "Underlying")
-    '{
-      $imports.lift("export interface " + $tagTypeNameExpr + " { readonly " + $tagTypeNameExpr + ": unique symbol; }\n") |+|
-      ("const " + $underlyingCodecNameExpr + " = ") |+|
-      ${ (underlyingType.asType match { case '[t] => generate[t](state.copy(top = false)) }) } |+|
-      ";\n" |+|
-      ("export const " + $codecNameExpr + " = ") |+|
-      $imports.iotsBrand(
-        $imports.lift("\n  " + $underlyingCodecNameExpr + ",\n") |+|
-        "  (x): x is " |+|
-        $imports.iotsBrandedType($imports.iotsTypeOf("typeof " + $underlyingCodecNameExpr) |+| ", " |+| $tagTypeNameExpr) |+|
-        (" => " + $underlyingCodecNameExpr + ".is(x),\n") |+|
-        ("  \"" + $tagTypeNameExpr + "\"\n")
-      ) |+|
-      ";\n" |+|
-      ("export type " + $codecTypeExpr + " = typeof " + $codecNameExpr + ";\n") |+|
-      ("export type " + $valueTypeExpr + " = ") |+|
-      $imports.iotsTypeOf($codecTypeExpr) |+|
-      ";"
-    }
-  }
-
   case class GenerateState(
     top: Boolean,
     inEnum: Boolean,
@@ -396,16 +362,6 @@ private case class ScalaTs(
       case '[Ior[l, r]] => '{ $imports.iotsThese(${ generate[l](state.copy(top = false)) }, ${ generate[r](state.copy(top = false)) }) }
       case '[scalaz.\&/[l, r]] => '{ $imports.iotsThese(${ generate[l](state.copy(top = false)) }, ${ generate[r](state.copy(top = false)) }) }
       case '[Map[k, v]] => '{ $imports.iotsRecord(${ tsRecordKeyType[k](state) }, ${ generate[v](state.copy(top = false)) }) }
-      // case _ if tagTypeName.exists(_ == fullTypeName(typeRepr.dealias)) =>
-      //   typeRepr.dealias match {
-      //     case AppliedType(_, underlyingType :: tagType :: Nil) =>
-      //       if (state.top) generateTaggedType(state, typeRepr, underlyingType, tagType)
-      //       else {
-      //         println(s"************** referencing tagged type: ${typeRepr.show}")
-      //         '{ $imports.custom(TypeName(${ Expr(fullTypeName(typeRepr)) }), ${ Expr(mkCodecName(typeRepr)) }) }
-      //       }
-      //     case t => report.errorAndAbort(s"Expected tagged type to have two type parameters, got `${t.show}`")
-      //   }
       case _ =>
         if (state.top) {
           Mirror(typeRepr) match {
@@ -556,12 +512,9 @@ object ScalaTs {
   def decap(s: String): String = s.take(1).toLowerCase + s.drop(1)
   def unionOrdName(s: String): String = decap(s) + "Ord"
 
-  private def generateImpl[A: Type](customType: Expr[CustomType], tagTypeName: Expr[Option[String]], imports: Expr[TsImports.available])(using ctx: Quotes): Expr[(Set[TypeName], Generated)] = {
-    val sts = new ScalaTs(customType, tagTypeName, imports)
-    Expr.ofTuple((
-      sts.generatedTypes[A],
-      sts.generateTopLevel[A](false),
-    ))
+  private def generateImpl[A: Type](customType: Expr[CustomType], imports: Expr[TsImports.available])(using ctx: Quotes): Expr[(Set[TypeName], Generated)] = {
+    val sts = new ScalaTs(customType, imports)
+    Expr.ofTuple((sts.generatedTypes[A], sts.generateTopLevel[A](false)))
   }
 
   trait CustomType {
@@ -575,10 +528,6 @@ object ScalaTs {
     }
   }
 
-  inline def generate[A](
-    inline customType: CustomType,
-    inline tagTypeName: Option[String],
-    inline imports: TsImports.available,
-  ): (Set[TypeName], Generated) =
-    ${ generateImpl[A]('customType, 'tagTypeName, 'imports) }
+  inline def generate[A](inline customType: CustomType, inline imports: TsImports.available): (Set[TypeName], Generated) =
+    ${ generateImpl[A]('customType, 'imports) }
 }
