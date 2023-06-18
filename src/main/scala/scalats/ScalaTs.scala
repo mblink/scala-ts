@@ -519,7 +519,6 @@ object ScalaTs {
 
   trait CustomType {
     def apply(name: String): Option[Generated]
-    // def apply(quotes: Quotes)(typeRepr: quotes.reflect.TypeRepr): Option[Generated]
   }
 
   object CustomType {
