@@ -3,6 +3,8 @@ package sts
 import cats.{Monoid, Semigroup, Show}
 import cats.syntax.foldable._
 import cats.syntax.semigroup._
+import java.io.File
+import java.nio.file.Paths
 
 case class Generated(imports: TsImports, data: String) {
   def |+|(other: Generated): Generated =
@@ -19,7 +21,7 @@ object Generated {
   lazy val empty: Generated = monoid.empty
 }
 
-case class TypeName(name: String) {
+case class TypeName(name: String, fallbacks: List[String] = Nil) {
   override final lazy val toString: String = name
 }
 
@@ -30,6 +32,7 @@ sealed trait TsImport {
 
 object TsImport {
   sealed trait Location
+  case object Local extends Location
   case class Resolved(location: String) extends Location
   case class Unresolved(typeName: TypeName) extends Location
 
@@ -79,9 +82,10 @@ class TsImports private (private val m: Map[TsImport.Location, TsImport]) {
   private[TsImports] final lazy val toList: List[(TsImport.Location, TsImport)] = m.toList
 
   override final lazy val toString: String =
-    s"TsImports(${toList.map {
-      case (TsImport.Resolved(l), i) => s"""import $i from "$l""""
-      case (TsImport.Unresolved(_), i) => s"""import $i from <unresolved>"""
+    s"TsImports(${toList.flatMap {
+      case (TsImport.Local, _) => None
+      case (TsImport.Resolved(l), i) => Some(s"""import $i from "$l"""")
+      case (TsImport.Unresolved(_), i) => Some(s"""import $i from <unresolved>""")
     }.mkString(", ")})"
 
   final def ++(other: TsImports): TsImports = new TsImports(m |+| other.m)
@@ -92,12 +96,21 @@ class TsImports private (private val m: Map[TsImport.Location, TsImport]) {
   // def foreach(f: QualifiedImport => Unit): Unit =
   //   foldLeft(())((_, i) => f(i))
 
-  final def resolve(allTypes: Map[String, Set[TypeName]]): TsImports = {
-    val typeToFile = allTypes.flatMap { case (file, typeNames) => typeNames.map((_, file)) }
-    new TsImports(m.map {
-      case (r @ TsImport.Resolved(_), i) => (r, i)
-      case (TsImport.Unresolved(t), i) => (TsImport.Resolved(typeToFile(t)), i)
-    })
+  final def resolve(currFile: String, allTypes: Map[String, Set[TypeName]]): Map[TsImport.Resolved, TsImport] = {
+    val typeToFile = allTypes.flatMap { case (file, typeNames) =>
+      typeNames.flatMap(t => Map(t.name -> file) ++ t.fallbacks.map((_, file)))
+    }
+    m.flatMap {
+      case (TsImport.Local, _) => None
+      case (r @ TsImport.Resolved(_), i) => Some((r, i))
+      case (TsImport.Unresolved(t), i) =>
+        val file = typeToFile.get(t.name)
+          .orElse(t.fallbacks.collectFirst(Function.unlift(typeToFile.get)))
+          .getOrElse(sys.error(s"Failed to resolve import for type `${t.name}` (fallback: `${t.fallbacks}`)"))
+
+        if (file == currFile) None
+        else Some((TsImport.Resolved(TsImports.normalizePath(TsImports.relPath(file, new File(currFile).getParent))), i))
+    }
   }
 }
 
@@ -117,6 +130,14 @@ object TsImports {
   implicit val monoid: Monoid[TsImports] = Monoid.instance(empty, _ ++ _)
 
   def lift(s: String): Generated = Generated(empty, s)
+
+  private[TsImports] def relPath(filePath: String, fromPath: String): String =
+    Paths.get(fromPath).relativize(Paths.get(filePath)).toString
+
+  private[TsImports] def normalizePath(path: String): String = {
+    val woExt = path.replaceAll("\\.tsx?$", "")
+    if (woExt.startsWith(".")) woExt else s"./$woExt"
+  }
 
   case class CallableImport(tsImports: TsImports, private val name: String, prefix: String = "(", suffix: String = ")") {
     lazy val value: Generated = Generated(tsImports, name)
