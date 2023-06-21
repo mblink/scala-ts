@@ -37,22 +37,43 @@ lazy val pomSettings = Seq(
     </developers>
 )
 
-lazy val scalaVersions = Seq("2.12.17", "2.13.10")
+lazy val scalaVersions = Seq("2.12.17", "2.13.10", "3.3.0")
+
+def foldScalaV(scalaVersion: String)(on2: => A, on3: => A): A =
+  scalaVersion match {
+    case s if s.startsWith("2.") => on2
+    case s if s.startsWith("3.") => on2
+  }
 
 lazy val root = (project in file(".")).
   settings(Seq(
     name := "scala-ts",
-    organization := "com.github.miloszpp",
+    organization := "bondlink",
     crossScalaVersions := scalaVersions,
-    scalaVersion := scalaVersions.find(_.startsWith("2.13")).get,
+    scalaVersion := scalaVersions.find(_.startsWith("3.")).get,
+    scalacOptions ++= foldScalaV(scalaVersion.value)(
+      Seq(),
+      Seq(
+        "-Wvalue-discard",
+        "-Wunused:implicits",
+        "-Wunused:imports",
+        "-Wunused:locals",
+        "-Wunused:params",
+        "-Wunused:privates",
+        "-Wunused:unsafe-warn-patvars",
+      ),
+    )
+    libraryDependencies ++= Seq(
+      "io.circe" %% "circe-core" % "0.14.3",
+      "joda-time" % "joda-time" % "2.12.5",
+      "org.typelevel" %% "cats-core" % "2.9.0",
+      // Scalaz is just needed for trying to cast values to types like `\/` and `\&/`
+      "org.scalaz" %% "scalaz-core" % "7.3.6",
+    ) ++ foldScalaV(scalaVersion.value)(
+      Seq(
+        "org.scala-lang" % "scala-reflect" % scalaVersion.value,
+        "ch.qos.logback" % "logback-classic" % "1.2.3",
+      ),
+      Seq(),
+    )
   ) ++ publishSettings ++ pomSettings)
-
-libraryDependencies ++= Seq(
-  "org.scala-lang" % "scala-reflect" % scalaVersion.value,
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "io.circe" %% "circe-core" % "0.14.3",
-  "org.scalatest" %% "scalatest" % "3.1.0" % "test",
-  "org.typelevel" %% "cats-core" % "2.9.0",
-  // Scalaz is just needed for trying to cast values to types like `\/` and `\&/`
-  "org.scalaz" %% "scalaz-core" % "7.3.6",
-)
