@@ -6,25 +6,6 @@ import cats.syntax.semigroup.*
 import java.io.File
 import java.nio.file.Paths
 
-case class Generated(imports: TsImports, data: String) {
-  def |+|(other: Generated): Generated =
-    Generated(TsImports.monoid.combine(imports, other.imports), data + other.data)
-
-  def |+|(other: String): Generated =
-    Generated(imports, data + other)
-}
-
-object Generated {
-  implicit val monoid: Monoid[Generated] =
-    Monoid.instance(Generated(TsImports.monoid.empty, ""), _ |+| _)
-
-  lazy val empty: Generated = monoid.empty
-}
-
-case class TypeName(name: String) {
-  override final lazy val toString: String = name
-}
-
 sealed trait TsImport {
   val str: String
   override final lazy val toString: String = str
@@ -143,7 +124,7 @@ object TsImports {
 
     def apply(t: Generated*)(implicit d: DummyImplicit): Generated = {
       val w = lift(name ++ prefix) |+| t.intercalate(lift(", ")) |+| lift(suffix)
-      Generated(tsImports ++ w.imports, w.data)
+      Generated(tsImports ++ w.imports, w.code)
     }
   }
 

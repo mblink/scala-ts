@@ -12,6 +12,25 @@ import scala.util.chaining.*
 
 private[sts] case class TypeParam[Name]()
 
+case class Generated(imports: TsImports, code: String) {
+  def |+|(other: Generated): Generated =
+    Generated(TsImports.monoid.combine(imports, other.imports), code + other.code)
+
+  def |+|(other: String): Generated =
+    Generated(imports, code + other)
+}
+
+object Generated {
+  implicit val monoid: Monoid[Generated] =
+    Monoid.instance(Generated(TsImports.monoid.empty, ""), _ |+| _)
+
+  lazy val empty: Generated = monoid.empty
+}
+
+case class TypeName(name: String) {
+  override final lazy val toString: String = name
+}
+
 case class ReferencedTypes(types: Map[TypeName, Set[TypeName]])
 
 object ReferencedTypes {
