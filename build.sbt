@@ -37,12 +37,12 @@ lazy val pomSettings = Seq(
     </developers>
 )
 
-lazy val scalaVersions = Seq("2.12.17", "2.13.10", "3.3.0")
+lazy val scalaVersions = Seq("2.12.18", "2.13.11", "3.3.0")
 
-def foldScalaV(scalaVersion: String)(on2: => A, on3: => A): A =
+def foldScalaV[A](scalaVersion: String)(on2: => A, on3: => A): A =
   scalaVersion match {
     case s if s.startsWith("2.") => on2
-    case s if s.startsWith("3.") => on2
+    case s if s.startsWith("3.") => on3
   }
 
 lazy val root = (project in file(".")).
@@ -62,7 +62,7 @@ lazy val root = (project in file(".")).
         "-Wunused:privates",
         "-Wunused:unsafe-warn-patvars",
       ),
-    )
+    ),
     libraryDependencies ++= Seq(
       "io.circe" %% "circe-core" % "0.14.3",
       "joda-time" % "joda-time" % "2.12.5",
