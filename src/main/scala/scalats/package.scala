@@ -7,5 +7,8 @@ extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
     B.intercalate(glue).combineAllOption(F.toIterable(fa).map(f)).getOrElse(B.empty)
 }
 
-inline def generate[A](using inline customType: ScalaTs.CustomType, inline imports: TsImports.available): (Set[TypeName], Generated) =
+inline def generate[A](
+  using inline customType: ScalaTs.CustomType,
+  inline imports: TsImports.available,
+): (List[(Option[TypeName], Generated)], ReferencedTypes) =
   ScalaTs.generate[A](customType, imports)

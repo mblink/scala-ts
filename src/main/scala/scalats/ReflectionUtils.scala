@@ -1,11 +1,11 @@
 package sts
 
 import scala.annotation.tailrec
-import scala.deriving._
-import scala.quoted._
+import scala.deriving.*
+import scala.quoted.*
 
 class ReflectionUtils(using val ctx: Quotes) {
-  import ctx.reflect._
+  import ctx.reflect.*
 
   def summonOptional[F[_]: Type, A: Type](using Quotes): Expr[Option[F[A]]] =
     Expr.summon[F[A]] match {
