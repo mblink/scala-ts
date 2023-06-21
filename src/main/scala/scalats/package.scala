@@ -12,3 +12,9 @@ inline def generate[A](
   inline imports: TsImports.available,
 ): (List[(Option[TypeName], Generated)], ReferencedTypes) =
   ScalaTs.generate[A](customType, imports)
+
+inline def referenceCode[A](
+  using inline customType: ScalaTs.CustomType,
+  inline imports: TsImports.available,
+): Generated =
+  ScalaTs.referenceCode[A](customType, imports)

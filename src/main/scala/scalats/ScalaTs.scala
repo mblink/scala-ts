@@ -658,6 +658,22 @@ object ScalaTs {
   ): (List[(Option[TypeName], Generated)], ReferencedTypes) =
     ${ generateImpl[A]('customType, 'imports) }
 
+  @experimental
+  private def referenceCodeImpl[A: Type](
+    customType: Expr[CustomType],
+    imports: Expr[TsImports.available],
+  )(using ctx: Quotes): Expr[Generated] = {
+    val sts = new ScalaTs(customType, imports)
+    val gen = sts.generate[A](sts.GenerateState(false, false, Nil, '{ Generated.empty }, '{""}, identity))
+    '{ $gen.foldMap(_._2) }
+  }
+
+  inline def referenceCode[A](
+    inline customType: CustomType,
+    inline imports: TsImports.available,
+  ): Generated =
+    ${ referenceCodeImpl[A]('customType, 'imports) }
+
   private def sortTypes(types: List[(Option[TypeName], Generated)], refs: ReferencedTypes): List[Generated] = {
     val all = types.flatMap { case (typeName, generated) => typeName.map((_, generated)) }.toMap
 
@@ -692,8 +708,21 @@ object ScalaTs {
     Using.resource(new PrintStream(file))(f)
   }
 
+  private def mkAllTypesByFile(allGenerated: List[(File, (List[(Option[TypeName], Generated)], ReferencedTypes))]): Map[String, Set[TypeName]] =
+    allGenerated.foldMap { case (f, ts) => Map(f.toString -> ts._1.flatMap(_._1).toSet) }
+
+  def resolve(
+    currFile: File,
+    generated: Generated,
+    allGenerated: List[(File, (List[(Option[TypeName], Generated)], ReferencedTypes))],
+  ): (Map[TsImport.Resolved, TsImport], String) = {
+    val allTypesByFile = mkAllTypesByFile(allGenerated)
+    val Generated(imports, code) = generated
+    imports.resolve(currFile.toString, allTypesByFile, code)
+  }
+
   def write(allGenerated: List[(File, (List[(Option[TypeName], Generated)], ReferencedTypes))]): Unit = {
-    val allTypesByFile = allGenerated.foldMap { case (f, ts) => Map(f.toString -> ts._1.flatMap(_._1).toSet) }
+    val allTypesByFile = mkAllTypesByFile(allGenerated)
     val all = allGenerated.foldMap { case (file, l) => Map(file.toString -> l) }.map { case (file, (types, refs)) =>
       val (allImports, allCode) = sortTypes(types, refs).foldMap { case Generated(imports, code) =>
         val (updImports, updCode) = imports.resolve(file.toString, allTypesByFile, code)
