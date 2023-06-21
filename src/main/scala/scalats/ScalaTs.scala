@@ -28,9 +28,13 @@ private case class ScalaTs(
   import ctx.reflect.*
   import ScalaTs.*
 
+  // Full type name, including package, excluding type parameters
+  // e.g. `fullTypeName("foo.bar.Baz[Quux]")` => `"foo.bar.Baz"`
   private def fullTypeName(tpe: TypeRepr): String =
     tpe.show.split('[').head
 
+  // Base type name, excluding type paramters
+  // e.g. `baseTypeName("foo.bar.Baz[Quux]")` => `"Baz"`
   private def baseTypeName(tpe: TypeRepr): String =
     fullTypeName(tpe).split('.').last
 
