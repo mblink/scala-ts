@@ -53,7 +53,13 @@ private case class ScalaTs(
   }
 
   private def mkCodecName(tpe: TypeRepr): String =
-    maybeDecap(baseTypeName(tpe)) + "C"
+    if (tpe.show != tpe.dealias.show)
+      maybeDecap(baseTypeName(tpe)) + "C"
+    else
+      Mirror(tpe).map(_.mirrorType) match {
+        case Some(MirrorType.Sum) => baseTypeName(tpe) + "CU"
+        case Some(MirrorType.Product) | None => maybeDecap(baseTypeName(tpe)) + "C"
+      }
 
   private object NumberType {
     def unapply[A](t: Type[A]): Boolean =
@@ -268,7 +274,7 @@ private case class ScalaTs(
     val allNamesConstName = '{ "all" + $valueType + "Names" }
     lazy val ordInst = '{
       $imports.lift("export const " + decap($valueType) + "Ord: ") |+|
-        $imports.fptsOrd("Ord<" + $valueType + "> = ") |+|
+        $imports.fptsOrd("Ord<" + $valueType + "U> = ") |+|
         $imports.fptsPipe(
           $imports.fptsString("Ord", Some("stringOrd")) |+|
             ", " |+|
@@ -484,7 +490,7 @@ private case class ScalaTs(
     val codecName = mkCodecName(typeRepr)
     val codecNameExpr = Expr(codecName)
     val codecType = Expr(cap(codecName))
-    val valueType = Expr(cap(codecName).stripSuffix("C"))
+    val valueType = Expr(cap(codecName).replaceAll("C(U?)$", "$1"))
     val className = Expr(codecName + "C")
     val joinedTPNames = Expr(typeParamNames.mkString(", "))
     val genState = GenerateState(true, inEnum, typeParamNames, typeParams, fnArgs, _)
