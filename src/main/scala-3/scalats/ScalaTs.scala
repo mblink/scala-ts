@@ -5,7 +5,6 @@ import cats.syntax.foldable.*
 import cats.syntax.semigroup.*
 import io.circe.Json
 import java.io.{File, PrintStream}
-import scala.annotation.experimental
 import scala.quoted.*
 import scala.util.Using
 import scala.util.chaining.*
@@ -115,7 +114,6 @@ with TypeParser {
       }
   }
 
-  @experimental
   private def tsRecordKeyType[A: Type](state: GenerateState): Expr[Generated] =
     TypeRepr.of[A].asType match {
       case NumberType() => '{ $imports.iotsNumberFromString }
@@ -233,7 +231,6 @@ with TypeParser {
     }
   }
 
-  @experimental
   private def generateEnum[A: Type](mirror: Mirror, state: GenerateState): Expr[List[(Option[TypeName], Generated)]] = {
     val typeRepr = TypeRepr.of[A]
     val valueType = Expr(baseTypeName(typeRepr))
@@ -376,7 +373,6 @@ with TypeParser {
     }
   }
 
-  @experimental
   private def generateCaseClass[A: Type](mirror: Mirror, state: GenerateState): Expr[List[(Option[TypeName], Generated)]] = {
     val typeRepr = TypeRepr.of[A]
     val typesAndLabels0 = mirror.types.toList.zip(mirror.labels).map {
@@ -416,7 +412,6 @@ with TypeParser {
     wrapCodec: Expr[Generated] => Expr[Generated],
   )
 
-  @experimental
   def generate[A: Type](state: GenerateState): Expr[List[(Option[TypeName], Generated)]] = {
     val typeRepr = TypeRepr.of[A]
     val handleTop = (gen: Expr[Generated]) =>
@@ -529,7 +524,6 @@ with TypeParser {
     TypeRepr.of[TypeParam["A22"]],
   )
 
-  @experimental
   def generateTopLevel[A: Type](inEnum: Boolean): Expr[List[(Option[TypeName], Generated)]] = {
     val typeRepr = TypeRepr.of[A]
     val (typeParamNames, typeParams, fnArgs, genCodec) = typeRepr match {
@@ -599,7 +593,6 @@ with TypeParser {
       }))
   }
 
-  @experimental
   private def referencedTypeNamesEnum[A: Type](mirror: Mirror, currType: String): Map[String, Set[String]] =
     mirror.types.foldMap { t =>
       val typeName = fullTypeName(t)
@@ -611,11 +604,9 @@ with TypeParser {
       })
     }
 
-  @experimental
   private def referencedTypeNamesCaseClass[A: Type](mirror: Mirror, currType: String): Map[String, Set[String]] =
     mirror.types.foldMap(_.asType match { case '[t] => referencedTypeNames[t](false, currType) })
 
-  @experimental
   private def referencedTypeNames[A: Type](top: Boolean, currType: String): Map[String, Set[String]] = {
     val typeRepr = TypeRepr.of[A]
     parseType(typeRepr) match {
@@ -658,7 +649,6 @@ with TypeParser {
     }
   }
 
-  @experimental
   def referencedTypes[A: Type]: Expr[ReferencedTypes] =
     '{
       ReferencedTypes(
@@ -697,7 +687,6 @@ object ScalaTs {
     }
   }
 
-  @experimental
   private def generateImpl[A: Type](
     customType: Expr[CustomType],
     imports: Expr[TsImports.available],
@@ -712,7 +701,6 @@ object ScalaTs {
   ): (List[(Option[TypeName], Generated)], ReferencedTypes) =
     ${ generateImpl[A]('customType, 'imports) }
 
-  @experimental
   private def referenceCodeImpl[A: Type](
     customType: Expr[CustomType],
     imports: Expr[TsImports.available],
