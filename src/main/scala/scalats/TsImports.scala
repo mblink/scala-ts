@@ -218,6 +218,7 @@ object TsImports {
     lazy val iotsBoolean = Generated(iotsImport, "t.boolean")
     lazy val iotsBrand = CallableImport(iotsImport, "t.brand")
     lazy val iotsBrandedType = CallableImport(iotsImport, "t.Branded", "<", ">")
+    lazy val iotsContext = Generated(iotsImport, "t.Context")
     lazy val iotsErrors = Generated(iotsImport, "t.Errors")
     lazy val iotsLiteral = CallableImport(iotsImport, "t.literal")
     lazy val iotsMixed = Generated(iotsImport, "t.Mixed")

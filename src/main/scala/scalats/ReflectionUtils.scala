@@ -4,7 +4,9 @@ import scala.annotation.tailrec
 import scala.deriving.*
 import scala.quoted.*
 
-class ReflectionUtils(using val ctx: Quotes) {
+trait ReflectionUtils {
+  implicit val ctx: Quotes
+
   import ctx.reflect.*
 
   def summonOptional[F[_]: Type, A: Type](using Quotes): Expr[Option[F[A]]] =

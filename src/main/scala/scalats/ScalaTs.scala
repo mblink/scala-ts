@@ -1,17 +1,16 @@
 package sts
 
 import cats.{Eval, Monoid}
-import cats.data.{Chain, Ior, NonEmptyChain, NonEmptyList, NonEmptyVector}
 import cats.syntax.foldable.*
 import cats.syntax.semigroup.*
 import io.circe.Json
 import java.io.{File, PrintStream}
-import java.time.{Instant, LocalDate => JLocalDate, LocalDateTime, ZonedDateTime}
-import org.joda.time.{DateTime, LocalDate}
 import scala.annotation.experimental
-import scala.collection.immutable.SortedSet
 import scala.quoted.*
 import scala.util.Using
+import scala.util.chaining.*
+
+private[sts] case class TypeParam[Name]()
 
 case class ReferencedTypes(types: Map[TypeName, Set[TypeName]])
 
@@ -24,7 +23,9 @@ object ReferencedTypes {
 private case class ScalaTs(
   customType: Expr[ScalaTs.CustomType],
   imports: Expr[TsImports.available],
-)(using override val ctx: Quotes) extends ReflectionUtils {
+)(using override val ctx: Quotes)
+extends ReflectionUtils
+with TypeParser {
   import ctx.reflect.*
   import ScalaTs.*
 
@@ -39,20 +40,42 @@ private case class ScalaTs(
     fullTypeName(tpe).split('.').last
 
   private def ordInstance[A: Type]: Expr[Generated] = {
+    lazy val err = report.errorAndAbort(s"`Ord` instance requested for ${Type.show[A]} but not found")
     val typeRepr = TypeRepr.of[A]
-    typeRepr.asType match {
-      case '[String] => '{ $imports.fptsString("Ord", Some("stringOrd")) }
-      case '[Boolean] => '{ $imports.fptsBoolean("Ord", Some("boolOrd")) }
-      case NumberType() => '{ $imports.fptsNumber("Ord", Some("numberOrd")) }
-      case '[Option[a]] => '{ $imports.fptsOption($imports.lift("Ord(") |+| ${ ordInstance[a] } |+| ")") }
-      case _ =>
+
+    parseType(typeRepr) match {
+      case T.String => '{ $imports.fptsString("Ord", Some("stringOrd")) }
+      case T.Boolean => '{ $imports.fptsBoolean("Ord", Some("boolOrd")) }
+      case T.Number => '{ $imports.fptsNumber("Ord", Some("numberOrd")) }
+      case t: T.Eval[a] => ordInstance[a](using t.a)
+      case t: T.List[a] => '{ $imports.fptsReadonlyArray($imports.lift("getOrd(") |+| ${ ordInstance[a](using t.a) } |+| ")") }
+      case t: T.Option[a] => '{ $imports.fptsOption($imports.lift("Ord(") |+| ${ ordInstance[a](using t.a) } |+| ")") }
+
+      case _: T.Unknown[_] =>
         Mirror(typeRepr) match {
           case Some(m) if m.mirrorType == MirrorType.Sum =>
             '{ $imports.custom(TypeName(${ Expr(fullTypeName(typeRepr)) }), unionOrdName(${ Expr(baseTypeName(typeRepr)) })) }
 
           case _ =>
-            report.errorAndAbort(s"`Ord` instance requested for ${typeRepr.show} but not found")
+            err
         }
+
+      case (
+        (_: T.TypeParam[_])
+        | T.Json
+        | T.BigNumber
+        | T.LocalDate
+        | T.DateTime
+        | (_: T.Set[_])
+        | (_: T.NonEmptyList[_])
+        | (_: T.Either[_, _])
+        | (_: T.Ior[_, _])
+        | (_: T.Map[_, _])
+        | T.EmptyTuple
+        | (_: T.TupleRec[_, _])
+        | (_: T.TupleN[_])
+      ) =>
+        err
     }
   }
 
@@ -81,72 +104,85 @@ private case class ScalaTs(
     }
 
   private def tsValue(typeRepr: TypeRepr, value: Expr[Any]): Expr[Generated] =
-    typeRepr.asType match {
-      case '[Json] => '{ $imports.lift($value.asInstanceOf[Json].noSpaces) }
-      case NumberType() | '[BigDecimal] | '[Boolean] => '{ $imports.lift($value.toString) }
-      case '[String] | '[LocalDate] | '[JLocalDate] | '[DateTime] | '[LocalDateTime] | '[ZonedDateTime] | '[Instant] => '{ $imports.lift("`" + $value.toString + "`") }
-      case '[Eval[t]] => tsValue(TypeRepr.of[t], '{ $value.asInstanceOf[Eval[t]].value })
-      case '[Chain[t]] =>
-        val t = TypeRepr.of[t]
-        '{ $imports.lift("[") |+| $value.asInstanceOf[Chain[t]].intercalateMap($imports.lift(", "))(a => ${ tsValue(t, 'a) }) |+| "]" }
-      case '[List[t]] =>
-        val t = TypeRepr.of[t]
-        '{ $imports.lift("[") |+| $value.asInstanceOf[List[t]].intercalateMap($imports.lift(", "))(a => ${ tsValue(t, 'a) }) |+| "]" }
-      case '[Vector[t]] =>
-        val t = TypeRepr.of[t]
-        '{ $imports.lift("[") |+| $value.asInstanceOf[Vector[t]].intercalateMap($imports.lift(", "))(a => ${ tsValue(t, 'a) }) |+| "]" }
-      case '[Seq[t]] =>
-        val t = TypeRepr.of[t]
-        '{ $imports.lift("[") |+| $value.asInstanceOf[Seq[t]].intercalateMap($imports.lift(", "))(a => ${ tsValue(t, 'a) }) |+| "]" }
-      case '[Set[t]] =>
-        val t = TypeRepr.of[t]
+    parseType(typeRepr) match {
+      case T.TypeParam() => '{ sys.error("Encountered unexpected type parameter in `tsValue`, value: " + $value) }
+      case T.Json => '{ $imports.lift($value.asInstanceOf[Json].noSpaces) }
+      case T.Number | T.BigNumber | T.Boolean => '{ $imports.lift($value.toString) }
+      case T.String | T.LocalDate | T.DateTime => '{ $imports.lift("`" + $value.toString + "`") }
+      case t: T.Eval[a] => t.a.pipe(implicit a => tsValue(TypeRepr.of[a], '{ $value.asInstanceOf[Eval[a]].value }))
+      case l: T.List[a] => l.a.pipe { implicit a =>
+        val t = TypeRepr.of[a]
+        '{ $imports.lift("[") |+| ${ l.toList }($value).intercalateMap($imports.lift(", "))(a => ${ tsValue(t, 'a) }) |+| "]" }
+      }
+      case t: T.Set[a] => t.a.pipe { implicit a =>
+        val t = TypeRepr.of[a]
         '{
           $imports.fptsReadonlySet(
             $imports.lift("fromReadonlyArray(") |+|
-              ${ ordInstance[t] } |+|
+              ${ ordInstance[a] } |+|
               ")([" |+|
-              $value.asInstanceOf[Set[t]].toList.intercalateMap($imports.lift(", "))(a => ${ tsValue(t, 'a) }) |+|
+              $value.asInstanceOf[Set[a]].toList.intercalateMap($imports.lift(", "))(a => ${ tsValue(t, 'a) }) |+|
               "])"
           )
         }
-      case '[NonEmptyChain[t]] => tsValue(TypeRepr.of[Chain[t]], '{ $value.asInstanceOf[NonEmptyChain[t]].toChain })
-      case '[NonEmptyList[t]] => tsValue(TypeRepr.of[List[t]], '{ $value.asInstanceOf[NonEmptyList[t]].toList })
-      case '[NonEmptyVector[t]] => tsValue(TypeRepr.of[Vector[t]], '{ $value.asInstanceOf[NonEmptyVector[t]].toVector })
-      case '[scalaz.NonEmptyList[t]] => tsValue(TypeRepr.of[List[t]], '{ $value.asInstanceOf[scalaz.NonEmptyList[t]].list.toList })
-      case '[Option[t]] =>
-        '{
-          $imports.fptsOption($value.asInstanceOf[Option[t]].fold($imports.lift("none"))(
-            a => $imports.lift("some(") |+| ${ tsValue(TypeRepr.of[t], 'a) } |+| ")"))
-        }
-      case '[Either[l, r]] =>
-        '{
-          $imports.fptsEither($value.asInstanceOf[Either[l, r]].fold(
+      }
+      case t: T.NonEmptyList[a] => t.a.pipe(implicit a => tsValue(TypeRepr.of[List[a]], '{ ${ t.toNel }($value).toList }))
+      case t: T.Option[a] =>
+        t.a.pipe(implicit a => '{
+          $imports.fptsOption($value.asInstanceOf[Option[a]].fold($imports.lift("none"))(
+            a => $imports.lift("some(") |+| ${ tsValue(TypeRepr.of[a], 'a) } |+| ")"))
+        })
+      case t: T.Either[l, r] =>
+        t.l.pipe(implicit l => t.r.pipe(implicit r => '{
+          $imports.fptsEither(${ t.toEither }($value).fold(
             l => $imports.lift("left(") |+| ${ tsValue(TypeRepr.of[l], 'l) } |+| ")",
             r => $imports.lift("right(") |+| ${ tsValue(TypeRepr.of[r], 'r) } |+| ")",
           ))
-        }
-      case '[scalaz.\/[l, r]] => tsValue(TypeRepr.of[Either[l, r]], '{ $value.asInstanceOf[scalaz.\/[l, r]].toEither })
-      case '[Ior[l, r]] =>
-        val (lt, rt) = (TypeRepr.of[l], TypeRepr.of[r])
-        '{
-          $imports.fptsThese($value.asInstanceOf[Ior[l, r]].fold(
-            l => $imports.lift("left(") |+| ${ tsValue(lt, 'l) } |+| ")",
-            r => $imports.lift("right(") |+| ${ tsValue(rt, 'r) } |+| ")",
-            (l, r) => $imports.lift("both(") |+| ${ tsValue(lt, 'l) } |+| ", " |+| ${ tsValue(rt, 'r) } |+| ")",
-          ))
-        }
-      case '[scalaz.\&/[l, r]] =>
-        tsValue(
-          TypeRepr.of[Ior[l, r]],
-          '{ $value.asInstanceOf[scalaz.\&/[l, r]].fold(Ior.Left(_), Ior.Right(_), Ior.Both(_, _)) })
-      case '[t] =>
-        val tpe = TypeRepr.of[t]
-        '{
+        }))
+      case t: T.Ior[l, r] =>
+        t.l.pipe(implicit l => t.r.pipe { implicit r =>
+          val (lt, rt) = (TypeRepr.of[l], TypeRepr.of[r])
+          '{
+            $imports.fptsThese(${ t.toIor }($value).fold(
+              l => $imports.lift("left(") |+| ${ tsValue(lt, 'l) } |+| ")",
+              r => $imports.lift("right(") |+| ${ tsValue(rt, 'r) } |+| ")",
+              (l, r) => $imports.lift("both(") |+| ${ tsValue(lt, 'l) } |+| ", " |+| ${ tsValue(rt, 'r) } |+| ")",
+            ))
+          }
+        })
+      case t: T.Map[k, v] =>
+        t.k.pipe(implicit k => t.v.pipe(implicit v => '{
+          $value.asInstanceOf[Map[k, v]].pipe(m =>
+            if (m.isEmpty) $imports.lift("{}")
+            else $imports.lift("{ ") |+|
+              m.toList.intercalateMap($imports.lift(",")) { case (k, v) =>
+                ${ tsValue(TypeRepr.of[k], 'k) } |+| ": " |+| ${ tsValue(TypeRepr.of[v], 'v) }
+              } |+|
+              " }"
+          )
+        }))
+      case T.EmptyTuple => '{ $imports.lift("[]") }
+      case t: T.TupleRec[h, t] =>
+        def unroll[T <: Tuple: Type](v: Expr[Any]): List[Expr[Generated]] =
+          Type.of[T] match {
+            case '[*:[h, t]] =>
+              val t = '{ $v.asInstanceOf[*:[h, t]] }
+              tsValue(TypeRepr.of[h], '{ $t.head }) :: unroll[t]('{ $t.tail })
+            case '[EmptyTuple] => Nil
+          }
+        val gen = t.h.pipe(implicit h => t.t.pipe(implicit t => unroll[h *: t](value)))
+        '{ $imports.lift("[") |+| intercalate($imports.lift(", "))(${ Expr.ofList(gen) }) |+| "]" }
+      case _: T.TupleN[_] =>
+        val el = (i: Int) => '{ $value.asInstanceOf[Product].productElement(${ Expr(i) }) }
+        val gen = typeRepr.typeArgs.zipWithIndex.map { case (t, i) => tsValue(t, el(i)) }
+        '{ $imports.lift("[") |+| intercalate($imports.lift(", "))(${ Expr.ofList(gen) }) |+| "]" }
+      case t: T.Unknown[a] =>
+        t.a.pipe(implicit a => '{
           $imports.custom(
-            TypeName(${ Expr(fullTypeName(tpe)) }),
+            TypeName(${ Expr(fullTypeName(TypeRepr.of[a])) }),
             maybeDecap(clsNme($value))
           )
-        }
+        })
     }
 
   private def valMembers(typeRepr: TypeRepr): List[Symbol] = {
@@ -367,46 +403,54 @@ private case class ScalaTs(
     val handleTop = (gen: Expr[Generated]) =>
       if (state.top) '{ List((Some(TypeName(${ Expr(fullTypeName(typeRepr)) })), ${ state.wrapCodec(gen) })) }
       else '{ List((None, $gen)) }
-    typeRepr.asType match {
-      case '[TypeParam[a]] =>
-        TypeRepr.of[a] match {
+
+    parseType(typeRepr) match {
+      case t: T.TypeParam[a] =>
+        TypeRepr.of[a](using t.a) match {
           case ConstantType(c) => c.value match {
             case s: String => handleTop('{ $imports.lift(${ Expr(s) }) })
           }
         }: @annotation.nowarn("msg=match may not be exhaustive")
-
-      case '[Json] => handleTop('{ $imports.iotsUnknown })
-      case NumberType() => handleTop('{ $imports.iotsNumber })
-      case '[BigDecimal] => handleTop('{ $imports.iotsBigNumber })
-      case '[Boolean] => handleTop('{ $imports.iotsBoolean })
-      case '[String] => handleTop('{ $imports.iotsString })
-      case '[LocalDate] => handleTop('{ $imports.iotsLocalDate })
-      case '[JLocalDate] => handleTop('{ $imports.iotsLocalDate })
-      case '[DateTime] => handleTop('{ $imports.iotsDateTime })
-      case '[LocalDateTime] => handleTop('{ $imports.iotsDateTime })
-      case '[ZonedDateTime] => handleTop('{ $imports.iotsDateTime })
-      case '[Instant] => handleTop('{ $imports.iotsDateTime })
-      case '[Eval[a]] => handleTop('{ ${ generate[a](state.copy(top = false)) }.foldMap(_._2) })
-      case '[Chain[a]] => handleTop('{ $imports.iotsReadonlyArray(${ generate[a](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[List[a]] => handleTop('{ $imports.iotsReadonlyArray(${ generate[a](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[Vector[a]] => handleTop('{ $imports.iotsReadonlyArray(${ generate[a](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[Seq[a]] => handleTop('{ $imports.iotsReadonlyArray(${ generate[a](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[Set[a]] => handleTop('{ $imports.iotsReadonlySetFromArray(${ generate[a](state.copy(top = false)) }.foldMap(_._2), ${ ordInstance[a] }) })
-      case '[SortedSet[a]] => handleTop('{ $imports.iotsReadonlySetFromArray(${ generate[a](state.copy(top = false)) }.foldMap(_._2), ${ ordInstance[a] }) })
-      case '[NonEmptyChain[a]] => handleTop('{ $imports.iotsReadonlyNonEmptyArray(${ generate[a](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[NonEmptyList[a]] => handleTop('{ $imports.iotsReadonlyNonEmptyArray(${ generate[a](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[NonEmptyVector[a]] => handleTop('{ $imports.iotsReadonlyNonEmptyArray(${ generate[a](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[scalaz.NonEmptyList[a]] => handleTop('{ $imports.iotsReadonlyNonEmptyArray(${ generate[a](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[Option[a]] => handleTop('{ $imports.iotsOption(${ generate[a](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[Either[l, r]] => handleTop('{ $imports.iotsEither(${ generate[l](state.copy(top = false)) }.foldMap(_._2), ${ generate[r](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[scalaz.\/[l, r]] => handleTop('{ $imports.iotsEither(${ generate[l](state.copy(top = false)) }.foldMap(_._2), ${ generate[r](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[Ior[l, r]] => handleTop('{ $imports.iotsThese(${ generate[l](state.copy(top = false)) }.foldMap(_._2), ${ generate[r](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[scalaz.\&/[l, r]] => handleTop('{ $imports.iotsThese(${ generate[l](state.copy(top = false)) }.foldMap(_._2), ${ generate[r](state.copy(top = false)) }.foldMap(_._2)) })
-      case '[Map[k, v]] => handleTop('{ $imports.iotsRecord(${ tsRecordKeyType[k](state.copy(top = false)) }, ${ generate[v](state.copy(top = false)) }.foldMap(_._2)) })
-      case _ if typeRepr <:< TypeRepr.of[Tuple] =>
-        val tpes = typeRepr.typeArgs.map(_.asType match { case '[t] => generate[t](state.copy(top = false)) })
-        handleTop('{ $imports.iotsTuple($imports.lift("[") |+| intercalate($imports.lift(", "))(${ Expr.ofList(tpes) }.map(_.foldMap(_._2))) |+| "]") })
-      case _ =>
+      case T.Json => handleTop('{ $imports.iotsUnknown })
+      case T.Number => handleTop('{ $imports.iotsNumber })
+      case T.BigNumber => handleTop('{ $imports.iotsBigNumber })
+      case T.Boolean => handleTop('{ $imports.iotsBoolean })
+      case T.String => handleTop('{ $imports.iotsString })
+      case T.LocalDate => handleTop('{ $imports.iotsLocalDate })
+      case T.DateTime => handleTop('{ $imports.iotsDateTime })
+      case t: T.Eval[a] => handleTop('{ ${ generate[a](state.copy(top = false))(using t.a) }.foldMap(_._2) })
+      case t: T.List[a] => handleTop('{ $imports.iotsReadonlyArray(${ generate[a](state.copy(top = false))(using t.a) }.foldMap(_._2)) })
+      case t: T.Set[a] => handleTop('{ $imports.iotsReadonlySetFromArray(${ generate[a](state.copy(top = false))(using t.a) }.foldMap(_._2), ${ ordInstance[a](using t.a) }) })
+      case t: T.NonEmptyList[a] => handleTop('{ $imports.iotsReadonlyNonEmptyArray(${ generate[a](state.copy(top = false))(using t.a) }.foldMap(_._2)) })
+      case t: T.Option[a] => handleTop('{ $imports.iotsOption(${ generate[a](state.copy(top = false))(using t.a) }.foldMap(_._2)) })
+      case t: T.Either[l, r] => handleTop('{ $imports.iotsEither(${ generate[l](state.copy(top = false))(using t.l) }.foldMap(_._2), ${ generate[r](state.copy(top = false))(using t.r) }.foldMap(_._2)) })
+      case t: T.Ior[l, r] => handleTop('{ $imports.iotsThese(${ generate[l](state.copy(top = false))(using t.l) }.foldMap(_._2), ${ generate[r](state.copy(top = false))(using t.r) }.foldMap(_._2)) })
+      case t: T.Map[k, v] => handleTop('{ $imports.iotsRecord(${ tsRecordKeyType[k](state.copy(top = false))(using t.k) }, ${ generate[v](state.copy(top = false))(using t.v) }.foldMap(_._2)) })
+      case T.EmptyTuple =>
+        val cond = Expr("Array.isArray(u) && u.length === 0")
+        handleTop('{
+          $imports.lift("new ") |+| $imports.iotsTypeType |+| "<[]>(\n" |+|
+          " \"EmptyTuple\",\n" |+|
+          "  (u: unknown): u is [] => " |+| $cond |+| ",\n" |+|
+          "  (u: unknown, context: " |+| $imports.iotsContext |+| ") =>\n" |+|
+          ("    " |+| $cond) |+|
+            " ? " |+| $imports.fptsEither("right([])") |+|
+            " : " |+| $imports.fptsEither("left([{ context, value: u, message: \"Expected empty tuple\" }])") |+|
+            ",\n" |+|
+          "  (a: []): [] => a,\n"
+        })
+      case t: T.TupleRec[h, t] =>
+        def unroll[T <: Tuple: Type]: List[Expr[List[(Option[TypeName], Generated)]]] =
+          Type.of[T] match {
+            case '[*:[h, t]] => generate[h](state.copy(top = false)) :: unroll[t]
+            case '[EmptyTuple] => Nil
+          }
+        val gen = t.h.pipe(implicit h => t.t.pipe(implicit t => unroll[h *: t]))
+        handleTop('{ $imports.iotsTuple($imports.lift("[") |+| intercalate($imports.lift(", "))(${ Expr.ofList(gen) }.map(_.foldMap(_._2))) |+| "]") })
+      case _: T.TupleN[_] =>
+        val gen = typeRepr.typeArgs.map(_.asType match { case '[t] => generate[t](state.copy(top = false)) })
+        handleTop('{ $imports.iotsTuple($imports.lift("[") |+| intercalate($imports.lift(", "))(${ Expr.ofList(gen) }.map(_.foldMap(_._2))) |+| "]") })
+      case _: T.Unknown[_] =>
         if (state.top) {
           Mirror(typeRepr) match {
             case Some(mirror) =>
@@ -555,38 +599,27 @@ private case class ScalaTs(
   @experimental
   private def referencedTypeNames[A: Type](top: Boolean, currType: String): Map[String, Set[String]] = {
     val typeRepr = TypeRepr.of[A]
-    typeRepr.asType match {
-      case '[TypeParam[_]] => Map.empty
-      case '[Json] => Map.empty
-      case NumberType() => Map.empty
-      case '[BigDecimal] => Map.empty
-      case '[Boolean] => Map.empty
-      case '[String] => Map.empty
-      case '[LocalDate] => Map.empty
-      case '[JLocalDate] => Map.empty
-      case '[DateTime] => Map.empty
-      case '[LocalDateTime] => Map.empty
-      case '[ZonedDateTime] => Map.empty
-      case '[Instant] => Map.empty
-      case '[Eval[a]] => referencedTypeNames[a](false, currType)
-      case '[Chain[a]] => referencedTypeNames[a](false, currType)
-      case '[List[a]] => referencedTypeNames[a](false, currType)
-      case '[Vector[a]] => referencedTypeNames[a](false, currType)
-      case '[Seq[a]] => referencedTypeNames[a](false, currType)
-      case '[Set[a]] => referencedTypeNames[a](false, currType)
-      case '[SortedSet[a]] => referencedTypeNames[a](false, currType)
-      case '[NonEmptyChain[a]] => referencedTypeNames[a](false, currType)
-      case '[NonEmptyList[a]] => referencedTypeNames[a](false, currType)
-      case '[NonEmptyVector[a]] => referencedTypeNames[a](false, currType)
-      case '[scalaz.NonEmptyList[a]] => referencedTypeNames[a](false, currType)
-      case '[Option[a]] => referencedTypeNames[a](false, currType)
-      case '[Either[l, r]] => referencedTypeNames[l](false, currType) |+| referencedTypeNames[r](false, currType)
-      case '[scalaz.\/[l, r]] => referencedTypeNames[l](false, currType) |+| referencedTypeNames[r](false, currType)
-      case '[Ior[l, r]] => referencedTypeNames[l](false, currType) |+| referencedTypeNames[r](false, currType)
-      case '[scalaz.\&/[l, r]] => referencedTypeNames[l](false, currType) |+| referencedTypeNames[r](false, currType)
-      case '[Map[k, v]] => referencedTypeNames[k](false, currType) |+| referencedTypeNames[v](false, currType)
-      case _ if typeRepr <:< TypeRepr.of[Tuple] => typeRepr.typeArgs.foldMap(_.asType match { case '[t] => referencedTypeNames[t](false, currType) })
-      case _ =>
+    parseType(typeRepr) match {
+      case T.TypeParam() => Map.empty
+      case T.Json => Map.empty
+      case T.Number => Map.empty
+      case T.BigNumber => Map.empty
+      case T.Boolean => Map.empty
+      case T.String => Map.empty
+      case T.LocalDate => Map.empty
+      case T.DateTime => Map.empty
+      case t: T.Eval[a] => referencedTypeNames[a](false, currType)(using t.a)
+      case t: T.List[a] => referencedTypeNames[a](false, currType)(using t.a)
+      case t: T.Set[a] => referencedTypeNames[a](false, currType)(using t.a)
+      case t: T.NonEmptyList[a] => referencedTypeNames[a](false, currType)(using t.a)
+      case t: T.Option[a] => referencedTypeNames[a](false, currType)(using t.a)
+      case t: T.Either[l, r] => referencedTypeNames[l](false, currType)(using t.l) |+| referencedTypeNames[r](false, currType)(using t.r)
+      case t: T.Ior[l, r] => referencedTypeNames[l](false, currType)(using t.l) |+| referencedTypeNames[r](false, currType)(using t.r)
+      case t: T.Map[k, v] => referencedTypeNames[k](false, currType)(using t.k) |+| referencedTypeNames[v](false, currType)(using t.v)
+      case T.EmptyTuple => Map.empty
+      case t: T.TupleRec[h, t] => referencedTypeNames[h](false, currType)(using t.h) |+| referencedTypeNames[t](false, currType)(using t.t)
+      case _: T.TupleN[_] => typeRepr.typeArgs.foldMap(_.asType match { case '[t] => referencedTypeNames[t](false, currType) })
+      case _: T.Unknown[_] =>
         if (top) {
           Mirror(typeRepr) match {
             case Some(m) =>
@@ -617,8 +650,6 @@ private case class ScalaTs(
 }
 
 object ScalaTs {
-  private[ScalaTs] case class TypeParam[Name]()
-
   def intercalate(glue: Generated)(xs: List[Generated]): Generated =
     xs match {
       case Nil => Generated.empty
