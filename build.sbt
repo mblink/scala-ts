@@ -12,6 +12,7 @@ lazy val root = (project in file(".")).
   settings(Seq(
     name := "scala-ts",
     organization := "bondlink",
+    version := "0.10.0-RC1",
     crossScalaVersions := scalaVersions,
     scalaVersion := scalaVersions.find(_.startsWith("3.")).get,
     scalacOptions ++= foldScalaV(scalaVersion.value)(
