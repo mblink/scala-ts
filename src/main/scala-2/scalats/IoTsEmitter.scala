@@ -1,9 +1,7 @@
-package com.mpc.scalats
-package core
+package scalats
 
 import cats.data.{NonEmptyChain, NonEmptyList, NonEmptyVector}
 import cats.syntax.foldable._
-import com.mpc.scalats.configuration.Config
 import scala.annotation.tailrec
 import scala.collection.immutable.ListSet
 import scala.reflect.runtime.universe.Type

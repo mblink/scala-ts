@@ -1,10 +1,9 @@
-package com.mpc.scalats.core
+package scalats
 
 import cats.{Apply, Eval, Functor}
 import cats.syntax.foldable._
 import cats.syntax.traverseFilter._
-import com.mpc.scalats.configuration.Config
-import com.mpc.scalats.core.TypeScriptModel.{
+import scalats.TypeScriptModel.{
   CustomTypeRef,
   Declaration,
   InterfaceDeclaration,

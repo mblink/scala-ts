@@ -1,7 +1,6 @@
-package com.mpc.scalats.core
+package scalats
 
-import com.mpc.scalats.configuration.Config
-import com.mpc.scalats.core.TypeScriptModel._
+import scalats.TypeScriptModel._
 import scala.collection.immutable.ListSet
 
 trait Emitter extends TsImports.HelperSyntax {

@@ -1,4 +1,4 @@
-package com.mpc.scalats.core
+package scalats
 
 trait Logger {
   def warning(msg: => String): Unit

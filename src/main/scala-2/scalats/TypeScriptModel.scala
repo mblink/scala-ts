@@ -1,4 +1,4 @@
-package com.mpc.scalats.core
+package scalats
 
 import scala.collection.immutable.ListSet
 import scala.reflect.runtime.universe.Type

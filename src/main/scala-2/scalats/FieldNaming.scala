@@ -1,4 +1,4 @@
-package com.mpc.scalats.configuration
+package scalats
 
 trait FieldNaming extends (String => String){
   /**
@@ -9,9 +9,9 @@ trait FieldNaming extends (String => String){
 }
 
 object FieldNaming {
-  /** 
+  /**
    * Functional factory
-   * 
+   *
    * @param naming the naming name
    */
   def apply(

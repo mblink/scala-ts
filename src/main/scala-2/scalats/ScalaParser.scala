@@ -1,12 +1,11 @@
-package com.mpc.scalats
-package core
+package scalats
 
 import scala.annotation.tailrec
 import scala.collection.mutable.StringBuilder
 import scala.collection.immutable.ListSet
 import scala.reflect.runtime.universe._
 
-final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boolean)(implicit config: configuration.Config) {
+final class ScalaParser(logger: Logger, mirror: Mirror, excludeType: Type => Boolean)(implicit config: Config) {
   import ScalaModel._
 
   def parseTypes(types: List[Type]): ListSet[TypeDef] =

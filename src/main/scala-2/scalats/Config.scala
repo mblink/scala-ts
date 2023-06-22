@@ -1,5 +1,4 @@
-package com.mpc.scalats
-package configuration
+package scalats
 
 import java.io.PrintStream
 import scala.reflect.runtime.universe.Type
@@ -12,13 +11,13 @@ case class Config(
   prependIPrefix: Boolean = false,
   tsNamingConvention: Boolean = true,
   typescriptIndent: String = "  ",
-  tsImports: TsImports = TsImports(),
-  getOrdInstance: PartialFunction[core.TypeScriptModel.TypeRef, core.TsImports.With[String]] = PartialFunction.empty,
+  tsImports: TsImportsConfig = TsImportsConfig(),
+  getOrdInstance: PartialFunction[TypeScriptModel.TypeRef, TsImports.With[String]] = PartialFunction.empty,
   scalaTagTypeName: Option[String] = None,
   excludeType: Type => Boolean = _ => false,
 )
 
-case class TsImports(
+case class TsImportsConfig(
   fptsBoolean: String = "fp-ts/lib/boolean",
   fptsDate: String = "fp-ts/lib/Date",
   fptsEither: String = "fp-ts/lib/Either",

@@ -1,12 +1,10 @@
-package com.mpc.scalats
-package core
+package scalats
 
 import cats.{Monoid, Semigroup, Show}
 import cats.syntax.foldable._
 import cats.syntax.functor._
 import cats.syntax.semigroup._
 import cats.syntax.show._
-import com.mpc.scalats.configuration.Config
 import java.io.File
 import java.nio.file.Paths
 import scala.reflect.runtime.universe.Type
