@@ -1,5 +1,3 @@
-import sbt.Keys._
-
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
 lazy val scalaVersions = Seq("2.12.18", "2.13.11", "3.3.0")

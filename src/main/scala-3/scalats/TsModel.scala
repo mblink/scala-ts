@@ -1,7 +1,5 @@
 package scalats
 
-import scala.collection.immutable
-
 sealed trait TsModel {
   val typeName: TypeName
   val typeArgs: List[TsModel]

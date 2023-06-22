@@ -3,7 +3,7 @@ package scalats
 import cats.Monoid
 import cats.syntax.semigroup.*
 
-class ReferencedTypes(private[ReferencedTypes] val types: Map[TypeName, Set[TypeName]]) {
+final class ReferencedTypes private (private[ReferencedTypes] val types: Map[TypeName, Set[TypeName]])  {
   private lazy val typesByName = types.map { case (t, ts) => (t.full, ts) }
   final def get(typeName: TypeName): Option[Set[TypeName]] = typesByName.get(typeName.full)
 }
