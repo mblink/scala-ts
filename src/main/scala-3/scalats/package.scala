@@ -1,15 +1,9 @@
 package scalats
 
-import cats.{Foldable, Monoid}
 import cats.syntax.foldable.*
 import java.io.{File, PrintStream}
 import scala.quoted.*
 import scala.util.Using
-
-extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
-  final def intercalateMap[B](glue: B)(f: A => B)(implicit B: Monoid[B]): B =
-    B.intercalate(glue).combineAllOption(F.toIterable(fa).map(f)).getOrElse(B.empty)
-}
 
 private def parseImpl[A: Type](using Quotes): Expr[TsModel] =
   new TsParser().parseTopLevel[A]

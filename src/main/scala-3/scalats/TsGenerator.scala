@@ -1,9 +1,14 @@
 package scalats
 
-import cats.Monoid
+import cats.{Foldable, Monoid}
 import cats.syntax.foldable.*
 import scala.language.implicitConversions
 import scala.util.chaining.*
+
+extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
+  private final def intercalateMap[B](glue: B)(f: A => B)(implicit B: Monoid[B]): B =
+    B.intercalate(glue).combineAllOption(F.toIterable(fa).map(f)).getOrElse(B.empty)
+}
 
 class TsGenerator(customType: TsCustomType, imports: TsImports.Available) {
   private def cap(s: String): String = s.take(1).toUpperCase + s.drop(1)
