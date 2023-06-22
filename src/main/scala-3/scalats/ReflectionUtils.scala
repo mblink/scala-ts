@@ -1,4 +1,4 @@
-package sts
+package scalats
 
 import scala.annotation.tailrec
 import scala.deriving.*
@@ -18,13 +18,15 @@ trait ReflectionUtils {
   enum MirrorType {
     case Sum
     case Product
+    case Singleton
   }
 
   object MirrorType {
     def from(mirror: Expr[scala.deriving.Mirror]): MirrorType =
       mirror match {
+        case '{ ${_}: scala.deriving.Mirror.Singleton } => MirrorType.Singleton
         case '{ ${_}: scala.deriving.Mirror.Product } => MirrorType.Product
-        case '{ ${_}: scala.deriving.Mirror.Sum    }  => MirrorType.Sum
+        case '{ ${_}: scala.deriving.Mirror.Sum } => MirrorType.Sum
       }
   }
 

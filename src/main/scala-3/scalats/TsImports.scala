@@ -1,4 +1,4 @@
-package sts
+package scalats
 
 import cats.{Monoid, Semigroup, Show}
 import cats.syntax.foldable.*
@@ -56,7 +56,7 @@ class TsImports private (private val m: Map[TsImport.Location, TsImport]) {
     code: String,
   ): (Map[TsImport.Resolved, TsImport], String) = {
     val currFileParent = new File(currFile).getParent
-    val typeToFile = allTypes.flatMap { case (file, typeNames) => typeNames.map(t => (t.name, file)) }
+    val typeToFile = allTypes.flatMap { case (file, typeNames) => typeNames.map(t => (t.full, file)) }
     m.foldLeft((Map.empty[TsImport.Resolved, TsImport], code)) {
       case ((accImports, accCode), (TsImport.Resolved(loc), i)) =>
         loc match {
@@ -68,7 +68,7 @@ class TsImports private (private val m: Map[TsImport.Location, TsImport]) {
         }
 
       case ((accImports, accCode), (TsImport.Unresolved(t), i)) =>
-        val file = typeToFile.getOrElse(t.name, sys.error(s"Failed to resolve import for type `${t.name}` from file `$currFile`"))
+        val file = typeToFile.getOrElse(t.full, sys.error(s"Failed to resolve import for type `${t.full}` from file `$currFile`"))
 
         if (file == currFile) {
           (accImports, i match {
@@ -157,7 +157,7 @@ object TsImports {
     iotsThese: Option[(String, String)] = None
   )
 
-  case class available(tsi: TsImports.Config) {
+  case class Available(tsi: TsImports.Config) {
     final lazy val empty: TsImports = TsImports.empty
 
     def lift(s: String): Generated = TsImports.lift(s)
