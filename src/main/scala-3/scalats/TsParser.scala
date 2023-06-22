@@ -11,14 +11,9 @@ case class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
 
     def parseMembers(m: Mirror): List[Expr[TsModel.Object | TsModel.Interface]] = {
       m.mirrorType match {
-        case MirrorType.Sum =>
-          m.types.toList.flatMap(Mirror(_).fold(Nil)(parseMembers))
-
-        case MirrorType.Product =>
-          List(m.mirroredType.asType match { case '[t] => parseCaseClass[t](m, Some(typeRepr)) })
-
-        case MirrorType.Singleton =>
-          List(m.mirroredType.asType match { case '[t] => parseObject[t](Some(typeRepr)) })
+        case MirrorType.Sum => m.types.toList.flatMap(Mirror(_).fold(Nil)(parseMembers))
+        case MirrorType.Product => List(m.mirroredType.asType match { case '[t] => parseCaseClass[t](m, Some(typeRepr)) })
+        case MirrorType.Singleton => List(m.mirroredType.asType match { case '[t] => parseObject[t](Some(typeRepr)) })
       }
     }
 

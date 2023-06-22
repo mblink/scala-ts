@@ -5,7 +5,5 @@ trait TsCustomType {
 }
 
 object TsCustomType {
-  val none = new TsCustomType {
-    def apply(name: String) = None
-  }
+  val none = new TsCustomType { def apply(name: String) = None }
 }

@@ -1,19 +1,12 @@
 package scalats
 
 import scala.annotation.tailrec
-import scala.deriving.*
 import scala.quoted.*
 
 trait ReflectionUtils {
   implicit val ctx: Quotes
 
   import ctx.reflect.*
-
-  def summonOptional[F[_]: Type, A: Type](using Quotes): Expr[Option[F[A]]] =
-    Expr.summon[F[A]] match {
-      case Some(instance) => '{Some($instance)}
-      case None => '{None}
-    }
 
   enum MirrorType {
     case Sum

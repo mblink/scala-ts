@@ -40,25 +40,25 @@ object TsModel {
     val typeArgs = Nil
   }
   case class Array(typeName: TypeName, tpe: TsModel, toList: Any => List[Any]) extends TsModel {
-    val typeArgs = scala.List(tpe)
+    val typeArgs = List(tpe)
   }
   case class Set(typeName: TypeName, tpe: TsModel) extends TsModel {
-    val typeArgs = scala.List(tpe)
+    val typeArgs = List(tpe)
   }
   case class NonEmptyArray(typeName: TypeName, tpe: TsModel, toNel: Any => cats.data.NonEmptyList[Any]) extends TsModel {
-    val typeArgs = scala.List(tpe)
+    val typeArgs = List(tpe)
   }
   case class Option(typeName: TypeName, tpe: TsModel) extends TsModel {
-    val typeArgs = scala.List(tpe)
+    val typeArgs = List(tpe)
   }
   case class Either(typeName: TypeName, left: TsModel, right: TsModel, toEither: Any => scala.Either[Any, Any]) extends TsModel {
-    val typeArgs = scala.List(left, right)
+    val typeArgs = List(left, right)
   }
   case class Ior(typeName: TypeName, left: TsModel, right: TsModel, toIor: Any => cats.data.Ior[Any, Any]) extends TsModel {
-    val typeArgs = scala.List(left, right)
+    val typeArgs = List(left, right)
   }
   case class Map(typeName: TypeName, key: TsModel, value: TsModel) extends TsModel {
-    val typeArgs = scala.List(key, value)
+    val typeArgs = List(key, value)
   }
   case class Tuple(typeName: TypeName, tpes: List[TsModel]) extends TsModel {
     val typeArgs = tpes

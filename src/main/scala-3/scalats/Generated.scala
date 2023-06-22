@@ -12,8 +12,7 @@ case class Generated(imports: TsImports, code: String) {
 }
 
 object Generated {
-  implicit val monoid: Monoid[Generated] =
-    Monoid.instance(Generated(TsImports.monoid.empty, ""), _ |+| _)
+  given monoid: Monoid[Generated] = Monoid.instance(Generated(TsImports.monoid.empty, ""), _ |+| _)
 
   lazy val empty: Generated = monoid.empty
 }
