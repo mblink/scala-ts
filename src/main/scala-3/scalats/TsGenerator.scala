@@ -203,24 +203,30 @@ class TsGenerator(customType: TsCustomType, imports: TsImports.Available) {
 
     given mb: Monoid[Boolean] = Monoid.instance(true, _ && _)
 
-    val (allConstant, memberNames, memberConstNames, memberCodecNames, memberCodecs) = possibilities.foldMap {
-      case i: TsModel.Interface =>
-        val name = i.typeName.base
-        val codecName = mkCodecName(i.typeName, false)
-        val codec = generateTopLevel(i)
-        (false, List(name), Nil, List(codecName), List(codec))
+    val (
+      allConstant,
+      memberNames,
+      memberTypeArgs,
+      memberConstNames,
+      memberCodecNames,
+      memberCodecs
+    ) = possibilities.foldMap(x => {
+      val name = x.typeName.base
+      val codec = generateTopLevel(x)
+      x match {
+        case i: TsModel.Interface =>
+          (false, List(name), List(i.typeArgs.toSet), Nil, List(mkCodecName(i.typeName, false)), List(codec))
+        case o: TsModel.Object =>
+          (true, List(name), List(o.typeArgs.toSet), List(maybeDecap(name)), List(mkCodecName(o.typeName, false)), List(codec))
+      }
+    })
 
-      case o: TsModel.Object =>
-        val name = o.typeName.base
-        val constName = maybeDecap(name)
-        val codecName = mkCodecName(o.typeName, false)
-        val codec = generateTopLevel(o)
-        (true, List(name), List(constName), List(codecName), List(codec))
+    val allMemberCodecs = memberCodecNames.zipWithIndex.map { case (name, idx) =>
+      val mtas = memberTypeArgs(idx)
+      val tas = typeArgs.filter(mtas.contains)
+      if (tas.isEmpty) imports.lift(name)
+      else name |+| "(" |+| tas.intercalateMap(imports.lift(", "))(generate(state.copy(top = false), _).foldMap(_._2)) |+| ")"
     }
-
-    val allMemberCodecs =
-      if (typeArgs.isEmpty) memberCodecNames.map(imports.lift)
-      else memberCodecNames.map(n => n |+| "(" |+| typeArgs.intercalateMap(imports.lift(", "))(generate(state.copy(top = false), _).foldMap(_._2)) |+| ")")
     val allMemberCodecsArr = "[" |+| allMemberCodecs.intercalate(imports.lift(", ")) |+| "]"
     val allNamesConstName = "all" |+| valueType |+| "Names"
     lazy val ordInst =
