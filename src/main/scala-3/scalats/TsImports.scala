@@ -160,77 +160,76 @@ object TsImports {
   case class Available(tsi: TsImports.Config) {
     final lazy val empty: TsImports = TsImports.empty
 
-    def lift(s: String): Generated = TsImports.lift(s)
+    final def lift(s: String): Generated = TsImports.lift(s)
 
-    private def namedImport(loc: String, valueName: String, alias: Option[String]): Generated =
+    final def namedImport(loc: String, valueName: String, alias: Option[String]): Generated =
       Generated(names(loc, alias.fold(valueName)(a => s"$valueName as $a")), alias.getOrElse(valueName))
 
-    private def namedImport(loc: String, valueName: String): Generated = namedImport(loc, valueName, None)
+    final def namedImport(loc: String, valueName: String): Generated = namedImport(loc, valueName, None)
 
-    private def namedImport(typeName: TypeName, valueName: String, alias: Option[String]): Generated =
+    final def namedImport(typeName: TypeName, valueName: String, alias: Option[String]): Generated =
       Generated(names(typeName, alias.fold(valueName)(a => s"$valueName as $a")), alias.getOrElse(valueName))
 
-    @annotation.unused
-    private def namedImport(typeName: TypeName, valueName: String): Generated = namedImport(typeName, valueName, None)
+    final def namedImport(typeName: TypeName, valueName: String): Generated = namedImport(typeName, valueName, None)
 
     private def namedImport(t: (String, String)): Generated = namedImport(t._2, t._1)
 
     private def optImport(o: Option[(String, String)], tpeName: String, cfgKey: String): Generated =
       o.map(namedImport).getOrElse(sys.error(s"$tpeName type requested but $cfgKey import config value missing"))
 
-    class FptsUtil(imprt: tsi.type => String) {
+    final class FptsUtil(imprt: tsi.type => String) {
       def apply(name: String, alias: Option[String] = None): Generated = namedImport(imprt(tsi), name, alias)
     }
 
-    lazy val fptsBoolean = new FptsUtil(_.fptsBoolean)
-    lazy val fptsDate = new FptsUtil(_.fptsDate)
-    lazy val fptsNumber = new FptsUtil(_.fptsNumber)
-    lazy val fptsString = new FptsUtil(_.fptsString)
+    final lazy val fptsBoolean = new FptsUtil(_.fptsBoolean)
+    final lazy val fptsDate = new FptsUtil(_.fptsDate)
+    final lazy val fptsNumber = new FptsUtil(_.fptsNumber)
+    final lazy val fptsString = new FptsUtil(_.fptsString)
 
-    lazy val fptsEither = CallableImport(all(tsi.fptsEither, "E"), "E", ".", "")
-    lazy val fptsOption = CallableImport(all(tsi.fptsOption, "O"), "O", ".", "")
-    lazy val fptsOrd = CallableImport(all(tsi.fptsOrd, "Ord"), "Ord", ".", "")
-    lazy val fptsPipe = CallableImport(namedImport(tsi.fptsPipe))
-    lazy val fptsReadonlyArray = CallableImport(all(tsi.fptsReadonlyArray, "RA"), "RA", ".", "")
-    lazy val fptsReadonlySet = CallableImport(all(tsi.fptsReadonlySet, "RS"), "RS", ".", "")
-    lazy val fptsThese = CallableImport(all(tsi.fptsThese, "Th"), "Th", ".", "")
+    final lazy val fptsEither = CallableImport(all(tsi.fptsEither, "E"), "E", ".", "")
+    final lazy val fptsOption = CallableImport(all(tsi.fptsOption, "O"), "O", ".", "")
+    final lazy val fptsOrd = CallableImport(all(tsi.fptsOrd, "Ord"), "Ord", ".", "")
+    final lazy val fptsPipe = CallableImport(namedImport(tsi.fptsPipe))
+    final lazy val fptsReadonlyArray = CallableImport(all(tsi.fptsReadonlyArray, "RA"), "RA", ".", "")
+    final lazy val fptsReadonlySet = CallableImport(all(tsi.fptsReadonlySet, "RS"), "RS", ".", "")
+    final lazy val fptsThese = CallableImport(all(tsi.fptsThese, "Th"), "Th", ".", "")
 
-    lazy val iotsImport = all(tsi.iots, "t")
-    lazy val iotsBoolean = Generated(iotsImport, "t.boolean")
-    lazy val iotsBrand = CallableImport(iotsImport, "t.brand")
-    lazy val iotsBrandedType = CallableImport(iotsImport, "t.Branded", "<", ">")
-    lazy val iotsContext = Generated(iotsImport, "t.Context")
-    lazy val iotsErrors = Generated(iotsImport, "t.Errors")
-    lazy val iotsLiteral = CallableImport(iotsImport, "t.literal")
-    lazy val iotsMixed = Generated(iotsImport, "t.Mixed")
-    lazy val iotsNull = Generated(iotsImport, "t.null")
-    lazy val iotsNumber = Generated(iotsImport, "t.number")
-    lazy val iotsReadonlyArray = CallableImport(iotsImport, "t.readonlyArray")
-    lazy val iotsRecord = CallableImport(iotsImport, "t.record")
-    lazy val iotsStrict = CallableImport(iotsImport, "t.strict")
-    lazy val iotsString = Generated(iotsImport, "t.string")
-    lazy val iotsTuple = CallableImport(iotsImport, "t.tuple")
-    lazy val iotsTypeFunction = CallableImport(iotsImport, "t.type")
-    lazy val iotsTypeType = Generated(iotsImport, "t.Type")
-    lazy val iotsTypeTypeC = Generated(iotsImport, "t.TypeC")
-    lazy val iotsTypeOf = CallableImport(iotsImport, "t.TypeOf", "<", ">")
-    lazy val iotsUndefined = Generated(iotsImport, "t.undefined")
-    lazy val iotsUnion = CallableImport(iotsImport, "t.union")
-    lazy val iotsUnknown = Generated(iotsImport, "t.unknown")
+    final lazy val iotsImport = all(tsi.iots, "t")
+    final lazy val iotsBoolean = Generated(iotsImport, "t.boolean")
+    final lazy val iotsBrand = CallableImport(iotsImport, "t.brand")
+    final lazy val iotsBrandedType = CallableImport(iotsImport, "t.Branded", "<", ">")
+    final lazy val iotsContext = Generated(iotsImport, "t.Context")
+    final lazy val iotsErrors = Generated(iotsImport, "t.Errors")
+    final lazy val iotsLiteral = CallableImport(iotsImport, "t.literal")
+    final lazy val iotsMixed = Generated(iotsImport, "t.Mixed")
+    final lazy val iotsNull = Generated(iotsImport, "t.null")
+    final lazy val iotsNumber = Generated(iotsImport, "t.number")
+    final lazy val iotsReadonlyArray = CallableImport(iotsImport, "t.readonlyArray")
+    final lazy val iotsRecord = CallableImport(iotsImport, "t.record")
+    final lazy val iotsStrict = CallableImport(iotsImport, "t.strict")
+    final lazy val iotsString = Generated(iotsImport, "t.string")
+    final lazy val iotsTuple = CallableImport(iotsImport, "t.tuple")
+    final lazy val iotsTypeFunction = CallableImport(iotsImport, "t.type")
+    final lazy val iotsTypeType = Generated(iotsImport, "t.Type")
+    final lazy val iotsTypeTypeC = Generated(iotsImport, "t.TypeC")
+    final lazy val iotsTypeOf = CallableImport(iotsImport, "t.TypeOf", "<", ">")
+    final lazy val iotsUndefined = Generated(iotsImport, "t.undefined")
+    final lazy val iotsUnion = CallableImport(iotsImport, "t.union")
+    final lazy val iotsUnknown = Generated(iotsImport, "t.unknown")
 
-    lazy val iotsDateTime = namedImport(tsi.iotsDateTime)
-    lazy val iotsReadonlyNonEmptyArray = CallableImport(namedImport(tsi.iotsReadonlyNonEmptyArray))
-    lazy val iotsReadonlySetFromArray = CallableImport(namedImport(tsi.iotsReadonlySetFromArray))
-    lazy val iotsNumberFromString = namedImport(tsi.iotsNumberFromString)
-    lazy val iotsOption = CallableImport(namedImport(tsi.iotsOption))
-    lazy val iotsBigNumber = optImport(tsi.iotsBigNumber, "BigNumber", "iotsBigNumber")
-    lazy val iotsEither = CallableImport(optImport(tsi.iotsEither, "Either", "iotsEither"))
-    lazy val iotsLocalDate = optImport(tsi.iotsLocalDate, "LocalDate", "iotsLocalDate")
-    lazy val iotsThese = CallableImport(optImport(tsi.iotsThese, "These", "iotsThese"))
+    final lazy val iotsDateTime = namedImport(tsi.iotsDateTime)
+    final lazy val iotsReadonlyNonEmptyArray = CallableImport(namedImport(tsi.iotsReadonlyNonEmptyArray))
+    final lazy val iotsReadonlySetFromArray = CallableImport(namedImport(tsi.iotsReadonlySetFromArray))
+    final lazy val iotsNumberFromString = namedImport(tsi.iotsNumberFromString)
+    final lazy val iotsOption = CallableImport(namedImport(tsi.iotsOption))
+    final lazy val iotsBigNumber = optImport(tsi.iotsBigNumber, "BigNumber", "iotsBigNumber")
+    final lazy val iotsEither = CallableImport(optImport(tsi.iotsEither, "Either", "iotsEither"))
+    final lazy val iotsLocalDate = optImport(tsi.iotsLocalDate, "LocalDate", "iotsLocalDate")
+    final lazy val iotsThese = CallableImport(optImport(tsi.iotsThese, "These", "iotsThese"))
 
     private var incr = Map.empty[String, Int]
 
-    def custom(typeName: TypeName, valueName: String): Generated = {
+    final def custom(typeName: TypeName, valueName: String): Generated = {
       incr = incr.updatedWith(valueName) {
         case Some(i) => Some(i + 1)
         case None => Some(0)
