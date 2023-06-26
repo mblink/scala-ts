@@ -2,7 +2,17 @@ package scalats
 
 import cats.Eval
 
+/**
+ * A helper to sort generated types, see [[scalats.TypeSorter.sort]]
+ */
 object TypeSorter {
+  /**
+   * Sort a set of generated types based on references between them
+   *
+   * @param types The generated types
+   * @params refs The mapping of type to other types it refers to
+   * @return A list of generated code sorted properly
+   */
   def sort(types: List[(Option[TypeName], Generated)], refs: ReferencedTypes): List[Generated] = {
     val all = types.flatMap { case (typeName, generated) => typeName.map(n => (n.full, generated)) }.toMap
 

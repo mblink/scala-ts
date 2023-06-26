@@ -8,6 +8,7 @@ trait ReflectionUtils {
 
   import ctx.reflect.*
 
+  /** An `enum` representing the three different kinds of `scala.deriving.Mirror`s */
   enum MirrorType {
     case Sum
     case Product
@@ -15,6 +16,7 @@ trait ReflectionUtils {
   }
 
   object MirrorType {
+    /** Parse a [[scalats.ReflectionUtils.MirrorType]] from a `scala.deriving.Mirror` */
     def from(mirror: Expr[scala.deriving.Mirror]): MirrorType =
       mirror match {
         case '{ ${_}: scala.deriving.Mirror.Singleton } => MirrorType.Singleton
@@ -23,6 +25,10 @@ trait ReflectionUtils {
       }
   }
 
+  /**
+   * A compile-time representation of a `scala.deriving.Mirror` using `scala.quoted.Quotes.TypeRepr`s
+   * in place of actual types.
+   */
   case class Mirror(
     mirroredType: TypeRepr,
     monoType: TypeRepr,
@@ -33,6 +39,7 @@ trait ReflectionUtils {
   )
 
   object Mirror {
+    /** Parse a [[scalats.ReflectionUtils.Mirror]] from a `scala.deriving.Mirror` */
     def apply(mirror: Expr[scala.deriving.Mirror]): Option[Mirror] = {
       val mirrorTpe = mirror.asTerm.tpe.widen
       for {
@@ -49,17 +56,12 @@ trait ReflectionUtils {
       }
     }
 
-    def apply(tpe: TypeRepr): Option[Mirror] = {
-      val mirrorType = Refinement(TypeRepr.of[scala.deriving.Mirror], "MirroredType", TypeBounds(tpe, tpe))
-      val instance = Implicits.search(mirrorType) match {
-        case iss: ImplicitSearchSuccess => Some(iss.tree.asExprOf[scala.deriving.Mirror])
-        case _: ImplicitSearchFailure => None
-      }
-      instance.flatMap(Mirror(_))
-    }
+    /** Parse a [[scalats.ReflectionUtils.Mirror]] from a `scala.quoted.Quotes.TypeRepr` */
+    def apply(tpe: TypeRepr): Option[Mirror] =
+      tpe.asType match { case '[t] => Expr.summon[scala.deriving.Mirror.Of[t]].flatMap(Mirror(_)) }
   }
 
-  def tupleTypeElements(tp: TypeRepr): List[TypeRepr] = {
+  private def tupleTypeElements(tp: TypeRepr): List[TypeRepr] = {
     @tailrec def loop(tp: TypeRepr, acc: List[TypeRepr]): List[TypeRepr] = tp match {
       case AppliedType(_, List(hd: TypeRepr, tl: TypeRepr)) => loop(tl, hd :: acc)
       case _ => acc
@@ -67,12 +69,12 @@ trait ReflectionUtils {
     loop(tp, Nil).reverse
   }
 
-  def low(tp: TypeRepr): TypeRepr = tp match {
+  private def low(tp: TypeRepr): TypeRepr = tp match {
     case tp: TypeBounds => tp.low
     case tp => tp
   }
 
-  def findMemberType(tp: TypeRepr, name: String): Option[TypeRepr] = tp match {
+  private def findMemberType(tp: TypeRepr, name: String): Option[TypeRepr] = tp match {
     case Refinement(_, `name`, tp) => Some(low(tp))
     case Refinement(parent, _, _) => findMemberType(parent, name)
     case AndType(left, right) => findMemberType(left, name).orElse(findMemberType(right, name))

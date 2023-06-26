@@ -1,5 +1,17 @@
 package scalats
 
+/**
+ * Representation of all the TypeScript types we support generating code for
+ *
+ * Note: `interface`s, `object`s, and `union`s are represented one of two ways:
+ *
+ *   1. As the type definition itself via [[scalats.TsModel.Interface]], [[scalats.TsModel.Object]], and [[scalats.TsModel.Union]]
+ *   2. As a reference to the type via [[scalats.TsModel.InterfaceRef]], [[scalats.TsModel.ObjectRef]], and [[scalats.TsModel.UnionRef]]
+ *
+ * This is done to prevent unnecessary parsing in [[scalats.TsParser]].
+ * The full type definition is only needed when parsing the type itself,
+ * we only need a reference to the type when parsing a type that refers to it.
+ */
 sealed trait TsModel {
   val typeName: TypeName
   val typeArgs: List[TsModel]

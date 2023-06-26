@@ -3,89 +3,66 @@ package scalats
 import scala.quoted.*
 import scala.util.chaining.*
 
-case class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
+/**
+ * Parses scala types to produce instances of [[scalats.TsModel]]
+ *
+ * [[scalats.TsParser.parseTopLevel]] takes a type `A` and replaces its type parameters
+ * with references to [[scalats.TypeParam]], while [[scalats.TsParser.parse]] treats types as is.
+ */
+final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
   import ctx.reflect.*
 
-  private def parseEnum[A: Type](mirror: Mirror): Expr[TsModel] = {
-    val typeRepr = TypeRepr.of[A]
+  /** A predefined set of [[scalats.TypeParam]] instances to use as references in parameterized types */
+  private val typeParamTypes = IndexedSeq(
+    TypeRepr.of[TypeParam["A1"]],
+    TypeRepr.of[TypeParam["A2"]],
+    TypeRepr.of[TypeParam["A3"]],
+    TypeRepr.of[TypeParam["A4"]],
+    TypeRepr.of[TypeParam["A5"]],
+    TypeRepr.of[TypeParam["A6"]],
+    TypeRepr.of[TypeParam["A7"]],
+    TypeRepr.of[TypeParam["A8"]],
+    TypeRepr.of[TypeParam["A9"]],
+    TypeRepr.of[TypeParam["A10"]],
+    TypeRepr.of[TypeParam["A11"]],
+    TypeRepr.of[TypeParam["A12"]],
+    TypeRepr.of[TypeParam["A13"]],
+    TypeRepr.of[TypeParam["A14"]],
+    TypeRepr.of[TypeParam["A15"]],
+    TypeRepr.of[TypeParam["A16"]],
+    TypeRepr.of[TypeParam["A17"]],
+    TypeRepr.of[TypeParam["A18"]],
+    TypeRepr.of[TypeParam["A19"]],
+    TypeRepr.of[TypeParam["A20"]],
+    TypeRepr.of[TypeParam["A21"]],
+    TypeRepr.of[TypeParam["A22"]],
+  )
 
-    def parseMembers(m: Mirror): List[Expr[TsModel.Object | TsModel.Interface]] = {
-      m.mirrorType match {
-        case MirrorType.Sum => m.types.toList.flatMap(Mirror(_).fold(Nil)(parseMembers))
-        case MirrorType.Product => List(m.mirroredType.asType match { case '[t] => parseCaseClass[t](m, Some(typeRepr)) })
-        case MirrorType.Singleton => List(m.mirroredType.asType match { case '[t] => parseObject[t](Some(typeRepr)) })
-      }
+  /**
+   * Parse a given type `A` into a [[scalats.TsModel]], replacing the type parameters of `A` (if any)
+   * with references to [[scalats.TypeParam]].
+   *
+   * @tparam A The type to parse
+   * @return The [[scalats.TsModel]] representation of `A`
+   */
+  def parseTopLevel[A: Type]: Expr[TsModel] =
+    TypeRepr.of[A] match {
+      case AppliedType(tpe, params) if params.nonEmpty =>
+        AppliedType(tpe, params.zipWithIndex.map { case (_, i) => typeParamTypes(i) }).asType match {
+          case '[t] => parse[t](true)
+        }
+      case _ =>
+        parse[A](true)
     }
 
-    '{
-      TsModel.Union(
-        TypeName(${ Expr(typeRepr.show) }),
-        ${ Expr.ofList(typeRepr.typeArgs.map(_.asType match { case '[t] => parse[t](false) })) },
-        ${ Expr.ofList(parseMembers(mirror)) }
-      )
-    }
-  }
-
-  private def parseCaseClass[A: Type](mirror: Mirror, parent: Option[TypeRepr]): Expr[TsModel.Interface] = {
-    val typeRepr = TypeRepr.of[A]
-    val fields = mirror.types.toList.zip(mirror.labels).map { case (tpe, name) =>
-      tpe.asType match { case '[t] => '{ TsModel.InterfaceField(${ Expr(name) }, ${ parse[t](false) }) } }
-    }
-    '{
-      TsModel.Interface(
-        TypeName(${ Expr(typeRepr.show) }),
-        ${ Expr(parent.map(_.show)) }.map(TypeName(_)),
-        ${ Expr.ofList(typeRepr.typeArgs.map(_.asType match { case '[t] => parse[t](false) })) },
-        ${ Expr.ofList(fields) },
-      )
-    }
-  }
-
-  private def valMembers(typeRepr: TypeRepr): List[Symbol] = {
-    val typeSym = typeRepr.typeSymbol
-    (typeSym.fieldMembers ++ typeSym.methodMembers).filter(s =>
-      s.isValDef &&
-        !s.isClassConstructor &&
-        s.name != "toString" &&
-        !(
-          s.privateWithin.nonEmpty ||
-          s.protectedWithin.nonEmpty ||
-          s.flags.is(Flags.Private) ||
-          s.flags.is(Flags.PrivateLocal) ||
-          s.flags.is(Flags.Protected)
-        )
-    ).sortBy(_.name)
-  }
-
-  private def valDefType(typeRepr: TypeRepr, sym: Symbol): TypeRepr = {
-    def unAnd(tpe: TypeRepr): TypeRepr = tpe match {
-      case AndType(t, _) => unAnd(t)
-      case AppliedType(t, ts) => AppliedType(t, ts.map(unAnd))
-      case t => t
-    }
-
-    sym.tree match {
-      case ValDef(_, _, Some(term)) => unAnd(term.tpe)
-      case _ => report.errorAndAbort(s"Failed to get type of ${typeRepr.show}#${sym.name}")
-    }
-  }
-
-  private def parseObject[A: Type](parent: Option[TypeRepr]): Expr[TsModel.Object] = {
-    val typeRepr = TypeRepr.of[A]
-    val value = Expr.summon[ValueOf[A]].getOrElse(report.errorAndAbort(s"Unable to summon `ValueOf[${typeRepr.show}]`"))
-    val members = valMembers(typeRepr)
-    val fields = Expr.ofList(members.map(s => valDefType(typeRepr, s).asType match {
-      case '[a] => '{ TsModel.ObjectField(${ Expr(s.name) }, ${ parse[a](false) }, ${ Select('{ $value.value }.asTerm, s).asExpr }) }
-    }))
-    '{
-      TsModel.Object(
-        TypeName(${ Expr(typeRepr.show) }),
-        ${ Expr(parent.map(_.show)) }.map(TypeName(_)),
-        $fields,
-      )
-    }
-  }
-
+  /**
+   * Parse a given type `A` into a [[scalats.TsModel]]. When `top` is `true`, `enum`s, `case class`es, and `object`s
+   * will be parsed as definitions. When `top` is `false`, they will be parsed as references to the type.
+   *
+   * @tparam A The type to parse
+   * @param top Whether the type should be parsed as a top-level definition
+   * @return The [[scalats.TsModel]] representation of `A`
+   */
   def parse[A: Type](top: Boolean): Expr[TsModel] = {
     val typeRepr = TypeRepr.of[A]
     val typeName = '{ TypeName(${ Expr(typeRepr.show) }) }
@@ -93,9 +70,8 @@ case class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
     typeRepr.asType match {
       case '[Nothing] => '{ TsModel.Unknown($typeName, Nil) }
       case '[TypeParam[a]] =>
-        val name = TypeRepr.of[a] match {
-          case ConstantType(c) => c.value match { case s: String => s }
-        }: @annotation.nowarn("msg=match may not be exhaustive")
+        @annotation.nowarn("msg=match may not be exhaustive")
+        val name = TypeRepr.of[a] match { case ConstantType(c) => c.value match { case s: String => s } }
         '{ TsModel.TypeParam(${ Expr(name) }) }
       case '[io.circe.Json] => '{ TsModel.Json($typeName) }
       case '[Byte] | '[Short] | '[Int] | '[Long] | '[Double] | '[Float] => '{ TsModel.Number($typeName) }
@@ -150,38 +126,86 @@ case class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
     }
   }
 
-  private val typeParamTypes = IndexedSeq(
-    TypeRepr.of[TypeParam["A1"]],
-    TypeRepr.of[TypeParam["A2"]],
-    TypeRepr.of[TypeParam["A3"]],
-    TypeRepr.of[TypeParam["A4"]],
-    TypeRepr.of[TypeParam["A5"]],
-    TypeRepr.of[TypeParam["A6"]],
-    TypeRepr.of[TypeParam["A7"]],
-    TypeRepr.of[TypeParam["A8"]],
-    TypeRepr.of[TypeParam["A9"]],
-    TypeRepr.of[TypeParam["A10"]],
-    TypeRepr.of[TypeParam["A11"]],
-    TypeRepr.of[TypeParam["A12"]],
-    TypeRepr.of[TypeParam["A13"]],
-    TypeRepr.of[TypeParam["A14"]],
-    TypeRepr.of[TypeParam["A15"]],
-    TypeRepr.of[TypeParam["A16"]],
-    TypeRepr.of[TypeParam["A17"]],
-    TypeRepr.of[TypeParam["A18"]],
-    TypeRepr.of[TypeParam["A19"]],
-    TypeRepr.of[TypeParam["A20"]],
-    TypeRepr.of[TypeParam["A21"]],
-    TypeRepr.of[TypeParam["A22"]],
-  )
+  /** Parse an `enum` definiton into its [[scalats.TsModel]] representation */
+  private def parseEnum[A: Type](mirror: Mirror): Expr[TsModel] = {
+    val typeRepr = TypeRepr.of[A]
 
-  def parseTopLevel[A: Type]: Expr[TsModel] =
-    TypeRepr.of[A] match {
-      case AppliedType(tpe, params) if params.nonEmpty =>
-        AppliedType(tpe, params.zipWithIndex.map { case (_, i) => typeParamTypes(i) }).asType match {
-          case '[t] => parse[t](true)
-        }
-      case _ =>
-        parse[A](true)
+    def parseMembers(m: Mirror): List[Expr[TsModel.Object | TsModel.Interface]] = {
+      m.mirrorType match {
+        case MirrorType.Sum => m.types.toList.flatMap(Mirror(_).fold(Nil)(parseMembers))
+        case MirrorType.Product => List(m.mirroredType.asType match { case '[t] => parseCaseClass[t](m, Some(typeRepr)) })
+        case MirrorType.Singleton => List(m.mirroredType.asType match { case '[t] => parseObject[t](Some(typeRepr)) })
+      }
     }
+
+    '{
+      TsModel.Union(
+        TypeName(${ Expr(typeRepr.show) }),
+        ${ Expr.ofList(typeRepr.typeArgs.map(_.asType match { case '[t] => parse[t](false) })) },
+        ${ Expr.ofList(parseMembers(mirror)) }
+      )
+    }
+  }
+
+  /** Parse a `case class` definiton into its [[scalats.TsModel]] representation */
+  private def parseCaseClass[A: Type](mirror: Mirror, parent: Option[TypeRepr]): Expr[TsModel.Interface] = {
+    val typeRepr = TypeRepr.of[A]
+    val fields = mirror.types.toList.zip(mirror.labels).map { case (tpe, name) =>
+      tpe.asType match { case '[t] => '{ TsModel.InterfaceField(${ Expr(name) }, ${ parse[t](false) }) } }
+    }
+    '{
+      TsModel.Interface(
+        TypeName(${ Expr(typeRepr.show) }),
+        ${ Expr(parent.map(_.show)) }.map(TypeName(_)),
+        ${ Expr.ofList(typeRepr.typeArgs.map(_.asType match { case '[t] => parse[t](false) })) },
+        ${ Expr.ofList(fields) },
+      )
+    }
+  }
+
+  private def valMembers(typeRepr: TypeRepr): List[Symbol] = {
+    val typeSym = typeRepr.typeSymbol
+    (typeSym.fieldMembers ++ typeSym.methodMembers).filter(s =>
+      s.isValDef &&
+        !s.isClassConstructor &&
+        s.name != "toString" &&
+        !(
+          s.privateWithin.nonEmpty ||
+          s.protectedWithin.nonEmpty ||
+          s.flags.is(Flags.Private) ||
+          s.flags.is(Flags.PrivateLocal) ||
+          s.flags.is(Flags.Protected)
+        )
+    ).sortBy(_.name)
+  }
+
+  private def valDefType(typeRepr: TypeRepr, sym: Symbol): TypeRepr = {
+    def unAnd(tpe: TypeRepr): TypeRepr = tpe match {
+      case AndType(t, _) => unAnd(t)
+      case AppliedType(t, ts) => AppliedType(t, ts.map(unAnd))
+      case t => t
+    }
+
+    sym.tree match {
+      case ValDef(_, _, Some(term)) => unAnd(term.tpe)
+      case _ => report.errorAndAbort(s"Failed to get type of ${typeRepr.show}#${sym.name}")
+    }
+  }
+
+  /** Parse an `object` definiton into its [[scalats.TsModel]] representation */
+  private def parseObject[A: Type](parent: Option[TypeRepr]): Expr[TsModel.Object] = {
+    val typeRepr = TypeRepr.of[A]
+    val value = Expr.summon[ValueOf[A]].getOrElse(report.errorAndAbort(s"Unable to summon `ValueOf[${typeRepr.show}]`"))
+    val members = valMembers(typeRepr)
+    val fields = Expr.ofList(members.map(s => valDefType(typeRepr, s).asType match {
+      case '[a] => '{ TsModel.ObjectField(${ Expr(s.name) }, ${ parse[a](false) }, ${ Select('{ $value.value }.asTerm, s).asExpr }) }
+    }))
+    '{
+      TsModel.Object(
+        TypeName(${ Expr(typeRepr.show) }),
+        ${ Expr(parent.map(_.show)) }.map(TypeName(_)),
+        $fields,
+      )
+    }
+  }
 }

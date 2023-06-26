@@ -1,3 +1,4 @@
 package scalats
 
-private[scalats] case class TypeParam[Name]()
+/** A placeholder for a type parameter of a scala type */
+class TypeParam[A] private ()
