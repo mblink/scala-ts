@@ -1,58 +1,71 @@
-import sbt.Keys._
-
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
-val publishSettings = Seq(
-  publish / skip := false,
-  publishMavenStyle := true,
-  Test / publishArtifact := false,
-  gitPublishDir := file("/src/maven-repo"),
-  licenses += ("MIT", url("https://opensource.org/licenses/MIT"))
-)
+lazy val scalaVersions = Seq("2.12.18", "2.13.11", "3.3.0")
 
-lazy val pomSettings = Seq(
-  pomExtra :=
-    <url>https://github.com/mblink/scala-ts</url>
-    <licenses>
-      <license>
-        <name>MIT</name>
-        <url>https://opensource.org/licenses/MIT</url>
-        <distribution>repo</distribution>
-      </license>
-    </licenses>
-    <scm>
-      <url>git@github.com:mblink/scala-ts.git</url>
-      <connection>scm:git:git@github.com:mblink/scala-ts.git</connection>
-    </scm>
-    <developers>
-      <developer>
-        <id>miloszpp</id>
-        <name>Miłosz Piechocki</name>
-        <url>http://codewithstyle.info</url>
-      </developer>
-      <developer>
-        <id>jleider</id>
-        <name>Justin Leider</name>
-      </developer>
-    </developers>
-)
+def foldScalaV[A](scalaVersion: String)(on2: => A, on3: => A): A =
+  scalaVersion match {
+    case s if s.startsWith("2.") => on2
+    case s if s.startsWith("3.") => on3
+  }
 
-lazy val scalaVersions = Seq("2.12.17", "2.13.10")
+lazy val cats = "org.typelevel" %% "cats-core" % "2.9.0"
+def circe(proj: String) = "io.circe" %% s"circe-$proj" % "0.14.5"
+lazy val joda = "joda-time" % "joda-time" % "2.12.5"
+def munit(proj: String = "") = "org.scalameta" %% s"munit${if (proj == "") "" else s"-$proj"}" % "0.7.29" % Test
+lazy val scalacheck = "org.scalacheck" %% "scalacheck" % "1.17.0" % Test
+lazy val scalaz = "org.scalaz" %% "scalaz-core" % "7.3.6"
 
-lazy val root = (project in file(".")).
-  settings(Seq(
+lazy val root = project.in(file("."))
+  .settings(
     name := "scala-ts",
-    organization := "com.github.miloszpp",
+    organization := "bondlink",
+    version := "0.10.0-RC2",
     crossScalaVersions := scalaVersions,
-    scalaVersion := scalaVersions.find(_.startsWith("2.13")).get,
-  ) ++ publishSettings ++ pomSettings)
+    scalaVersion := scalaVersions.find(_.startsWith("3.")).get,
 
-libraryDependencies ++= Seq(
-  "org.scala-lang" % "scala-reflect" % scalaVersion.value,
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "io.circe" %% "circe-core" % "0.14.3",
-  "org.scalatest" %% "scalatest" % "3.1.0" % "test",
-  "org.typelevel" %% "cats-core" % "2.9.0",
-  // Scalaz is just needed for trying to cast values to types like `\/` and `\&/`
-  "org.scalaz" %% "scalaz-core" % "7.3.6",
-)
+    scalacOptions ++= foldScalaV(scalaVersion.value)(
+      Seq(),
+      Seq(
+        "-Wvalue-discard",
+        "-Wunused:implicits",
+        "-Wunused:imports",
+        "-Wunused:locals",
+        "-Wunused:params",
+        "-Wunused:privates",
+        "-Wunused:unsafe-warn-patvars",
+      ),
+    ),
+    Test / scalacOptions += "-Yretain-trees",
+    Compile / doc / scalacOptions ++= Seq(
+      "-skip-by-regex:^scalats\\.BuildInfo.*",
+    ),
+
+    libraryDependencies ++= Seq(
+      cats,
+      // Optional dependencies to provide more scala => TS type support
+      circe("core") % Optional,
+      joda % Optional,
+      scalaz % Optional,
+      // Test dependencies
+      circe("parser") % Test,
+      munit(),
+      munit("scalacheck"),
+      scalacheck,
+    ) ++ foldScalaV(scalaVersion.value)(
+      Seq(
+        "org.scala-lang" % "scala-reflect" % scalaVersion.value,
+        "ch.qos.logback" % "logback-classic" % "1.2.3",
+      ),
+      Seq(),
+    ),
+
+    buildInfoPackage := "scalats",
+    buildInfoKeys := Seq(BuildInfoKey.action("testsDir")(baseDirectory.value / "tests")),
+
+    // Publish settings
+    publishMavenStyle := true,
+    Test / publishArtifact := false,
+    gitPublishDir := file("/src/maven-repo"),
+    licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
+  )
+  .enablePlugins(BuildInfoPlugin)

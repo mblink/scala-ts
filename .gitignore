@@ -12,3 +12,6 @@ target
 metals.sbt
 .bloop
 .metals
+
+tests/output
+tests/node_modules
