@@ -36,8 +36,11 @@ lazy val root = project.in(file("."))
       ),
     ),
     Test / scalacOptions += "-Yretain-trees",
-    Compile / doc / scalacOptions ++= Seq(
-      "-skip-by-regex:^scalats\\.BuildInfo.*",
+    Compile / doc / scalacOptions ++= foldScalaV(scalaVersion.value)(
+      Seq(),
+      Seq(
+        "-skip-by-regex:^scalats\\.BuildInfo\\$$",
+      ),
     ),
 
     libraryDependencies ++= Seq(
