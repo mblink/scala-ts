@@ -12,23 +12,26 @@ object ObjectTest {
 
     given decoder: Decoder[Foo.type] =
       Decoder.instance(c => for {
+        _ <- c.get["Foo"]("_tag")
         _ <- c.get[1]("int")
         _ <- c.get["test"]("str")
       } yield Foo)
 
     given encoder: Encoder[Foo.type] =
-      Encoder.AsObject.instance(foo => JsonObject("int" := foo.int, "str" := foo.str))
+      Encoder.AsObject.instance(foo => JsonObject("_tag" := "Foo", "int" := foo.int, "str" := foo.str))
   }
 
   val expectedFooCode = """
 import * as t from "io-ts";
 
 export const foo = {
+  _tag: `Foo`,
   int: 1,
   str: `test`
 } as const;
 
 export const fooC = t.type({
+  _tag: t.literal(`Foo`),
   int: t.literal(1),
   str: t.literal(`test`)
 });

@@ -180,7 +180,7 @@ final class IoTsEmitter(val config: Config) extends Emitter {
     val (taggedIfaceName, tagMmbr) = (interfaceName(taggedName), _tagMember(name))
 
     line(s"export const $objName = {") |+|
-    emitMembers(members ++ superInterface.map(_ => tagMmbr), getTypeWrappedVal(_, _, false)) |+|
+    emitMembers(members + tagMmbr, getTypeWrappedVal(_, _, false)) |+|
     line("} as const;") |+|
     line() |+|
     superInterface.fold(
