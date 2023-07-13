@@ -172,6 +172,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
         !(
           s.privateWithin.nonEmpty ||
           s.protectedWithin.nonEmpty ||
+          s.flags.is(Flags.Given) ||
           s.flags.is(Flags.Private) ||
           s.flags.is(Flags.PrivateLocal) ||
           s.flags.is(Flags.Protected)
