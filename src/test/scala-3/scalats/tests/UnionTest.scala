@@ -27,21 +27,25 @@ import { pipe } from "fp-ts/lib/function";
 import * as Ord from "fp-ts/lib/Ord";
 
 export const bar = {
+  _tag: `Bar`,
   int: 1,
-  str: `bar`,
-  _tag: `Bar`
+  str: `bar`
 } as const;
 
-export const barTaggedC = t.type({ _tag: t.literal(`Bar`) });
+export const barTaggedC = t.type({
+  _tag: t.literal(`Bar`)
+});
 export type BarTaggedC = typeof barTaggedC;
 export type BarTagged = t.TypeOf<BarTaggedC>;
 export type Bar = BarTagged & typeof bar;
 export const barC = pipe(barTaggedC, c => new t.Type<Bar, BarTagged>(
   `Bar`,
   (u: unknown): u is Bar => E.isRight(c.decode(u)),
-  (u: unknown): E.Either<t.Errors, Bar> =>pipe(c.decode(u), E.map(x => ({ ...x, ...bar }))),
+  (u: unknown): E.Either<t.Errors, Bar> => pipe(c.decode(u), E.map(x => ({ ...x, ...bar }))),
   (x: Bar): BarTagged => ({ ...x, _tag: `Bar`}),
 ));
+export type BarC = typeof barC;
+
 
 export const bazC = t.type({
   _tag: t.literal(`Baz`),

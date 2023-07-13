@@ -25,21 +25,25 @@ import * as E from "fp-ts/lib/Either";
 import * as t from "io-ts";
 
 export const bar = {
+  _tag: `Bar`,
   data: `bar`,
-  int: 1,
-  _tag: `Bar`
+  int: 1
 } as const;
 
-export const barTaggedC = t.type({ _tag: t.literal(`Bar`) });
+export const barTaggedC = t.type({
+  _tag: t.literal(`Bar`)
+});
 export type BarTaggedC = typeof barTaggedC;
 export type BarTagged = t.TypeOf<BarTaggedC>;
 export type Bar = BarTagged & typeof bar;
 export const barC = pipe(barTaggedC, c => new t.Type<Bar, BarTagged>(
   `Bar`,
   (u: unknown): u is Bar => E.isRight(c.decode(u)),
-  (u: unknown): E.Either<t.Errors, Bar> =>pipe(c.decode(u), E.map(x => ({ ...x, ...bar }))),
+  (u: unknown): E.Either<t.Errors, Bar> => pipe(c.decode(u), E.map(x => ({ ...x, ...bar }))),
   (x: Bar): BarTagged => ({ ...x, _tag: `Bar`}),
 ));
+export type BarC = typeof barC;
+
 
 export class bazCC<A1 extends t.Mixed>{ codec = (A1: A1) => t.type({
   _tag: t.literal(`Baz`),
