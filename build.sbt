@@ -23,18 +23,6 @@ lazy val root = project.in(file("."))
     crossScalaVersions := scalaVersions,
     scalaVersion := scalaVersions.find(_.startsWith("3.")).get,
 
-    scalacOptions ++= foldScalaV(scalaVersion.value)(
-      Seq(),
-      Seq(
-        "-Wvalue-discard",
-        "-Wunused:implicits",
-        "-Wunused:imports",
-        "-Wunused:locals",
-        "-Wunused:params",
-        "-Wunused:privates",
-        "-Wunused:unsafe-warn-patvars",
-      ),
-    ),
     Test / scalacOptions += "-Yretain-trees",
     Compile / doc / scalacOptions ++= foldScalaV(scalaVersion.value)(
       Seq(),
