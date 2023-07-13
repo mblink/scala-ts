@@ -232,15 +232,12 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available) 
     TsModel.ObjectField("_tag", TsModel.Literal(TsModel.String(TypeName("String")), tag), tag)
 
   /** Produces code for a type with a given set of fields */
-  private def generateFieldsCodec(state: State, fields: List[TsModel.InterfaceField | TsModel.ObjectField]): Generated =
+  private def generateFieldsCodec(state: State, fields: List[TsModel.Field]): Generated =
     imports.iotsTypeFunction(
       "{\n" |+|
-      fields.map {
-        case TsModel.InterfaceField(name, tpe) => (name, tpe)
-        case TsModel.ObjectField(name, tpe, _) => (name, tpe)
-      }.intercalateMap(imports.lift(",\n")) { case (name, tpe) =>
-        "  " |+| name |+| ": " |+| generate(state.copy(top = false), tpe).foldMap(_._2)
-      } |+|
+      fields.intercalateMap(imports.lift(",\n"))(field =>
+        "  " |+| field.name |+| ": " |+| generate(state.copy(top = false), field.tpe).foldMap(_._2)
+      ) |+|
       "\n}"
     )
 

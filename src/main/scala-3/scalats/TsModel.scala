@@ -18,8 +18,12 @@ sealed trait TsModel {
 }
 
 object TsModel {
-  case class ObjectField(name: scala.Predef.String, tpe: TsModel, value: Any)
-  case class InterfaceField(name: scala.Predef.String, tpe: TsModel)
+  sealed trait Field {
+    val name: scala.Predef.String
+    val tpe: TsModel
+  }
+  case class ObjectField(name: scala.Predef.String, tpe: TsModel, value: Any) extends Field
+  case class InterfaceField(name: scala.Predef.String, tpe: TsModel) extends Field
 
   case class TypeParam(name: scala.Predef.String) extends TsModel {
     val typeName = TypeName(name)
