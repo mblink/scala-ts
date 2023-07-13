@@ -1,28 +1,36 @@
 package scalats
 package tests
 
-import io.circe.{Decoder, Encoder, Json, JsonObject}
+import io.circe.{Decoder, Encoder, JsonObject}
+import io.circe.syntax.*
 import scalats.tests.arbitrary.given
 
 object ObjectTest {
   case object Foo {
-    val name = "foo"
+    val int = 1
+    val str = "test"
+
     given decoder: Decoder[Foo.type] =
-      Decoder.instance(_.get["foo"]("name").map(_ => Foo))
+      Decoder.instance(c => for {
+        _ <- c.get[1]("int")
+        _ <- c.get["test"]("str")
+      } yield Foo)
 
     given encoder: Encoder[Foo.type] =
-      Encoder.AsObject.instance(foo => JsonObject.singleton("name", Json.fromString(foo.name)))
+      Encoder.AsObject.instance(foo => JsonObject("int" := foo.int, "str" := foo.str))
   }
 
   val expectedFooCode = """
 import * as t from "io-ts";
 
 export const foo = {
-  name: `foo`
+  int: 1,
+  str: `test`
 } as const;
 
 export const fooC = t.type({
-  name: t.literal(`foo`)
+  int: t.literal(1),
+  str: t.literal(`test`)
 });
 export type FooC = typeof fooC;
 export type Foo = t.TypeOf<FooC>;
