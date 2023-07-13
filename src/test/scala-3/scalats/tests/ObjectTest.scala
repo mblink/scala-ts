@@ -22,7 +22,7 @@ export const foo = {
 } as const;
 
 export const fooC = t.type({
-  name: t.string
+  name: t.literal(`foo`)
 });
 export type FooC = typeof fooC;
 export type Foo = t.TypeOf<FooC>;

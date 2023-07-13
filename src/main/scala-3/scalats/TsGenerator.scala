@@ -251,7 +251,9 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available) 
     val taggedValueType = cap(taggedCodecName).stripSuffix("C")
     val fields = parent.fold(Nil)(_ => List(tagField(name))) ++ fields0
 
-    lazy val fullCodec: Generated = state.wrapCodec(generateFieldsCodec(state, fields))
+    lazy val fullCodec: Generated = state.wrapCodec(
+      generateFieldsCodec(state, fields.map(f => TsModel.ObjectField(f.name, TsModel.Literal(f.tpe, f.value), f.value)))
+    )
 
     lazy val minimalTaggedCodec: Generated =
       // Codec with only `_tag` value
