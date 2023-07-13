@@ -25,6 +25,10 @@ object TsModel {
     val typeName = TypeName(name)
     val typeArgs = Nil
   }
+  case class Literal(tpe: TsModel, value: Any) extends TsModel {
+    val typeName = tpe.typeName
+    val typeArgs = Nil
+  }
   case class Json(typeName: TypeName) extends TsModel {
     val typeArgs = Nil
   }
