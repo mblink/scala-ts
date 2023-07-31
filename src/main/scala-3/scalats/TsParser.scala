@@ -142,7 +142,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
       TsModel.Union(
         TypeName(${ Expr(typeRepr.show) }),
         ${ Expr.ofList(typeRepr.typeArgs.map(_.asType match { case '[t] => parse[t](false) })) },
-        ${ Expr.ofList(parseMembers(mirror)) }
+        ${ Expr.ofList(parseMembers(mirror)) }.distinctBy(_.typeName.raw)
       )
     }
   }
