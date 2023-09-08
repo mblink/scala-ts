@@ -4,6 +4,7 @@ import cats.{Foldable, Monoid}
 import cats.syntax.foldable.*
 import scala.language.implicitConversions
 import scala.util.chaining.*
+import org.slf4j.LoggerFactory
 
 extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
   private final def intercalateMap[B](glue: B)(f: A => B)(implicit B: Monoid[B]): B =
@@ -63,7 +64,17 @@ extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
  * t.number
  * ```
  */
-final class TsGenerator(customType: TsCustomType, imports: TsImports.Available) {
+final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, debug: Boolean = true, debugFilter: String = "") {
+  val logger = LoggerFactory.getLogger("scala-ts")
+  private def filteredLog(logMsg: String): Unit = {
+    if(logMsg.containsSlice(debugFilter)) logger.info(logMsg)
+  }
+  private def debugLog(ttype: String, name: String, extra: Option[String]): Unit = {
+    if (this.debug) {
+      filteredLog(s"Generating ${ttype} for ${name} => ${name}C" + extra.fold("")(e => s"${e}"))
+    }
+  }
+
   private def cap(s: String): String = s.take(1).toUpperCase + s.drop(1)
   private def decap(s: String): String = s.take(1).toLowerCase + s.drop(1)
   private val allCapsRx = """^[A-Z0-9_]+$""".r
@@ -250,6 +261,9 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available) 
     val taggedCodecName = constName + "TaggedC"
     val taggedValueType = cap(taggedCodecName).stripSuffix("C")
     val fields = tagField(name) :: fields0
+    
+    debugLog("object", obj.typeName.base, None)
+    //if (this.debug) filteredLog(f"Generating object ${obj.typeName} => ${constName}C")
 
     lazy val fullCodec: Generated = state.wrapCodec(
       generateFieldsCodec(state, fields.map(f => TsModel.ObjectField(f.name, TsModel.Literal(f.tpe, f.value), f.value)))
@@ -297,6 +311,9 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available) 
 
   /** Produces code for a scala `case class` definition */
   private def generateInterface(state: State, iface: TsModel.Interface): List[(Option[TypeName], Generated)] = {
+    debugLog("interface", iface.typeName.base, None)
+    //if (this.debug) filteredLog(f"Generating code for interface ${iface.typeName} => ${iface.typeName.base}C")
+
     val TsModel.Interface(typeName, parent, typeArgs, fields0) = iface
     val fields = parent.fold(Nil)(_ => List(tagField(typeName.base))) ++ fields0
 
@@ -334,6 +351,12 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available) 
       if (tas.isEmpty) imports.lift(name)
       else name |+| "(" |+| tas.intercalateMap(imports.lift(", "))(generate(state.copy(top = false), _).foldMap(_._2)) |+| ")"
     }
+
+    debugLog("union", union.typeName.base, Some(memberCodecNames.map( name => f"\n  member ${name}").mkString))
+ /*    if (debug) {
+      filteredLog(f"Generating for ADT...\n${union.typeName} => ${union.typeName.base}C:" ++ memberCodecNames.map( name => f"\n  member ${name}").mkString)
+    } */
+
     val allMemberCodecsArr = "[" |+| allMemberCodecs.intercalate(imports.lift(", ")) |+| "]"
     val allNamesConstName = "all" |+| valueType |+| "Names"
     lazy val ordInst =

@@ -30,11 +30,11 @@ inline def parseReference[A]: TsModel = ${ parseReferenceImpl[A] }
  * @param all A mapping of files to parsed types
  * @return The generated types
  */
-def generateAll(all: Map[File, List[TsModel]])(
+def generateAll(all: Map[File, List[TsModel]], debug: Boolean = false, debugFilter: String)(
   using customType: TsCustomType,
   imports: TsImports.Available,
 ): List[(File, (List[(Option[TypeName], Generated)], ReferencedTypes))] = {
-  val generator = new TsGenerator(customType, imports)
+  val generator = new TsGenerator(customType, imports, debug, debugFilter)
   all.toList.foldMap { case (file, models) =>
     Map(file.toString -> (models.flatMap(generator.generateTopLevel), models.foldMap(generator.referencedTypes)))
   }.toList.map { case (file, (types, refs)) => (new File(file), (types.distinctBy(_._1.map(_.full)), refs)) }
@@ -72,8 +72,8 @@ def writeAll(all: List[(File, (List[(Option[TypeName], Generated)], ReferencedTy
  *
  * @param all A mapping of files to parsed types
  */
-def writeAll(all: Map[File, List[TsModel]])(using customType: TsCustomType, imports: TsImports.Available): Unit =
-  writeAll(generateAll(all))
+def writeAll(all: Map[File, List[TsModel]], debug: Boolean = false, debugFilter: String = "")(using customType: TsCustomType, imports: TsImports.Available): Unit =
+  writeAll(generateAll(all, debug, debugFilter))
 
 /**
  * Resolve import references for the given generated code

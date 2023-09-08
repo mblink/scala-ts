@@ -14,6 +14,7 @@ lazy val joda = "joda-time" % "joda-time" % "2.12.5"
 def munit(proj: String = "") = "org.scalameta" %% s"munit${if (proj == "") "" else s"-$proj"}" % "0.7.29" % Test
 lazy val scalacheck = "org.scalacheck" %% "scalacheck" % "1.17.0" % Test
 lazy val scalaz = "org.scalaz" %% "scalaz-core" % "7.3.6"
+lazy val slf4j = "org.slf4j" % "slf4j-api" % "2.0.7"
 
 lazy val root = project.in(file("."))
   .settings(
@@ -42,6 +43,7 @@ lazy val root = project.in(file("."))
       munit(),
       munit("scalacheck"),
       scalacheck,
+      slf4j,
     ) ++ foldScalaV(scalaVersion.value)(
       Seq(
         "org.scala-lang" % "scala-reflect" % scalaVersion.value,
