@@ -263,7 +263,6 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, 
     val fields = tagField(name) :: fields0
     
     debugLog("object", obj.typeName.base, None)
-    //if (this.debug) filteredLog(f"Generating object ${obj.typeName} => ${constName}C")
 
     lazy val fullCodec: Generated = state.wrapCodec(
       generateFieldsCodec(state, fields.map(f => TsModel.ObjectField(f.name, TsModel.Literal(f.tpe, f.value), f.value)))
@@ -312,7 +311,6 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, 
   /** Produces code for a scala `case class` definition */
   private def generateInterface(state: State, iface: TsModel.Interface): List[(Option[TypeName], Generated)] = {
     debugLog("interface", iface.typeName.base, None)
-    //if (this.debug) filteredLog(f"Generating code for interface ${iface.typeName} => ${iface.typeName.base}C")
 
     val TsModel.Interface(typeName, parent, typeArgs, fields0) = iface
     val fields = parent.fold(Nil)(_ => List(tagField(typeName.base))) ++ fields0
@@ -353,9 +351,6 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, 
     }
 
     debugLog("union", union.typeName.base, Some(memberCodecNames.map( name => f"\n  member ${name}").mkString))
- /*    if (debug) {
-      filteredLog(f"Generating for ADT...\n${union.typeName} => ${union.typeName.base}C:" ++ memberCodecNames.map( name => f"\n  member ${name}").mkString)
-    } */
 
     val allMemberCodecsArr = "[" |+| allMemberCodecs.intercalate(imports.lift(", ")) |+| "]"
     val allNamesConstName = "all" |+| valueType |+| "Names"
