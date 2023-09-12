@@ -30,7 +30,7 @@ inline def parseReference[A]: TsModel = ${ parseReferenceImpl[A] }
  * @param all A mapping of files to parsed types
  * @return The generated types
  */
-def generateAll(all: Map[File, List[TsModel]], debug: Boolean = false, debugFilter: String)(
+def generateAll(all: Map[File, List[TsModel]], debug: Boolean = false, debugFilter: String = "")(
   using customType: TsCustomType,
   imports: TsImports.Available,
 ): List[(File, (List[(Option[TypeName], Generated)], ReferencedTypes))] = {
