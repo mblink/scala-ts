@@ -71,7 +71,7 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, 
   }
   private def debugLog(ttype: String, name: String, extra: Option[String]): Unit = {
     if (this.debug) {
-      filteredLog(s"Generating ${ttype} for ${name} => ${name}C" + extra.fold("")(e => s"${e}"))
+      filteredLog(s"Generating ${ttype} for ${name} => ${name}C" + extra.getOrElse(""))
     }
   }
 
