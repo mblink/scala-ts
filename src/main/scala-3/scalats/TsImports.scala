@@ -218,6 +218,7 @@ object TsImports {
     fptsPipe: (String, String) = ("pipe", "fp-ts/lib/function"),
     iots: String = "io-ts",
     iotsDateTime: (String, String) = ("DateFromISOString", "io-ts-types/lib/DateFromISOString"),
+    iotsReadonlyMapFromEntries: (String, String) = ("readonlyMapFromEntries", "io-ts-types/lib/readonlyMapFromEntries"),
     iotsReadonlyNonEmptyArray: (String, String) = ("readonlyNonEmptyArray", "io-ts-types/lib/readonlyNonEmptyArray"),
     iotsReadonlySetFromArray: (String, String) = ("readonlySetFromArray", "io-ts-types/lib/readonlySetFromArray"),
     iotsNumberFromString: (String, String) = ("NumberFromString", "io-ts-types/lib/NumberFromString"),
@@ -351,6 +352,8 @@ object TsImports {
 
     /** Reference to the configured `iotsDateTime` value */
     final lazy val iotsDateTime = namedImport(tsi.iotsDateTime)
+    /** Helper to call the configured `iotsReadonlyMapFromEntries` function */
+    final lazy val iotsReadonlyMapFromEntries = CallableImport(namedImport(tsi.iotsReadonlyMapFromEntries))
     /** Helper to call the configured `iotsReadonlyNonEmptyArray` function */
     final lazy val iotsReadonlyNonEmptyArray = CallableImport(namedImport(tsi.iotsReadonlyNonEmptyArray))
     /** Helper to call the configured `iotsReadonlySetFromArray` function */
