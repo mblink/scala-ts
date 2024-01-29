@@ -20,7 +20,7 @@ lazy val root = project.in(file("."))
   .settings(
     name := "scala-ts",
     organization := "bondlink",
-    version := "0.11.2",
+    version := "0.12.0-RC1",
     crossScalaVersions := scalaVersions,
     scalaVersion := scalaVersions.find(_.startsWith("3.")).get,
 

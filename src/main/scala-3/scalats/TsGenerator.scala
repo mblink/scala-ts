@@ -137,11 +137,20 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, 
       generate(state, _).foldMap(_._2).pipe(x => x |+| ": " |+| x)
     ) |+| ") => "
 
-  /** The `io-ts` type of a TypeScript record, handles `number`s as `string`s */
-  private def recordKeyType(state: State, tpe: TsModel): Generated =
-    tpe match {
-      case TsModel.Number(_) => imports.iotsNumberFromString
-      case _ => generate(state, tpe).foldMap(_._2)
+  /**
+   * The `io-ts` type corresponding to a Scala `Map`
+   *
+   * Produces a TypeScript `Record` when the keys are `string`s and a `ReadonlyMap` otherwise
+   */
+  private def recordCodec(state: State, keyTpe: TsModel, valTpe: TsModel): Generated =
+    keyTpe match {
+      case TsModel.String(_) => imports.iotsRecord(imports.iotsString, generate(state, valTpe).foldMap(_._2))
+      case _ =>
+        imports.iotsReadonlyMapFromEntries(
+          generate(state, keyTpe).foldMap(_._2),
+          ordInstance(keyTpe),
+          generate(state, valTpe).foldMap(_._2),
+        )
     }
 
   /** Converts a scala `value` to a TypeScript value. Used when generating objects with known values */
@@ -413,7 +422,7 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, 
       case TsModel.Option(typeName, tpe) => maybeWrapCodec(state, typeName, imports.iotsOption(generate(state.copy(top = false), tpe).foldMap(_._2)))
       case TsModel.Either(typeName, left, right, _) => maybeWrapCodec(state, typeName, imports.iotsEither(generate(state.copy(top = false), left).foldMap(_._2), generate(state.copy(top = false), right).foldMap(_._2)))
       case TsModel.Ior(typeName, left, right, _) => maybeWrapCodec(state, typeName, imports.iotsThese(generate(state.copy(top = false), left).foldMap(_._2), generate(state.copy(top = false), right).foldMap(_._2)))
-      case TsModel.Map(typeName, key, value) => maybeWrapCodec(state, typeName, imports.iotsRecord(recordKeyType(state.copy(top = false), key), generate(state.copy(top = false), value).foldMap(_._2)))
+      case TsModel.Map(typeName, key, value) => maybeWrapCodec(state, typeName, recordCodec(state.copy(top = false), key, value))
       case TsModel.Tuple(typeName, tpes) =>
         val updState = state.copy(top = false)
         maybeWrapCodec(state, typeName, imports.iotsTuple("[" |+|

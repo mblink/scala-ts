@@ -65,7 +65,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
    */
   def parse[A: Type](top: Boolean): Expr[TsModel] = {
     val typeRepr = TypeRepr.of[A]
-    val typeName = '{ TypeName(${ Expr(typeRepr.show) }) }
+    val typeName = mkTypeName(typeRepr)
 
     typeRepr.asType match {
       case '[Nothing] => '{ TsModel.Unknown($typeName, Nil) }
@@ -109,22 +109,27 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
           }
         '{ TsModel.Tuple($typeName, ${ Expr.ofList(unroll[h *: t]) }) }
       case '[t] if typeRepr <:< TypeRepr.of[Tuple] =>
-        '{ TsModel.Tuple($typeName, ${ Expr.ofList(TypeRepr.of[t].typeArgs.map(_.asType match { case '[a] => parse[a](false) })) }) }
+        '{ TsModel.Tuple($typeName, ${ mkTypeArgs(TypeRepr.of[t]) }) }
       case '[t] =>
-        lazy val typeArgs = Expr.ofList(typeRepr.typeArgs.map(_.asType match { case '[a] => parse[a](false) }))
         Mirror(typeRepr) match {
           case Some(m) =>
             m.mirrorType match {
-              case MirrorType.Sum => if (top) parseEnum[t](m) else '{ TsModel.UnionRef($typeName, $typeArgs) }
-              case MirrorType.Product => if (top) parseCaseClass[t](m, None) else '{ TsModel.InterfaceRef($typeName, $typeArgs) }
-              case MirrorType.Singleton => if (top) parseObject[t](None) else '{ TsModel.ObjectRef($typeName) }
+              case MirrorType.Sum => if (top) parseEnum[t](m) else parseEnumRef[t]
+              case MirrorType.Product => if (top) parseCaseClass[t](m, None) else parseCaseClassRef[t]
+              case MirrorType.Singleton => if (top) parseObject[t](None) else parseObjectRef[t]
             }
 
           case None =>
-            '{ TsModel.Unknown($typeName, $typeArgs) }
+            '{ TsModel.Unknown($typeName, ${ mkTypeArgs(typeRepr) }) }
         }
     }
   }
+
+  private def mkTypeName(typeRepr: TypeRepr): Expr[TypeName] =
+    '{ TypeName(${ Expr(typeRepr.show) }) }
+
+  private def mkTypeArgs(typeRepr: TypeRepr): Expr[List[TsModel]] =
+    Expr.ofList(typeRepr.typeArgs.map(_.asType match { case '[a] => parse[a](false) }))
 
   /** Parse an `enum` definiton into its [[scalats.TsModel]] representation */
   private def parseEnum[A: Type](mirror: Mirror): Expr[TsModel] = {
@@ -140,11 +145,16 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
 
     '{
       TsModel.Union(
-        TypeName(${ Expr(typeRepr.show) }),
-        ${ Expr.ofList(typeRepr.typeArgs.map(_.asType match { case '[t] => parse[t](false) })) },
+        ${ mkTypeName(typeRepr) },
+        ${ mkTypeArgs(typeRepr) },
         ${ Expr.ofList(parseMembers(mirror)) }.distinctBy(_.typeName.raw)
       )
     }
+  }
+
+  private def parseEnumRef[A: Type]: Expr[TsModel.UnionRef] = {
+    val typeRepr = TypeRepr.of[A]
+    '{ TsModel.UnionRef(${ mkTypeName(typeRepr) }, ${ mkTypeArgs(typeRepr) }) }
   }
 
   /** Parse a `case class` definiton into its [[scalats.TsModel]] representation */
@@ -155,12 +165,17 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
     }
     '{
       TsModel.Interface(
-        TypeName(${ Expr(typeRepr.show) }),
+        ${ mkTypeName(typeRepr) },
         ${ Expr(parent.map(_.show)) }.map(TypeName(_)),
-        ${ Expr.ofList(typeRepr.typeArgs.map(_.asType match { case '[t] => parse[t](false) })) },
+        ${ mkTypeArgs(typeRepr) },
         ${ Expr.ofList(fields) },
       )
     }
+  }
+
+  private def parseCaseClassRef[A: Type]: Expr[TsModel.InterfaceRef] = {
+    val typeRepr = TypeRepr.of[A]
+    '{ TsModel.InterfaceRef(${ mkTypeName(typeRepr) }, ${ mkTypeArgs(typeRepr) }) }
   }
 
   private def valMembers(typeRepr: TypeRepr): List[Symbol] = {
@@ -203,10 +218,13 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
     }))
     '{
       TsModel.Object(
-        TypeName(${ Expr(typeRepr.show) }),
+        ${ mkTypeName(typeRepr) },
         ${ Expr(parent.map(_.show)) }.map(TypeName(_)),
         $fields,
       )
     }
   }
+
+  private def parseObjectRef[A: Type]: Expr[TsModel.ObjectRef] =
+    '{ TsModel.ObjectRef(TypeName(${ Expr(Type.show[A]) })) }
 }
