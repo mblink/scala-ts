@@ -90,6 +90,6 @@ object TsModel {
     val typeArgs = Nil
   }
   case class Union(typeName: TypeName, typeArgs: List[TsModel], possibilities: List[Object | Interface]) extends TsModel
-  case class UnionRef(typeName: TypeName, typeArgs: List[TsModel]) extends TsModel
+  case class UnionRef(typeName: TypeName, typeArgs: List[TsModel], possibilities: List[ObjectRef | InterfaceRef]) extends TsModel
   case class Unknown(typeName: TypeName, typeArgs: List[TsModel]) extends TsModel
 }
