@@ -114,7 +114,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
         Mirror(typeRepr) match {
           case Some(m) =>
             m.mirrorType match {
-              case MirrorType.Sum => if (top) parseEnum[t](m) else parseEnumRef[t]
+              case MirrorType.Sum => if (top) parseEnum[t](m) else parseEnumRef[t](m)
               case MirrorType.Product => if (top) parseCaseClass[t](m, None) else parseCaseClassRef[t]
               case MirrorType.Singleton => if (top) parseObject[t](None) else parseObjectRef[t]
             }
@@ -152,9 +152,23 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
     }
   }
 
-  private def parseEnumRef[A: Type]: Expr[TsModel.UnionRef] = {
+  private def parseEnumRef[A: Type](mirror: Mirror): Expr[TsModel.UnionRef] = {
     val typeRepr = TypeRepr.of[A]
-    '{ TsModel.UnionRef(${ mkTypeName(typeRepr) }, ${ mkTypeArgs(typeRepr) }) }
+
+    def parseMembers(m: Mirror): List[Expr[TsModel.ObjectRef | TsModel.InterfaceRef]] =
+      m.mirrorType match {
+        case MirrorType.Sum => m.types.toList.flatMap(Mirror(_).fold(Nil)(parseMembers))
+        case MirrorType.Product => List(m.mirroredType.asType match { case '[t] => parseCaseClassRef[t] })
+        case MirrorType.Singleton => List(m.mirroredType.asType match { case '[t] => parseObjectRef[t] })
+      }
+
+    '{
+      TsModel.UnionRef(
+        ${ mkTypeName(typeRepr) },
+        ${ mkTypeArgs(typeRepr) },
+        ${ Expr.ofList(parseMembers(mirror)) }.distinctBy(_.typeName.raw)
+      )
+    }
   }
 
   /** Parse a `case class` definiton into its [[scalats.TsModel]] representation */

@@ -15,6 +15,7 @@ extension(file: File) {
 val outputDir = BuildInfo.testsDir / "output"
 
 given customType: TsCustomType = TsCustomType.none
+given customOrd: TsCustomOrd = TsCustomOrd.none
 given imports: TsImports.Available = TsImports.Available(TsImports.Config())
 
 given circeConfig: CirceConfig = CirceConfig(discriminator = Some("_tag"))

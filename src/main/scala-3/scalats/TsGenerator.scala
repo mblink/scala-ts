@@ -64,7 +64,13 @@ extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
  * t.number
  * ```
  */
-final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, debug: Boolean = true, debugFilter: String = "") {
+final class TsGenerator(
+  customType: TsCustomType,
+  customOrd: TsCustomOrd,
+  imports: TsImports.Available,
+  debug: Boolean = true,
+  debugFilter: String = "",
+) {
   val logger = LoggerFactory.getLogger("scala-ts")
   private def filteredLog(logMsg: String): Unit = {
     if(logMsg.containsSlice(debugFilter)) logger.info(logMsg)
@@ -204,11 +210,23 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, 
 
   private def unionOrdName(s: String): String = decap(s) ++ "Ord"
 
+  private def isObject(m: TsModel.Object | TsModel.ObjectRef | TsModel.Interface | TsModel.InterfaceRef): Boolean =
+    m match {
+      case _: TsModel.Object | _: TsModel.ObjectRef => true
+      case _: TsModel.Interface | _: TsModel.InterfaceRef => false
+    }
+
+  private def unionHasOrd(u: TsModel.Union | TsModel.UnionRef): Boolean =
+    u match {
+      case u: TsModel.Union => u.typeArgs.isEmpty && u.possibilities.forall(isObject)
+      case u: TsModel.UnionRef => u.typeArgs.isEmpty && u.possibilities.forall(isObject)
+    }
+
   /** Produces code that refers to an `fp-ts` `Ord` instance for a given type */
   private def ordInstance(tpe: TsModel): Generated = {
     lazy val err = sys.error(s"`Ord` instance requested for ${tpe.typeName.full} but not found")
 
-    tpe match {
+    customOrd(tpe.typeName).getOrElse(tpe match {
       case TsModel.Literal(tpe, _) => ordInstance(tpe)
       case TsModel.String(_) => imports.fptsString("Ord", Some("stringOrd"))
       case TsModel.Boolean(_) => imports.fptsBoolean("Ord", Some("boolOrd"))
@@ -216,8 +234,10 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, 
       case TsModel.Eval(_, tpe) => ordInstance(tpe)
       case TsModel.Array(_, tpe, _) => imports.fptsReadonlyArray("getOrd(" |+| ordInstance(tpe) |+| ")")
       case TsModel.Option(_, tpe) => imports.fptsOption("Ord(" |+| ordInstance(tpe) |+| ")")
-      case TsModel.Union(typeName, _, _) => imports.custom(typeName, unionOrdName(typeName.base))
-      case TsModel.UnionRef(typeName, _) => imports.custom(typeName, unionOrdName(typeName.base))
+      case u @ TsModel.Union(typeName, _, _) =>
+        if (unionHasOrd(u)) imports.custom(typeName, unionOrdName(typeName.base)) else err
+      case u @ TsModel.UnionRef(typeName, _, _) =>
+        if (unionHasOrd(u)) imports.custom(typeName, unionOrdName(typeName.base)) else err
 
       case (
         TsModel.TypeParam(_)
@@ -237,7 +257,7 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, 
         | TsModel.ObjectRef(_)
         | TsModel.Unknown(_, _)
       ) => err
-    }
+    })
   }
 
   /** Produces code that refers to a given type, represented by its `typeName` and `typeArgs` */
@@ -382,7 +402,7 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, 
         case _ :: _ => imports.iotsUnion(allMemberCodecsArr)
       }) |+|
       "\n" |+|
-      (if (typeArgs.isEmpty) ordInst else Generated.empty) |+|
+      (if (unionHasOrd(union)) ordInst else Generated.empty) |+|
       (
         if (allConstant) "export const all" |+| valueType |+| " = [" |+| memberConstNames.mkString(", ") |+| "] as const;\n"
         else Generated.empty
@@ -434,7 +454,7 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, 
       case o: TsModel.Object => if (state.top) generateObject(state, o) else generateTypeRef(state, o.typeName, Nil, false)
       case TsModel.ObjectRef(typeName) => generateTypeRef(state, typeName, Nil, false)
       case u: TsModel.Union => if (state.top) generateUnion(state, u) else generateTypeRef(state, u.typeName, u.typeArgs, true)
-      case TsModel.UnionRef(typeName, typeArgs) => generateTypeRef(state, typeName, typeArgs, true)
+      case TsModel.UnionRef(typeName, typeArgs, _) => generateTypeRef(state, typeName, typeArgs, true)
       case TsModel.Unknown(typeName, typeArgs) => generateTypeRef(state, typeName, typeArgs, false)
     }
 
@@ -551,7 +571,7 @@ final class TsGenerator(customType: TsCustomType, imports: TsImports.Available, 
       case o: TsModel.Object => referencedTypeNamesObject(o, currType)
       case TsModel.ObjectRef(typeName) => Map(currType -> Set(typeName))
       case u: TsModel.Union => referencedTypeNamesUnion(u, currType)
-      case TsModel.UnionRef(typeName, typeArgs) => Map(currType -> Set(typeName)) |+| typeArgs.foldMap(referencedTypeNames(_, currType))
+      case TsModel.UnionRef(typeName, typeArgs, _) => Map(currType -> Set(typeName)) |+| typeArgs.foldMap(referencedTypeNames(_, currType))
       case TsModel.Unknown(typeName, typeArgs) => Map(currType -> Set(typeName)) |+| typeArgs.foldMap(referencedTypeNames(_, currType))
     }
   }

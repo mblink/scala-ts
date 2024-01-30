@@ -4,7 +4,7 @@ package tests
 import io.circe.{Decoder, Encoder}
 import scalats.tests.arbitrary.given
 
-object UnionTest {
+object UnionWithInterfaceTest {
   sealed trait Foo {
     val int: Int
     val str: String
@@ -20,11 +20,9 @@ object UnionTest {
   case class Baz(int: Int, str: String) extends Foo
 
   val expectedFooCode = """
-import * as t from "io-ts";
-import { Ord as stringOrd } from "fp-ts/lib/string";
-import * as E from "fp-ts/lib/Either";
 import { pipe } from "fp-ts/lib/function";
-import * as Ord from "fp-ts/lib/Ord";
+import * as E from "fp-ts/lib/Either";
+import * as t from "io-ts";
 
 export const bar = {
   _tag: `Bar`,
@@ -64,7 +62,6 @@ export const FooCU = t.union([barC, bazC]);
 export type FooCU = typeof FooCU;
 export type FooU = t.TypeOf<FooCU>;
 
-export const fooOrd: Ord.Ord<FooU> = pipe(stringOrd, Ord.contramap(x => x._tag));
 export type FooMap<A> = { [K in FooName]: A };
 """.trim
 
@@ -75,10 +72,10 @@ export type FooMap<A> = { [K in FooName]: A };
   )
 }
 
-class UnionTest extends CodecTest[UnionTest.Foo](
-  outputDir / "union",
-  UnionTest.types,
+class UnionWithInterfaceTest extends CodecTest[UnionWithInterfaceTest.Foo](
+  outputDir / "unionWithInterface",
+  UnionWithInterfaceTest.types,
   "FooCU",
   "FooCU",
-  UnionTest.fooFile,
+  UnionWithInterfaceTest.fooFile,
 )
