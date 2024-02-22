@@ -172,7 +172,7 @@ final class TsGenerator(
         "[" |+| toList(value).intercalateMap(imports.lift(", "))(tsValue(tpe, _)) |+| "]"
       case TsModel.Set(_, tpe) =>
         imports.fptsReadonlySet("fromReadonlyArray(" |+| ordInstance(tpe) |+| ")([" |+|
-          value.asInstanceOf[Set[_]].toList.intercalateMap(imports.lift(", "))(tsValue(tpe, _)) |+|
+          value.asInstanceOf[Set[?]].toList.intercalateMap(imports.lift(", "))(tsValue(tpe, _)) |+|
         "])")
       case TsModel.NonEmptyArray(typeName, tpe, toNel) =>
         tsValue(TsModel.Array(typeName, tpe, toNel.andThen(_.toList)), value)
