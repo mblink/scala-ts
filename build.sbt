@@ -1,5 +1,25 @@
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
+val scalaV = "3.3.1"
+
+ThisBuild / scalaVersion := scalaV
+ThisBuild / crossScalaVersions := Seq(scalaV)
+
+// GitHub Actions config
+val javaVersions = Seq(8, 11, 17, 21).map(v => JavaSpec.temurin(v.toString))
+
+ThisBuild / githubWorkflowJavaVersions := javaVersions
+ThisBuild / githubWorkflowArtifactUpload := false
+ThisBuild / githubWorkflowBuildMatrixFailFast := Some(false)
+ThisBuild / githubWorkflowTargetBranches := Seq("master")
+
+ThisBuild / githubWorkflowBuild := Seq(
+  WorkflowStep.Run(List("cd tests && yarn && cd .."), name = Some("yarn install")),
+  WorkflowStep.Sbt(List("test"), name = Some("test")),
+)
+
+ThisBuild / githubWorkflowPublishTargetBranches := Seq()
+
 lazy val cats = "org.typelevel" %% "cats-core" % "2.10.0"
 def circe(proj: String) = "io.circe" %% s"circe-$proj" % "0.14.6"
 lazy val joda = "joda-time" % "joda-time" % "2.12.7"
