@@ -172,7 +172,7 @@ final class TsGenerator(
         "[" |+| toList(value).intercalateMap(imports.lift(", "))(tsValue(tpe, _)) |+| "]"
       case TsModel.Set(_, tpe) =>
         imports.fptsReadonlySet("fromReadonlyArray(" |+| ordInstance(tpe) |+| ")([" |+|
-          value.asInstanceOf[Set[_]].toList.intercalateMap(imports.lift(", "))(tsValue(tpe, _)) |+|
+          value.asInstanceOf[Set[?]].toList.intercalateMap(imports.lift(", "))(tsValue(tpe, _)) |+|
         "])")
       case TsModel.NonEmptyArray(typeName, tpe, toNel) =>
         tsValue(TsModel.Array(typeName, tpe, toNel.andThen(_.toList)), value)
@@ -219,7 +219,7 @@ final class TsGenerator(
   private def unionHasOrd(u: TsModel.Union | TsModel.UnionRef): Boolean =
     u match {
       case u: TsModel.Union => u.typeArgs.isEmpty && u.possibilities.forall(isObject)
-      case u: TsModel.UnionRef => u.typeArgs.isEmpty && u.possibilities.forall(isObject)
+      case u: TsModel.UnionRef => u.typeArgs.isEmpty && u.allObjects
     }
 
   /** Produces code that refers to an `fp-ts` `Ord` instance for a given type */

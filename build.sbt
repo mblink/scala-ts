@@ -1,36 +1,42 @@
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
-lazy val scalaVersions = Seq("2.12.18", "2.13.11", "3.3.0")
+val scalaV = "3.3.1"
 
-def foldScalaV[A](scalaVersion: String)(on2: => A, on3: => A): A =
-  scalaVersion match {
-    case s if s.startsWith("2.") => on2
-    case s if s.startsWith("3.") => on3
-  }
+ThisBuild / scalaVersion := scalaV
+ThisBuild / crossScalaVersions := Seq(scalaV)
 
-lazy val cats = "org.typelevel" %% "cats-core" % "2.9.0"
-def circe(proj: String) = "io.circe" %% s"circe-$proj" % "0.14.5"
-lazy val joda = "joda-time" % "joda-time" % "2.12.5"
-def munit(proj: String = "") = "org.scalameta" %% s"munit${if (proj == "") "" else s"-$proj"}" % "0.7.29" % Test
+// GitHub Actions config
+val javaVersions = Seq(8, 11, 17, 21).map(v => JavaSpec.temurin(v.toString))
+
+ThisBuild / githubWorkflowJavaVersions := javaVersions
+ThisBuild / githubWorkflowArtifactUpload := false
+ThisBuild / githubWorkflowBuildMatrixFailFast := Some(false)
+ThisBuild / githubWorkflowTargetBranches := Seq("master")
+
+ThisBuild / githubWorkflowBuild := Seq(
+  WorkflowStep.Run(List("cd tests && yarn && cd .."), name = Some("yarn install")),
+  WorkflowStep.Sbt(List("test"), name = Some("test")),
+)
+
+ThisBuild / githubWorkflowPublishTargetBranches := Seq()
+
+lazy val cats = "org.typelevel" %% "cats-core" % "2.10.0"
+def circe(proj: String) = "io.circe" %% s"circe-$proj" % "0.14.6"
+lazy val joda = "joda-time" % "joda-time" % "2.12.7"
+def munit(proj: String = "") = "org.scalameta" %% s"munit${if (proj == "") "" else s"-$proj"}" % "1.0.0-M11" % Test
 lazy val scalacheck = "org.scalacheck" %% "scalacheck" % "1.17.0" % Test
-lazy val scalaz = "org.scalaz" %% "scalaz-core" % "7.3.6"
-lazy val slf4j = "org.slf4j" % "slf4j-api" % "2.0.7"
+lazy val scalaz = "org.scalaz" %% "scalaz-core" % "7.3.8"
+lazy val slf4j = "org.slf4j" % "slf4j-api" % "2.0.12"
 
 lazy val root = project.in(file("."))
   .settings(
     name := "scala-ts",
     organization := "bondlink",
     version := "0.13.0",
-    crossScalaVersions := scalaVersions,
-    scalaVersion := scalaVersions.find(_.startsWith("3.")).get,
+    scalaVersion := "3.3.1",
 
     Test / scalacOptions += "-Yretain-trees",
-    Compile / doc / scalacOptions ++= foldScalaV(scalaVersion.value)(
-      Seq(),
-      Seq(
-        "-skip-by-regex:^scalats\\.BuildInfo\\$$",
-      ),
-    ),
+    Compile / doc / scalacOptions += "-skip-by-regex:^scalats\\.BuildInfo\\$$",
 
     libraryDependencies ++= Seq(
       cats,
@@ -44,12 +50,6 @@ lazy val root = project.in(file("."))
       munit("scalacheck"),
       scalacheck,
       slf4j,
-    ) ++ foldScalaV(scalaVersion.value)(
-      Seq(
-        "org.scala-lang" % "scala-reflect" % scalaVersion.value,
-        "ch.qos.logback" % "logback-classic" % "1.2.3",
-      ),
-      Seq(),
     ),
 
     buildInfoPackage := "scalats",

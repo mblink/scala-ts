@@ -27,3 +27,5 @@ class TypeName private (val raw: String) {
 object TypeName {
   def apply(raw: String): TypeName = new TypeName(raw) {}
 }
+
+object T { def apply(raw: String): TypeName = TypeName(raw) }
