@@ -155,18 +155,18 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
   private def parseEnumRef[A: Type](mirror: Mirror): Expr[TsModel.UnionRef] = {
     val typeRepr = TypeRepr.of[A]
 
-    def parseMembers(m: Mirror): List[Expr[TsModel.ObjectRef | TsModel.InterfaceRef]] =
+    def allObjects(m: Mirror): Boolean =
       m.mirrorType match {
-        case MirrorType.Sum => m.types.toList.flatMap(Mirror(_).fold(Nil)(parseMembers))
-        case MirrorType.Product => List(m.mirroredType.asType match { case '[t] => parseCaseClassRef[t] })
-        case MirrorType.Singleton => List(m.mirroredType.asType match { case '[t] => parseObjectRef[t] })
+        case MirrorType.Sum => m.types.toList.foldLeft(true)((acc, t) => Mirror(t).fold(acc)(m => acc && allObjects(m)))
+        case MirrorType.Product => false
+        case MirrorType.Singleton => true
       }
 
     '{
       TsModel.UnionRef(
         ${ mkTypeName(typeRepr) },
         ${ mkTypeArgs(typeRepr) },
-        ${ Expr.ofList(parseMembers(mirror)) }.distinctBy(_.typeName.raw)
+        ${ Expr(allObjects(mirror)) },
       )
     }
   }
