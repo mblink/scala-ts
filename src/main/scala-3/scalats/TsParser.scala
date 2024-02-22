@@ -126,7 +126,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
   }
 
   private def mkTypeName(typeRepr: TypeRepr): Expr[TypeName] =
-    '{ TypeName(${ Expr(typeRepr.show) }) }
+    '{ T(${ Expr(typeRepr.show) }) }
 
   private def mkTypeArgs(typeRepr: TypeRepr): Expr[List[TsModel]] =
     Expr.ofList(typeRepr.typeArgs.map(_.asType match { case '[a] => parse[a](false) }))
@@ -180,7 +180,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
     '{
       TsModel.Interface(
         ${ mkTypeName(typeRepr) },
-        ${ Expr(parent.map(_.show)) }.map(TypeName(_)),
+        ${ Expr(parent.map(_.show)) }.map(T(_)),
         ${ mkTypeArgs(typeRepr) },
         ${ Expr.ofList(fields) },
       )
@@ -233,12 +233,12 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
     '{
       TsModel.Object(
         ${ mkTypeName(typeRepr) },
-        ${ Expr(parent.map(_.show)) }.map(TypeName(_)),
+        ${ Expr(parent.map(_.show)) }.map(T(_)),
         $fields,
       )
     }
   }
 
   private def parseObjectRef[A: Type]: Expr[TsModel.ObjectRef] =
-    '{ TsModel.ObjectRef(TypeName(${ Expr(Type.show[A]) })) }
+    '{ TsModel.ObjectRef(${ mkTypeName(TypeRepr.of[A]) }) }
 }
