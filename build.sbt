@@ -1,13 +1,5 @@
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
-lazy val scalaVersions = Seq("2.12.18", "2.13.11", "3.3.1")
-
-def foldScalaV[A](scalaVersion: String)(on2: => A, on3: => A): A =
-  scalaVersion match {
-    case s if s.startsWith("2.") => on2
-    case s if s.startsWith("3.") => on3
-  }
-
 lazy val cats = "org.typelevel" %% "cats-core" % "2.10.0"
 def circe(proj: String) = "io.circe" %% s"circe-$proj" % "0.14.6"
 lazy val joda = "joda-time" % "joda-time" % "2.12.7"
@@ -21,16 +13,10 @@ lazy val root = project.in(file("."))
     name := "scala-ts",
     organization := "bondlink",
     version := "0.13.0",
-    crossScalaVersions := scalaVersions,
-    scalaVersion := scalaVersions.find(_.startsWith("3.")).get,
+    scalaVersion := "3.3.1",
 
     Test / scalacOptions += "-Yretain-trees",
-    Compile / doc / scalacOptions ++= foldScalaV(scalaVersion.value)(
-      Seq(),
-      Seq(
-        "-skip-by-regex:^scalats\\.BuildInfo\\$$",
-      ),
-    ),
+    Compile / doc / scalacOptions += "-skip-by-regex:^scalats\\.BuildInfo\\$$",
 
     libraryDependencies ++= Seq(
       cats,
@@ -44,12 +30,6 @@ lazy val root = project.in(file("."))
       munit("scalacheck"),
       scalacheck,
       slf4j,
-    ) ++ foldScalaV(scalaVersion.value)(
-      Seq(
-        "org.scala-lang" % "scala-reflect" % scalaVersion.value,
-        "ch.qos.logback" % "logback-classic" % "1.2.3",
-      ),
-      Seq(),
     ),
 
     buildInfoPackage := "scalats",
