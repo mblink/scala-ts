@@ -32,7 +32,7 @@ lazy val root = project.in(file("."))
   .settings(
     name := "scala-ts",
     organization := "bondlink",
-    version := "0.13.0",
+    version := "0.14.0",
     scalaVersion := "3.3.1",
 
     Test / scalacOptions += "-Yretain-trees",
