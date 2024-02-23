@@ -67,7 +67,7 @@ export type FooU<A1> = t.TypeOf<FooCU<t.Type<A1>>>;
   val fooFile = "foo.ts"
 
   val types = Map(
-    fooFile -> (List(parse[Foo[_]]), expectedFooCode),
+    fooFile -> (List(parse[Foo[?]]), expectedFooCode),
   )
 }
 

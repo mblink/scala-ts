@@ -18,14 +18,10 @@ package scalats
  * typeName.base // Baz
  * ```
  */
-class TypeName private (val raw: String) {
+case class TypeName(raw: String) {
   final val full: String = raw.split('[').head.stripSuffix(".type")
   final val base: String = full.split('.').last
   override final lazy val toString: String = raw
-}
-
-object TypeName {
-  def apply(raw: String): TypeName = new TypeName(raw) {}
 }
 
 object T { def apply(raw: String): TypeName = TypeName(raw) }

@@ -16,7 +16,7 @@ object arbitrary {
 
     case _: Mirror.SumOf[A] =>
       Arbitrary((insts match {
-        case a :: b :: rest => Gen.oneOf(a.arbitrary, b.arbitrary, rest.map(_.arbitrary): _*)
+        case a :: b :: rest => Gen.oneOf(a.arbitrary, b.arbitrary, rest.map(_.arbitrary)*)
         case a :: Nil => a.arbitrary
         case Nil => Gen.const(null)
       }).map(_.asInstanceOf[A]))

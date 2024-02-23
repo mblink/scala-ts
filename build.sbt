@@ -1,6 +1,6 @@
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
-val scalaV = "3.3.1"
+val scalaV = "3.3.2"
 
 ThisBuild / scalaVersion := scalaV
 ThisBuild / crossScalaVersions := Seq(scalaV)
@@ -33,9 +33,8 @@ lazy val root = project.in(file("."))
     name := "scala-ts",
     organization := "bondlink",
     version := "0.14.0",
-    scalaVersion := "3.3.1",
+    scalaVersion := scalaV,
 
-    Test / scalacOptions += "-Yretain-trees",
     Compile / doc / scalacOptions += "-skip-by-regex:^scalats\\.BuildInfo\\$$",
 
     libraryDependencies ++= Seq(

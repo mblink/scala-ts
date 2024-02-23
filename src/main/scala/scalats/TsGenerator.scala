@@ -205,7 +205,11 @@ final class TsGenerator(
         | _: TsModel.Union
         | _: TsModel.UnionRef
         | _: TsModel.Unknown
-      ) => imports.custom(tpe.typeName, maybeDecap(value.getClass.getSimpleName.stripSuffix("$")))
+      ) =>
+        value match {
+          case p: Product => imports.custom(tpe.typeName, maybeDecap(p.productPrefix))
+          case _ => imports.custom(tpe.typeName, maybeDecap(value.getClass.getSimpleName.stripSuffix("$")))
+        }
     }
 
   private def unionOrdName(s: String): String = decap(s) ++ "Ord"
@@ -522,67 +526,4 @@ final class TsGenerator(
         )
       )), model)
   }
-
-  /** Parses the types that a scala `case class` refers to */
-  private def referencedTypeNamesInterface(iface: TsModel.Interface, currType: TypeName): Map[TypeName, Set[TypeName]] =
-    iface.fields.foldMap { case TsModel.InterfaceField(_, tpe) => referencedTypeNames(tpe, currType) }
-
-  /** Parses the types that a scala `object` refers to */
-  private def referencedTypeNamesObject(obj: TsModel.Object, currType: TypeName): Map[TypeName, Set[TypeName]] =
-    obj.fields.foldMap { case TsModel.ObjectField(_, tpe, _) => referencedTypeNames(tpe, currType) }
-
-  /** Parses the types that a scala `enum`/`sealed trait`/`sealed class` refers to */
-  private def referencedTypeNamesUnion(union: TsModel.Union, currType: TypeName): Map[TypeName, Set[TypeName]] = {
-    import cats.syntax.semigroup.*
-    union.possibilities.foldMap(x => Map(currType -> Set(x.typeName)) |+| (x match {
-      case i: TsModel.Interface => referencedTypeNamesInterface(i, i.typeName)
-      case o: TsModel.Object => referencedTypeNamesObject(o, o.typeName)
-    }))
-  }
-
-  /** Parses the types that a given [[scalats.TsModel]] refers to */
-  private def referencedTypeNames(model: TsModel, currType: TypeName): Map[TypeName, Set[TypeName]] = {
-    import cats.syntax.semigroup.*
-
-    model match {
-      case (
-        TsModel.TypeParam(_)
-        | TsModel.Json(_)
-        | TsModel.Number(_)
-        | TsModel.BigNumber(_)
-        | TsModel.Boolean(_)
-        | TsModel.String(_)
-        | TsModel.LocalDate(_)
-        | TsModel.DateTime(_)
-      ) => Map.empty
-
-      case TsModel.Literal(tpe, _) => referencedTypeNames(tpe, currType)
-      case TsModel.Eval(_, tpe) => referencedTypeNames(tpe, currType)
-      case TsModel.Array(_, tpe, _) => referencedTypeNames(tpe, currType)
-      case TsModel.Set(_, tpe) => referencedTypeNames(tpe, currType)
-      case TsModel.NonEmptyArray(_, tpe, _) => referencedTypeNames(tpe, currType)
-      case TsModel.Option(_, tpe) => referencedTypeNames(tpe, currType)
-      case TsModel.Either(_, left, right, _) => referencedTypeNames(left, currType) |+| referencedTypeNames(right, currType)
-      case TsModel.Ior(_, left, right, _) => referencedTypeNames(left, currType) |+| referencedTypeNames(right, currType)
-      case TsModel.Map(_, key, value) => referencedTypeNames(key, currType) |+| referencedTypeNames(value, currType)
-      case TsModel.Tuple(_, tpes) => tpes.foldMap(referencedTypeNames(_, currType))
-      case i: TsModel.Interface => referencedTypeNamesInterface(i, currType)
-      case TsModel.InterfaceRef(typeName, typeArgs) => Map(currType -> Set(typeName)) |+| typeArgs.foldMap(referencedTypeNames(_, currType))
-      case o: TsModel.Object => referencedTypeNamesObject(o, currType)
-      case TsModel.ObjectRef(typeName) => Map(currType -> Set(typeName))
-      case u: TsModel.Union => referencedTypeNamesUnion(u, currType)
-      case TsModel.UnionRef(typeName, typeArgs, _) => Map(currType -> Set(typeName)) |+| typeArgs.foldMap(referencedTypeNames(_, currType))
-      case TsModel.Unknown(typeName, typeArgs) => Map(currType -> Set(typeName)) |+| typeArgs.foldMap(referencedTypeNames(_, currType))
-    }
-  }
-
-  /**
-   * Produces a [[scalats.ReferencedTypes]] containing the list of [[scalats.TypeName]]s
-   * that the given [[scalats.TypeName]] refers to
-   *
-   * @param model The [[scalats.TsModel]] to parse references for
-   * @return The types the model references
-   */
-  def referencedTypes(model: TsModel): ReferencedTypes =
-    new ReferencedTypes(referencedTypeNames(model, model.typeName))
 }

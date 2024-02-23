@@ -216,15 +216,13 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
       case t => t
     }
 
-    sym.tree match {
-      case ValDef(_, _, Some(term)) => unAnd(term.tpe)
-      case _ => report.errorAndAbort(s"Failed to get type of ${typeRepr.show}#${sym.name}")
-    }
+    unAnd(typeRepr.memberType(sym))
   }
 
   /** Parse an `object` definiton into its [[scalats.TsModel]] representation */
   private def parseObject[A: Type](parent: Option[TypeRepr]): Expr[TsModel.Object] = {
     val typeRepr = TypeRepr.of[A]
+
     val value = Expr.summon[ValueOf[A]].getOrElse(report.errorAndAbort(s"Unable to summon `ValueOf[${typeRepr.show}]`"))
     val members = valMembers(typeRepr)
     val fields = Expr.ofList(members.map(s => valDefType(typeRepr, s).asType match {
