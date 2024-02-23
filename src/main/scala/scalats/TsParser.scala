@@ -216,39 +216,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
       case t => t
     }
 
-    sym.tree match {
-      case ValDef(_, _, Some(term)) => unAnd(term.tpe)
-      case ValDef(_, tpe, None) =>
-        println(s"""
-**********************************************
-typeRepr: $typeRepr
-
-tpe: ${tpe.tpe}
-
-typeRepr.show: ${typeRepr.show}
-
-typeRepr.typeSymbol.primaryConstructor.tree: ${typeRepr.typeSymbol.primaryConstructor.tree}
-
-typeRepr.typeSymbol.typeRef: ${typeRepr.typeSymbol.typeRef}
-
-typeRepr.typeSymbol.termRef: ${typeRepr.typeSymbol.termRef}
-
-typeRepr.typeSymbol.flags.is(Flags.Enum): ${typeRepr.typeSymbol.flags.is(Flags.Enum)}
-
-typeRepr.typeSymbol.owner.termRef.show: ${typeRepr.typeSymbol.owner.termRef.show}
-
-t1: ${typeRepr.select(sym).dealias}
-
-t2: ${unAnd(typeRepr.memberType(sym))}
-**********************************************
-""")
-
-        // unAnd(typeRepr.memberType(sym))
-        // typeRepr.select(sym)
-        unAnd(tpe.tpe)
-
-      case _ => report.errorAndAbort(s"Failed to get type of ${typeRepr.show}#${sym.name}")
-    }
+    unAnd(typeRepr.memberType(sym))
   }
 
   /** Parse an `object` definiton into its [[scalats.TsModel]] representation */
@@ -272,60 +240,3 @@ t2: ${unAnd(typeRepr.memberType(sym))}
   private def parseObjectRef[A: Type]: Expr[TsModel.ObjectRef] =
     '{ TsModel.ObjectRef(${ mkTypeName(TypeRepr.of[A]) }) }
 }
-
-private def parseValueImpl[A: Type](value: Expr[A])(using Quotes): Expr[TsModel] =
-  new TsParser().parse[A](false)
-
-inline def parseValue[A](value: A): TsModel = ${ parseValueImpl[A]('value) }
-
-private case class PrettyPrinter(level: Int, inQuotes: Boolean, backslashed: Boolean) {
-  val indent = List.fill(level)("  ").mkString
-
-  def transform(char: Char): (PrettyPrinter, String) = {
-    val woSlash = copy(backslashed = false)
-    val (pp, f): (PrettyPrinter, PrettyPrinter => String) = char match {
-      case '"' if inQuotes && !backslashed => (woSlash.copy(inQuotes = false), (_: PrettyPrinter) => s"$char")
-      case '"' if !inQuotes => (woSlash.copy(inQuotes = true), (_: PrettyPrinter) => s"$char")
-      case '\\' if inQuotes && !backslashed => (copy(backslashed = true), (_: PrettyPrinter) => s"$char")
-
-      case ',' if !inQuotes => (woSlash, (p: PrettyPrinter) => s",\n${p.indent}")
-      case '(' if !inQuotes => (woSlash.copy(level = level + 1), (p: PrettyPrinter) => s"(\n${p.indent}")
-      case ')' if !inQuotes => (woSlash.copy(level = level - 1), (p: PrettyPrinter) => s"\n${p.indent})")
-      case _ => (woSlash, (_: PrettyPrinter) => s"$char")
-    }
-    (pp, f(pp))
-  }
-}
-
-private def prettyPrint(raw: String): String =
-  raw.foldLeft((PrettyPrinter(0, false, false), new StringBuilder(""))) { case ((pp, sb), char) =>
-    val (newPP, res) = pp.transform(char)
-    (newPP, sb.append(res))
-  }._2.toString.replaceAll("""\(\s+\)""", "()")
-
-private def getTypeOfXImpl[A: Type](using q: Quotes): Expr[Unit] = {
-  import q.reflect.*
-
-  val tpe = TypeRepr.of[A]
-  val sym = tpe.typeSymbol
-  val x = sym.fieldMembers.find(_.name == "x").get
-  val valDef = x.tree.asInstanceOf[ValDef]
-  val ctor = sym.primaryConstructor.tree.asInstanceOf[DefDef]
-  println(s"""
-
-tpe.memberType(x): ${tpe.memberType(x)}
-
-valDef.tpt.tpe: ${valDef.tpt.tpe}
-
-ctor: $ctor
-
-ctor.paramss.head.params.head.rhs: ${ctor.paramss.head.params.head.asInstanceOf[ValDef].tpt}
-
-sym.tree: ${prettyPrint(sym.tree.toString)}
-
-""")
-
-  '{ () }
-}
-
-inline def getTypeOfX[A] = ${ getTypeOfXImpl[A] }
