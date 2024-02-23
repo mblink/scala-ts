@@ -205,7 +205,11 @@ final class TsGenerator(
         | _: TsModel.Union
         | _: TsModel.UnionRef
         | _: TsModel.Unknown
-      ) => imports.custom(tpe.typeName, maybeDecap(value.getClass.getSimpleName.stripSuffix("$")))
+      ) =>
+        value match {
+          case p: Product => imports.custom(tpe.typeName, maybeDecap(p.productPrefix))
+          case _ => imports.custom(tpe.typeName, maybeDecap(value.getClass.getSimpleName.stripSuffix("$")))
+        }
     }
 
   private def unionOrdName(s: String): String = decap(s) ++ "Ord"
