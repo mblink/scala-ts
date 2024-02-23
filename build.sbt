@@ -35,7 +35,6 @@ lazy val root = project.in(file("."))
     version := "0.14.0",
     scalaVersion := scalaV,
 
-    Test / scalacOptions += "-Yretain-trees",
     Compile / doc / scalacOptions += "-skip-by-regex:^scalats\\.BuildInfo\\$$",
 
     libraryDependencies ++= Seq(
