@@ -75,7 +75,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
         '{ TsModel.TypeParam(${ Expr(name) }) }
       case '[io.circe.Json] => '{ TsModel.Json($typeName) }
       case '[Byte] | '[Short] | '[Int] | '[Long] | '[Double] | '[Float] => '{ TsModel.Number($typeName) }
-      case '[BigDecimal] => '{ TsModel.BigNumber($typeName) }
+      case '[BigDecimal] | '[BigInt] => '{ TsModel.BigNumber($typeName) }
       case '[Boolean] => '{ TsModel.Boolean($typeName) }
       case '[String] => '{ TsModel.String($typeName) }
       case '[java.time.LocalDate] | '[org.joda.time.LocalDate] => '{ TsModel.LocalDate($typeName) }
