@@ -223,6 +223,7 @@ object TsImports {
     iotsReadonlySetFromArray: (String, String) = ("readonlySetFromArray", "io-ts-types/lib/readonlySetFromArray"),
     iotsNumberFromString: (String, String) = ("NumberFromString", "io-ts-types/lib/NumberFromString"),
     iotsOption: (String, String) = ("optionFromNullable", "io-ts-types/lib/optionFromNullable"),
+    iotsUUID: (String, String) = ("UUID", "io-ts-types/lib/UUID"),
     iotsBigNumber: Option[(String, String)] = None,
     iotsEither: Option[(String, String)] = None,
     iotsLocalDate: Option[(String, String)] = None,
@@ -370,6 +371,8 @@ object TsImports {
     final lazy val iotsLocalDate = optImport(tsi.iotsLocalDate, "LocalDate", "iotsLocalDate")
     /** Helper to call the configured `iotsThese` function */
     final lazy val iotsThese = CallableImport(optImport(tsi.iotsThese, "These", "iotsThese"))
+    /** Reference to the configured `iotsUUID` value */
+    final lazy val iotsUUID = namedImport(tsi.iotsUUID)
 
     private var incr = Map.empty[String, Int]
 

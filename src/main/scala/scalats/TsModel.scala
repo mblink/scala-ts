@@ -54,6 +54,9 @@ object TsModel {
   case class DateTime(typeName: TypeName) extends TsModel {
     val typeArgs = Nil
   }
+  case class UUID(typeName: TypeName) extends TsModel {
+    val typeArgs = Nil
+  }
   case class Eval(typeName: TypeName, tpe: TsModel) extends TsModel {
     val typeArgs = Nil
   }

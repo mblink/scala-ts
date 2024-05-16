@@ -80,6 +80,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
       case '[String] => '{ TsModel.String($typeName) }
       case '[java.time.LocalDate] | '[org.joda.time.LocalDate] => '{ TsModel.LocalDate($typeName) }
       case '[java.time.LocalDateTime] | '[java.time.ZonedDateTime] | '[java.time.Instant] | '[org.joda.time.DateTime] => '{ TsModel.DateTime($typeName) }
+      case '[java.util.UUID] => '{ TsModel.UUID($typeName) }
       case '[cats.Eval[a]] => '{ TsModel.Eval($typeName, ${ parse[a](false) }) }
       case '[cats.data.Chain[a]] => '{ TsModel.Array($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[cats.data.Chain[Any]].toList) }
       case '[List[a]] => '{ TsModel.Array($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[List[Any]]) }

@@ -166,7 +166,7 @@ final class TsGenerator(
       case TsModel.Literal(tpe, value) => tsValue(tpe, value)
       case TsModel.Json(_) => value.asInstanceOf[io.circe.Json].noSpaces
       case TsModel.Number(_) | TsModel.BigNumber(_) | TsModel.Boolean(_) => value.toString
-      case TsModel.String(_) | TsModel.LocalDate(_) | TsModel.DateTime(_) => s"`$value`"
+      case TsModel.String(_) | TsModel.LocalDate(_) | TsModel.DateTime(_) | TsModel.UUID(_) => s"`$value`"
       case TsModel.Eval(_, tpe) => tsValue(tpe, value.asInstanceOf[cats.Eval[?]].value)
       case TsModel.Array(_, tpe, toList) =>
         "[" |+| toList(value).intercalateMap(imports.lift(", "))(tsValue(tpe, _)) |+| "]"
@@ -249,6 +249,7 @@ final class TsGenerator(
         | TsModel.BigNumber(_)
         | TsModel.LocalDate(_)
         | TsModel.DateTime(_)
+        | TsModel.UUID(_)
         | TsModel.Set(_, _)
         | TsModel.NonEmptyArray(_, _, _)
         | TsModel.Either(_, _, _, _)
@@ -439,6 +440,7 @@ final class TsGenerator(
       case TsModel.String(typeName) => maybeWrapCodec(state, typeName, imports.iotsString)
       case TsModel.LocalDate(typeName) => maybeWrapCodec(state, typeName, imports.iotsLocalDate)
       case TsModel.DateTime(typeName) => maybeWrapCodec(state, typeName, imports.iotsDateTime)
+      case TsModel.UUID(typeName) => maybeWrapCodec(state, typeName, imports.iotsUUID)
       case TsModel.Eval(_, tpe) => generate(state, tpe)
       case TsModel.Array(typeName, tpe, _) => maybeWrapCodec(state, typeName, imports.iotsReadonlyArray(generate(state.copy(top = false), tpe).foldMap(_._2)))
       case TsModel.Set(typeName, tpe) => maybeWrapCodec(state, typeName, imports.iotsReadonlySetFromArray(generate(state.copy(top = false), tpe).foldMap(_._2), ordInstance(tpe)))
