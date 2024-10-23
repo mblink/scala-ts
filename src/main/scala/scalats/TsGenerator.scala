@@ -144,7 +144,7 @@ final class TsGenerator(
     ) |+| ")" |+| retType.fold(Generated.empty)(t => ": " |+| t) |+| " => "
 
   /**
-   * The `io-ts` value corresponding to a Scala `Map`
+   * The `io-ts` type corresponding to a Scala `Map`
    *
    * Produces a TypeScript `Record` when the keys are `string`s and a `ReadonlyMap` otherwise
    */
@@ -276,7 +276,7 @@ final class TsGenerator(
     })
   }
 
-  /** Produces code that refers to a given value, represented by its `typeName` and `typeArgs` */
+  /** Produces code that refers to a given type, represented by its `typeName` and `typeArgs` */
   private def generateTypeRef(typeName: TypeName, typeArgs: List[TsModel], isUnion: Boolean): Generated =
     customType.tpe(typeName.raw).getOrElse(
       imports.custom(typeName, cap(mkCodecName(typeName, isUnion))) |+|
