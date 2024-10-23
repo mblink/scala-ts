@@ -405,7 +405,13 @@ final class TsGenerator(
     union.possibilities match {
       case Nil => sys.error(s"Can't generate TS code for union `${union.typeName}` with 0 members")
       case h :: Nil => generateType(h)
-      case l @ (_ :: _) => imports.iotsUnionC("[" |+| l.toList.intercalateMap(imports.lift(", "))(generateType) |+| "]")
+      case l @ (_ :: _) =>
+        imports.iotsUnionC("[" |+|
+          l.map {
+            case TsModel.Interface(typeName, _, typeArgs, _) => TsModel.InterfaceRef(typeName, typeArgs)
+            case TsModel.Object(typeName, _, _) => TsModel.ObjectRef(typeName)
+          }.intercalateMap(imports.lift(", "))(generateType) |+|
+        "]")
     }
 
   /** Produces value code for a scala `enum`/`sealed trait`/`sealed class` */
