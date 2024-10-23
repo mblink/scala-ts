@@ -30,27 +30,33 @@ export const bar = {
   str: `bar`
 } as const;
 
-export const barTaggedC = t.type({
+export type BarTaggedC = t.TypeC<{
+  _tag: t.LiteralC<`Bar`>
+}>;
+export const barTaggedC: BarTaggedC = t.type({
   _tag: t.literal(`Bar`)
 });
-export type BarTaggedC = typeof barTaggedC;
 export type BarTagged = t.TypeOf<BarTaggedC>;
 export type Bar = BarTagged & typeof bar;
-export const barC = pipe(barTaggedC, c => new t.Type<Bar, BarTagged>(
+export type BarC = t.Type<Bar, BarTagged>;
+export const barC: BarC = pipe(barTaggedC, c => new t.Type<Bar, BarTagged>(
   `Bar`,
   (u: unknown): u is Bar => E.isRight(c.decode(u)),
   (u: unknown): E.Either<t.Errors, Bar> => pipe(c.decode(u), E.map(x => ({ ...x, ...bar }))),
   (x: Bar): BarTagged => ({ ...x, _tag: `Bar`}),
 ));
-export type BarC = typeof barC;
 
 
-export const bazC = t.type({
+export type BazC = t.TypeC<{
+  _tag: t.LiteralC<`Baz`>,
+  int: t.NumberC,
+  str: t.StringC
+}>;
+export const bazC: BazC = t.type({
   _tag: t.literal(`Baz`),
   int: t.number,
   str: t.string
 });
-export type BazC = typeof bazC;
 export type Baz = t.TypeOf<BazC>;
 
 
@@ -58,8 +64,8 @@ export const allFooC = [barC, bazC] as const;
 export const allFooNames = [`Bar`, `Baz`] as const;
 export type FooName = (typeof allFooNames)[number];
 
-export const FooCU = t.union([barC, bazC]);
-export type FooCU = typeof FooCU;
+export type FooCU = t.UnionC<[BarC, BazC]>;
+export const FooCU: FooCU = t.union([barC, bazC]);
 export type FooU = t.TypeOf<FooCU>;
 
 export type FooMap<A> = { [K in FooName]: A };

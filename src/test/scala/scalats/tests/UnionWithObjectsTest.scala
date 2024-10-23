@@ -35,19 +35,21 @@ export const bar = {
   str: `bar`
 } as const;
 
-export const barTaggedC = t.type({
+export type BarTaggedC = t.TypeC<{
+  _tag: t.LiteralC<`Bar`>
+}>;
+export const barTaggedC: BarTaggedC = t.type({
   _tag: t.literal(`Bar`)
 });
-export type BarTaggedC = typeof barTaggedC;
 export type BarTagged = t.TypeOf<BarTaggedC>;
 export type Bar = BarTagged & typeof bar;
-export const barC = pipe(barTaggedC, c => new t.Type<Bar, BarTagged>(
+export type BarC = t.Type<Bar, BarTagged>;
+export const barC: BarC = pipe(barTaggedC, c => new t.Type<Bar, BarTagged>(
   `Bar`,
   (u: unknown): u is Bar => E.isRight(c.decode(u)),
   (u: unknown): E.Either<t.Errors, Bar> => pipe(c.decode(u), E.map(x => ({ ...x, ...bar }))),
   (x: Bar): BarTagged => ({ ...x, _tag: `Bar`}),
 ));
-export type BarC = typeof barC;
 
 
 export const baz = {
@@ -56,27 +58,29 @@ export const baz = {
   str: `baz`
 } as const;
 
-export const bazTaggedC = t.type({
+export type BazTaggedC = t.TypeC<{
+  _tag: t.LiteralC<`Baz`>
+}>;
+export const bazTaggedC: BazTaggedC = t.type({
   _tag: t.literal(`Baz`)
 });
-export type BazTaggedC = typeof bazTaggedC;
 export type BazTagged = t.TypeOf<BazTaggedC>;
 export type Baz = BazTagged & typeof baz;
-export const bazC = pipe(bazTaggedC, c => new t.Type<Baz, BazTagged>(
+export type BazC = t.Type<Baz, BazTagged>;
+export const bazC: BazC = pipe(bazTaggedC, c => new t.Type<Baz, BazTagged>(
   `Baz`,
   (u: unknown): u is Baz => E.isRight(c.decode(u)),
   (u: unknown): E.Either<t.Errors, Baz> => pipe(c.decode(u), E.map(x => ({ ...x, ...baz }))),
   (x: Baz): BazTagged => ({ ...x, _tag: `Baz`}),
 ));
-export type BazC = typeof bazC;
 
 
 export const allFooC = [barC, bazC] as const;
 export const allFooNames = [`Bar`, `Baz`] as const;
 export type FooName = (typeof allFooNames)[number];
 
-export const FooCU = t.union([barC, bazC]);
-export type FooCU = typeof FooCU;
+export type FooCU = t.UnionC<[BarC, BazC]>;
+export const FooCU: FooCU = t.union([barC, bazC]);
 export type FooU = t.TypeOf<FooCU>;
 
 export const fooOrd: Ord.Ord<FooU> = pipe(stringOrd, Ord.contramap(x => x._tag));
