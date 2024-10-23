@@ -1,6 +1,6 @@
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
-val scalaV = "3.3.3"
+val scalaV = "3.3.4"
 
 ThisBuild / scalaVersion := scalaV
 ThisBuild / crossScalaVersions := Seq(scalaV)
@@ -20,13 +20,21 @@ ThisBuild / githubWorkflowBuild := Seq(
 
 ThisBuild / githubWorkflowPublishTargetBranches := Seq()
 
-lazy val cats = "org.typelevel" %% "cats-core" % "2.10.0"
-def circe(proj: String) = "io.circe" %% s"circe-$proj" % "0.14.6"
-lazy val joda = "joda-time" % "joda-time" % "2.12.7"
-def munit(proj: String = "") = "org.scalameta" %% s"munit${if (proj == "") "" else s"-$proj"}" % "1.0.0-M11" % Test
-lazy val scalacheck = "org.scalacheck" %% "scalacheck" % "1.17.0" % Test
+lazy val cats = "org.typelevel" %% "cats-core" % "2.12.0"
+def circe(proj: String) = "io.circe" %% s"circe-$proj" % "0.14.10"
+lazy val joda = "joda-time" % "joda-time" % "2.13.0"
+def munit(proj: String = "") =
+  "org.scalameta" %%
+    s"munit${if (proj == "") "" else s"-$proj"}" %
+    (proj match {
+      case "" => "1.0.2"
+      case "scalacheck" => "1.0.0"
+      case _ => sys.error(s"Unknown munit project: $proj")
+    }) %
+    Test
+lazy val scalacheck = "org.scalacheck" %% "scalacheck" % "1.18.1" % Test
 lazy val scalaz = "org.scalaz" %% "scalaz-core" % "7.3.8"
-lazy val slf4j = "org.slf4j" % "slf4j-api" % "2.0.12"
+lazy val slf4j = "org.slf4j" % "slf4j-api" % "2.0.16"
 
 lazy val root = project.in(file("."))
   .settings(
