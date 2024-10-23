@@ -92,7 +92,7 @@ final class TsGenerator(
 
   case class WrapCodec(custom: Generated => (Generated => Generated => Generated => Generated) => Generated) {
     final def apply(codec: Generated): Generated =
-      custom(codec)(codec => codecType => valueType => codec |+| codecType |+| valueType)
+      custom(codec)(codecType => codec => valueType => codecType |+| codec |+| valueType)
   }
 
   object WrapCodec {
@@ -135,13 +135,13 @@ final class TsGenerator(
 
   /**
    * Produces TypeScript function parameters, typically used in conjunction with `typeArgsMixed`
-   * e.g. `(A1: A1, A2: A2, ...) => `
+   * e.g. `(A1: A1, A2: A2, ...)[: RetType] => `
    */
-  private def typeArgsFnParams(state: State, typeArgs: List[TsModel]): Generated =
+  private def typeArgsFnParams(state: State, typeArgs: List[TsModel], retType: Option[Generated]): Generated =
     if (typeArgs.isEmpty) Generated.empty
     else "(" |+| typeArgs.intercalateMap(imports.lift(", "))(
       generate(state, _).foldMap(_._2).pipe(x => x |+| ": " |+| x)
-    ) |+| ") => "
+    ) |+| ")" |+| retType.fold(Generated.empty)(t => ": " |+| t) |+| " => "
 
   /**
    * The `io-ts` value corresponding to a Scala `Map`
@@ -348,12 +348,12 @@ final class TsGenerator(
     lazy val minimalTaggedFields = List(tagField(name))
 
     lazy val minimalTaggedCodec: Generated =
+      // Tagged codec type
+      "export type " |+| cap(taggedCodecName) |+| " = " |+| generateFieldsType(minimalTaggedFields) |+| ";\n" |+|
       // Codec with only `_tag` value
-      "export const " |+| taggedCodecName |+| ": " |+| generateFieldsType(minimalTaggedFields) |+| " = " |+|
+      "export const " |+| taggedCodecName |+| ": " |+| cap(taggedCodecName) |+| " = " |+|
       generateFieldsCodec(state, minimalTaggedFields) |+|
       ";\n" |+|
-      // Tagged codec type
-      "export type " |+| cap(taggedCodecName) |+| " = typeof " |+| taggedCodecName |+| ";\n" |+|
       // Tagged value type
       "export type " |+| taggedValueType |+| " = " |+| imports.iotsTypeOf(cap(taggedCodecName)) |+| ";\n" |+|
       // Full codec type
@@ -367,11 +367,11 @@ final class TsGenerator(
         ",\n" |+|
         "  (x: " |+| valueType |+| "): " |+| taggedValueType |+| " => ({ ...x, _tag: `" |+| name |+| "`}),\n" |+|
         ")"
-      ))(codec => codecType => _ /* we create our own value type */ =>
+      ))(codecType => codec => _ /* we create our own value type */ =>
          // Full value type
          "export type " |+| valueType |+| " = " |+| taggedValueType |+| " & typeof " |+| constName |+| ";\n" |+|
-         codec |+|
-         codecType
+         codecType |+|
+         codec
       )
 
     val codec =
@@ -453,7 +453,7 @@ final class TsGenerator(
     Monoid[List[(Option[TypeName], Generated)]].combine(memberCodecs.flatten, List((Some(typeName),
       "export const all" |+| valueType |+| "C = " |+|
       typeArgsMixed(state.copy(top = false), typeArgs) |+|
-      typeArgsFnParams(state.copy(top = false), typeArgs) |+|
+      typeArgsFnParams(state.copy(top = false), typeArgs, None) |+|
       allMemberCodecsArr |+| " as const;\n" |+|
       "export const " |+| allNamesConstName |+| " = [" |+| memberNames.intercalateMap(", ")(s => s"`$s`") |+| "] as const;\n" |+|
       "export type " |+| valueType |+| "Name = (typeof " |+| allNamesConstName |+| ")[number];\n\n" |+|
@@ -664,7 +664,6 @@ final class TsGenerator(
     })
     val codecType = cap(codecName)
     val valueType = codecType.replaceAll("C(U?)$", "$1")
-    val className = codecName ++ "C"
     val hasTypeArgs = model match {
       case _: TsModel.Interface | _: TsModel.Object | _: TsModel.Union => model.typeArgs.nonEmpty
       case _ => false
@@ -672,31 +671,19 @@ final class TsGenerator(
 
     if (hasTypeArgs) {
       val updState = State(false, WrapCodec.id)
-      val tpArgsPlain = model.typeArgs.intercalateMap(imports.lift(","))(generate(updState, _).foldMap(_._2))
+      val tpArgsPlain = model.typeArgs.intercalateMap(imports.lift(","))(genNotTop(updState, _))
       val tpArgsIots = typeArgsMixed(updState, model.typeArgs)
-      val fnArgs = typeArgsFnParams(updState, model.typeArgs)
+      val fnArgs = typeArgsFnParams(updState, model.typeArgs, Some(codecType |+| "<" |+| tpArgsPlain |+| ">"))
       generate(State(true, WrapCodec(codec => f =>
         f(
-          "export class " |+| className |+|
-          tpArgsIots |+|
-          "{ codec: " |+| fnArgs |+| generateType(model) |+| " = " |+|
-          fnArgs |+|
-          codec |+|
-          "}\n" |+|
-          "export const " |+| codecName |+| " = " |+|
-          tpArgsIots |+|
-          fnArgs |+|
-          "new " |+| className |+| "<" |+| tpArgsPlain |+| ">().codec(" |+| tpArgsPlain |+| ");\n"
+          "export type " |+| codecType |+| tpArgsIots |+| " = " |+| generateType(model) |+| ";\n"
         )(
-          "export type " |+| codecType |+| tpArgsIots |+|
-          " = ReturnType<" |+| className |+| "<" |+| tpArgsPlain |+| ">[\"codec\"]>;\n"
+          "export const " |+| codecName |+| " = " |+| tpArgsIots |+| fnArgs |+| codec |+| ";\n"
         )(
           "export type " |+| valueType |+| "<" |+| tpArgsPlain |+| "> = " |+|
           imports.iotsTypeOf(
             codecType |+| "<" |+|
-            model.typeArgs.intercalateMap(imports.lift(","))(
-              t => imports.iotsTypeType(generate(updState, t).foldMap(_._2))
-            ) |+|
+            model.typeArgs.intercalateMap(imports.lift(", "))(t => imports.iotsTypeType(genNotTop(updState, t))) |+|
             ">"
           ) |+|
           ";"
@@ -705,11 +692,9 @@ final class TsGenerator(
     } else
       generate(State(true, WrapCodec(codec => f =>
         f(
-          "export const " |+| codecName |+| ": " |+| generateType(model) |+| " = " |+|
-          codec |+|
-          ";\n"
+          "export type " |+| codecType |+| " = " |+| generateType(model) |+| ";\n"
         )(
-          "export type " |+| codecType |+| " = typeof " |+| codecName |+| ";\n"
+          "export const " |+| codecName |+| ": " |+| codecType |+| " = " |+| codec |+| ";\n"
         )(
           "export type " |+| valueType |+| " = " |+| imports.iotsTypeOf(codecType) |+| ";\n"
         )
