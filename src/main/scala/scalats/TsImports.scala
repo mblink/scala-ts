@@ -1,6 +1,6 @@
 package scalats
 
-import cats.{Monoid, Semigroup, Show}
+import cats.{Id, Monoid, Semigroup, Show}
 import cats.syntax.foldable.*
 import cats.syntax.semigroup.*
 import java.io.File
@@ -228,7 +228,9 @@ object TsImports {
     def tpe(tsImports: TsImports, name: String): CallableImport = CallableImport(tsImports, name, "<", ">")
   }
 
-  case class ConfiguredImport(tpe: Generated, value: Generated)
+  case class ConfiguredImport[ValueTpe[_]](valueType: ValueTpe[Generated], codecType: Generated, value: Generated)
+
+  type Never[A] = None.type
 
   /**
    * TypeScript imports config to control where certain values and types are imported from
@@ -239,52 +241,60 @@ object TsImports {
    */
   case class Config(
     fptsBoolean: String = "fp-ts/lib/boolean",
-    fptsDate: String = "fp-ts/lib/Date",
     fptsEither: String = "fp-ts/lib/Either",
     fptsNumber: String = "fp-ts/lib/number",
     fptsOption: String = "fp-ts/lib/Option",
     fptsOrd: String = "fp-ts/lib/Ord",
     fptsReadonlyArray: String = "fp-ts/lib/ReadonlyArray",
+    fptsReadonlyNonEmptyArray: String = "fp-ts/lib/ReadonlyNonEmptyArray",
     fptsReadonlySet: String = "fp-ts/lib/ReadonlySet",
     fptsString: String = "fp-ts/lib/string",
     fptsThese: String = "fp-ts/lib/These",
     fptsPipe: (String, String) = ("pipe", "fp-ts/lib/function"),
     iots: String = "io-ts",
-    iotsDateTime: ConfiguredImport = ConfiguredImport(
+    iotsDateTime: ConfiguredImport[Id] = ConfiguredImport(
+      Generated.lift("Date"),
       namedImport("io-ts-types/lib/DateFromISOString", "DateFromISOStringC"),
       namedImport("io-ts-types/lib/DateFromISOString", "DateFromISOString"),
     ),
-    iotsReadonlyMapFromEntries: ConfiguredImport = ConfiguredImport(
+    iotsReadonlyMapFromEntries: ConfiguredImport[Never] = ConfiguredImport(
+      None,
       namedImport("io-ts-types/lib/readonlyMapFromEntries", "ReadonlyMapFromEntriesC"),
       namedImport("io-ts-types/lib/readonlyMapFromEntries", "readonlyMapFromEntries"),
     ),
-    iotsReadonlyNonEmptyArray: ConfiguredImport = ConfiguredImport(
+    iotsReadonlyNonEmptyArray: ConfiguredImport[Never] = ConfiguredImport(
+      None,
       namedImport("io-ts-types/lib/readonlyNonEmptyArray", "ReadonlyNonEmptyArrayC"),
       namedImport("io-ts-types/lib/readonlyNonEmptyArray", "readonlyNonEmptyArray"),
     ),
-    iotsReadonlySetFromArray: ConfiguredImport = ConfiguredImport(
+    iotsReadonlySetFromArray: ConfiguredImport[Never] = ConfiguredImport(
+      None,
       namedImport("io-ts-types/lib/readonlySetFromArray", "ReadonlySetFromArrayC"),
       namedImport("io-ts-types/lib/readonlySetFromArray", "readonlySetFromArray"),
     ),
-    iotsNumberFromString: ConfiguredImport = ConfiguredImport(
+    iotsNumberFromString: ConfiguredImport[Never] = ConfiguredImport(
+      None,
       namedImport("io-ts-types/lib/NumberFromString", "NumberFromStringC"),
       namedImport("io-ts-types/lib/NumberFromString", "NumberFromString"),
     ),
-    iotsOption: ConfiguredImport = ConfiguredImport(
+    iotsOption: ConfiguredImport[Never] = ConfiguredImport(
+      None,
       namedImport("io-ts-types/lib/optionFromNullable", "OptionFromNullableC"),
       namedImport("io-ts-types/lib/optionFromNullable", "optionFromNullable"),
     ),
-    iotsUUID: ConfiguredImport = ConfiguredImport(
+    iotsUUID: ConfiguredImport[Id] = ConfiguredImport(
+      namedImport("io-ts-types/lib/UUID", "UUID"),
       Generated(names("io-ts-types/lib/UUID", "UUID"), "typeof UUID"),
       namedImport("io-ts-types/lib/UUID", "UUID"),
     ),
-    iotsEither: ConfiguredImport = ConfiguredImport(
+    iotsEither: ConfiguredImport[Never] = ConfiguredImport(
+      None,
       namedImport("io-ts-types/lib/either", "EitherC"),
       namedImport("io-ts-types/lib/either", "either"),
     ),
-    iotsBigNumber: Option[ConfiguredImport] = None,
-    iotsLocalDate: Option[ConfiguredImport] = None,
-    iotsThese: Option[ConfiguredImport] = None
+    iotsBigNumber: Option[ConfiguredImport[Id]] = None,
+    iotsLocalDate: Option[ConfiguredImport[Id]] = None,
+    iotsThese: Option[ConfiguredImport[Never]] = None
   )
 
   /** A set of TypeScript imports available to use during code generation */
@@ -307,8 +317,6 @@ object TsImports {
 
     /** Helper to refer to values from the configured `fptsBoolean` location */
     final lazy val fptsBoolean = new FptsUtil(_.fptsBoolean)
-    /** Helper to refer to values from the configured `fptsDate` location */
-    final lazy val fptsDate = new FptsUtil(_.fptsDate)
     /** Helper to refer to values from the configured `fptsNumber` location */
     final lazy val fptsNumber = new FptsUtil(_.fptsNumber)
     /** Helper to refer to values from the configured `fptsString` location */
@@ -324,6 +332,8 @@ object TsImports {
     final lazy val fptsPipe = CallableImport(namedImport(tsi.fptsPipe))
     /** Helper to refer to values from the configured `fptsReadonlyArray` location */
     final lazy val fptsReadonlyArray = CallableImport(all(tsi.fptsReadonlyArray, "RA"), "RA", ".", "")
+    /** Helper to refer to values from the configured `fptsReadonlyArray` location */
+    final lazy val fptsReadonlyNonEmptyArray = CallableImport(all(tsi.fptsReadonlyNonEmptyArray, "RNEA"), "RNEA", ".", "")
     /** Helper to refer to values from the configured `fptsReadonlySet` location */
     final lazy val fptsReadonlySet = CallableImport(all(tsi.fptsReadonlySet, "RS"), "RS", ".", "")
     /** Helper to refer to values from the configured `fptsThese` location */
@@ -392,50 +402,89 @@ object TsImports {
     /** Reference to the `iots.UnknownC` type */
     final lazy val iotsUnknownC = Generated(iotsImport, "t.UnknownC")
 
-    /** Reference to the configured `iotsDateTime` type */
-    final lazy val iotsDateTimeType = tsi.iotsDateTime.tpe
+    /** Reference to the configured `iotsDateTime` codec type */
+    final lazy val iotsDateTimeType = tsi.iotsDateTime.codecType
     /** Reference to the configured `iotsDateTime` value */
     final lazy val iotsDateTimeValue = tsi.iotsDateTime.value
-    /** Helper to call the configured `iotsReadonlyMapFromEntries` type */
-    final lazy val iotsReadonlyMapFromEntriesType = CallableImport.tpe(tsi.iotsReadonlyMapFromEntries.tpe)
+
+    /** Helper to call the configured `iotsReadonlyMapFromEntries` codec type */
+    final lazy val iotsReadonlyMapFromEntriesType = CallableImport.tpe(tsi.iotsReadonlyMapFromEntries.codecType)
     /** Helper to call the configured `iotsReadonlyMapFromEntries` function */
     final lazy val iotsReadonlyMapFromEntriesValue = CallableImport(tsi.iotsReadonlyMapFromEntries.value)
-    /** Helper to call the configured `iotsReadonlyNonEmptyArray` type */
-    final lazy val iotsReadonlyNonEmptyArrayType = CallableImport.tpe(tsi.iotsReadonlyNonEmptyArray.tpe)
+
+    /** Helper to call the configured `iotsReadonlyNonEmptyArray` codec type */
+    final lazy val iotsReadonlyNonEmptyArrayType = CallableImport.tpe(tsi.iotsReadonlyNonEmptyArray.codecType)
     /** Helper to call the configured `iotsReadonlyNonEmptyArray` function */
     final lazy val iotsReadonlyNonEmptyArrayValue = CallableImport(tsi.iotsReadonlyNonEmptyArray.value)
-    /** Helper to call the configured `iotsReadonlySetFromArray` type */
-    final lazy val iotsReadonlySetFromArrayType = CallableImport.tpe(tsi.iotsReadonlySetFromArray.tpe)
+
+    /** Helper to call the configured `iotsReadonlySetFromArray` codec type */
+    final lazy val iotsReadonlySetFromArrayType = CallableImport.tpe(tsi.iotsReadonlySetFromArray.codecType)
     /** Helper to call the configured `iotsReadonlySetFromArray` function */
     final lazy val iotsReadonlySetFromArrayValue = CallableImport(tsi.iotsReadonlySetFromArray.value)
-    /** Reference to the configured `iotsNumberFromString` type */
-    final lazy val iotsNumberFromStringType = tsi.iotsNumberFromString.tpe
+
+    /** Reference to the configured `iotsNumberFromString` codec type */
+    final lazy val iotsNumberFromStringType = tsi.iotsNumberFromString.codecType
     /** Reference to the configured `iotsNumberFromString` value */
     final lazy val iotsNumberFromStringValue = tsi.iotsNumberFromString.value
-    /** Helper to call the configured `iotsOption` function */
-    final lazy val iotsOptionType = CallableImport.tpe(tsi.iotsOption.tpe)
+
+    /** Helper to call the configured `iotsOption` codec type */
+    final lazy val iotsOptionType = CallableImport.tpe(tsi.iotsOption.codecType)
     /** Helper to call the configured `iotsOption` function */
     final lazy val iotsOptionValue = CallableImport(tsi.iotsOption.value)
-    /** Reference to the configured `iotsBigNumber` type */
-    final lazy val iotsBigNumberType = optImport(tsi.iotsBigNumber.map(_.tpe), "BigNumber", "iotsBigNumber")
+
+    /** Reference to the configured `iotsBigNumber` codec type */
+    final lazy val iotsBigNumberType = optImport(tsi.iotsBigNumber.map(_.codecType), "BigNumber", "iotsBigNumber")
     /** Reference to the configured `iotsBigNumber` value */
     final lazy val iotsBigNumberValue = optImport(tsi.iotsBigNumber.map(_.value), "BigNumber", "iotsBigNumber")
-    /** Helper to call the configured `iotsEither` type */
-    final lazy val iotsEitherType = CallableImport.tpe(tsi.iotsEither.tpe)
+
+    /** Helper to call the configured `iotsEither` codec type */
+    final lazy val iotsEitherType = CallableImport.tpe(tsi.iotsEither.codecType)
     /** Helper to call the configured `iotsEither` function */
     final lazy val iotsEitherValue = CallableImport(tsi.iotsEither.value)
-    /** Reference to the configured `iotsLocalDate` value */
-    final lazy val iotsLocalDateType = optImport(tsi.iotsLocalDate.map(_.tpe), "LocalDate", "iotsLocalDate")
+
+    /** Reference to the configured `iotsLocalDate` codec type */
+    final lazy val iotsLocalDateType = optImport(tsi.iotsLocalDate.map(_.codecType), "LocalDate", "iotsLocalDate")
     /** Reference to the configured `iotsLocalDate` value */
     final lazy val iotsLocalDateValue = optImport(tsi.iotsLocalDate.map(_.value), "LocalDate", "iotsLocalDate")
-    /** Helper to call the configured `iotsThese` type */
-    final lazy val iotsTheseType = CallableImport.tpe(optImport(tsi.iotsThese.map(_.tpe), "These", "iotsThese"))
+
+    /** Helper to call the configured `iotsThese` codec type */
+    final lazy val iotsTheseType = CallableImport.tpe(optImport(tsi.iotsThese.map(_.codecType), "These", "iotsThese"))
     /** Helper to call the configured `iotsThese` function */
     final lazy val iotsTheseValue = CallableImport(optImport(tsi.iotsThese.map(_.value), "These", "iotsThese"))
-    /** Reference to the configured `iotsUUID` type */
-    final lazy val iotsUUIDType = tsi.iotsUUID.tpe
+
+    /** Reference to the configured `iotsUUID` codec type */
+    final lazy val iotsUUIDType = tsi.iotsUUID.codecType
     /** Reference to the configured `iotsUUID` value */
     final lazy val iotsUUIDValue = tsi.iotsUUID.value
+
+    final lazy val unknownType = Generated.lift("unknown")
+    final lazy val stringType = Generated.lift("string")
+    final lazy val numberType = Generated.lift("number")
+    final lazy val booleanType = Generated.lift("boolean")
+    /** Reference to the configured `iotsDateTime` value type */
+    final lazy val dateTimeType = tsi.iotsDateTime.valueType
+    /** Helper to build a ReadonlyArray type */
+    final lazy val readonlyArrayType = CallableImport.tpe(TsImports.empty, "ReadonlyArray")
+    /** Helper to build a ReadonlyNonEmptyArray type */
+    final lazy val readonlyNonEmptyArrayType = CallableImport.tpe(fptsReadonlyNonEmptyArray("ReadonlyNonEmptyArray"))
+    /** Helper to build a ReadonlyMap type */
+    final lazy val readonlyMapType = CallableImport.tpe(TsImports.empty, "ReadonlyMap")
+    /** Helper to build a ReadonlySet type */
+    final lazy val readonlySetType = CallableImport.tpe(TsImports.empty, "ReadonlySet")
+    /** Helper to build an Option type */
+    final lazy val optionType = CallableImport.tpe(fptsOption("Option"))
+    /** Reference to the configured `iotsBigNumber` value type */
+    final lazy val bigNumberType = optImport(tsi.iotsBigNumber.map(_.valueType), "BigNumber", "iotsBigNumber")
+    /** Helper to build an Either type */
+    final lazy val eitherType = CallableImport.tpe(fptsEither("Either"))
+    /** Reference to the configured `iotsLocalDate` value type */
+    final lazy val localDateType = optImport(tsi.iotsLocalDate.map(_.valueType), "LocalDate", "iotsLocalDate")
+    /** Helper to build a These type */
+    final lazy val theseType = CallableImport.tpe(fptsThese("These"))
+    /** Reference to the configured `iotsUUID` value type */
+    final lazy val uuidType = tsi.iotsUUID.valueType
+    /** Helper to build a Record type */
+    final lazy val recordType = CallableImport.tpe(TsImports.empty, "Record")
 
     private var incr = Map.empty[String, Int]
 
