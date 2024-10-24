@@ -795,14 +795,14 @@ final class TsGenerator(
 
     if (hasTypeArgs) {
       val updState = State(false, WrapCodec.id)
-      val tpArgsPlain = model.typeArgs.intercalateMap(imports.lift(","))(genNotTop(updState, _))
+      val tpArgsPlain = "<" |+| model.typeArgs.intercalateMap(imports.lift(", "))(genNotTop(updState, _)) |+| ">"
       val tpArgsIots = typeArgsMixed(updState, model.typeArgs)
-      val fnArgs = typeArgsFnParams(updState, model.typeArgs, Some(codecType |+| "<" |+| tpArgsPlain |+| ">"))
+      val fnArgs = typeArgsFnParams(updState, model.typeArgs, Some(codecType |+| tpArgsPlain))
       generate(State(true, WrapCodec(codec => f =>
         f(
           "export type " |+| codecType |+| tpArgsIots |+| " = " |+| generateCodecType(model) |+| ";\n"
         )(
-          "export type " |+| valueType |+| "<" |+| tpArgsPlain |+| "> = " |+| generateValueType(model) |+| ";"
+          "export type " |+| valueType |+| tpArgsPlain |+| " = " |+| generateValueType(model) |+| ";\n"
         )(
           "export const " |+| codecName |+| " = " |+| tpArgsIots |+| fnArgs |+| codec |+| ";\n"
         )
