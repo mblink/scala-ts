@@ -32,16 +32,16 @@ extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
  * Generates
  *
  * ```ts
- * export const testC = t.number;
- * export type TestC = typeof testC;
- * export type Test = t.TypeOf<TestC>;
+ * export type TestC = t.NumberC;
+ * export type Test = number;
+ * export const testC: TestC = t.number satisfies t.Type<Test, unknown>;
  * ```
  *
  * ### Using generate with top = true
  *
  * ```scala
  * generate(
- *   State(true, codec => "export const codec = " |+| codec |+| ";")),
+ *   State(true, WrapCodec(codec => _ => "export const codec = " |+| codec |+| ";")),
  *   TsModel.Number(TypeName("Test"))
  * )
  * ```
@@ -55,7 +55,10 @@ extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
  * ### Using generate with top = false
  *
  * ```scala
- * generate(State(false, identity))
+ * generate(
+ *   State(false, g.WrapCodec(codec => _ => codec)),
+ *   TsModel.Number(TypeName("Test"))
+ * )
  * ```
  *
  * Produces
