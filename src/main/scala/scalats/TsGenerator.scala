@@ -92,7 +92,7 @@ final class TsGenerator(
 
   case class WrapCodec(custom: Generated => (Generated => Generated => Generated => Generated) => Generated) {
     final def apply(codec: Generated): Generated =
-      custom(codec)(codecType => codec => valueType => codecType |+| codec |+| valueType)
+      custom(codec)(codecType => valueType => codec => codecType |+| valueType |+| codec)
   }
 
   object WrapCodec {
@@ -391,7 +391,7 @@ final class TsGenerator(
         ",\n" |+|
         "  (x: " |+| valueType |+| "): " |+| taggedValueType |+| " => ({ ...x, _tag: `" |+| name |+| "`}),\n" |+|
         ")"
-      ))(codecType => codec => _ /* we create our own value type */ =>
+      ))(codecType => _ /* we create our own value type */ => codec =>
          // Full value type
          "export type " |+| valueType |+| " = " |+| taggedValueType |+| " & typeof " |+| constName |+| ";\n" |+|
          codecType |+|
@@ -802,9 +802,9 @@ final class TsGenerator(
         f(
           "export type " |+| codecType |+| tpArgsIots |+| " = " |+| generateCodecType(model) |+| ";\n"
         )(
-          "export const " |+| codecName |+| " = " |+| tpArgsIots |+| fnArgs |+| codec |+| ";\n"
-        )(
           "export type " |+| valueType |+| "<" |+| tpArgsPlain |+| "> = " |+| generateValueType(model) |+| ";"
+        )(
+          "export const " |+| codecName |+| " = " |+| tpArgsIots |+| fnArgs |+| codec |+| ";\n"
         )
       )), model)
     } else
@@ -812,9 +812,9 @@ final class TsGenerator(
         f(
           "export type " |+| codecType |+| " = " |+| generateCodecType(model) |+| ";\n"
         )(
-          "export const " |+| codecName |+| ": " |+| codecType |+| " = " |+| codec |+| ";\n"
-        )(
           "export type " |+| valueType |+| " = " |+| generateValueType(model) |+| ";\n"
+        )(
+          "export const " |+| codecName |+| ": " |+| codecType |+| " = " |+| codec |+| ";\n"
         )
       )), model)
   }
