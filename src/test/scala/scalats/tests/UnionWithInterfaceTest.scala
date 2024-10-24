@@ -44,7 +44,7 @@ export const barC: BarC = pipe(barTaggedC, c => new t.Type<Bar, BarTagged>(
   (u: unknown): u is Bar => E.isRight(c.decode(u)),
   (u: unknown): E.Either<t.Errors, Bar> => pipe(c.decode(u), E.map(x => ({ ...x, ...bar }))),
   (x: Bar): BarTagged => ({ ...x, _tag: `Bar`}),
-));
+)) satisfies t.Type<Bar, unknown>;
 
 
 export type BazC = t.TypeC<{
@@ -52,12 +52,16 @@ export type BazC = t.TypeC<{
   int: t.NumberC,
   str: t.StringC
 }>;
+export type Baz = {
+  _tag: `Baz`,
+  int: number,
+  str: string
+};
 export const bazC: BazC = t.type({
   _tag: t.literal(`Baz`),
   int: t.number,
   str: t.string
-});
-export type Baz = t.TypeOf<BazC>;
+}) satisfies t.Type<Baz, unknown>;
 
 
 export const allFooC = [barC, bazC] as const;
@@ -65,8 +69,8 @@ export const allFooNames = [`Bar`, `Baz`] as const;
 export type FooName = (typeof allFooNames)[number];
 
 export type FooCU = t.UnionC<[BarC, BazC]>;
-export const FooCU: FooCU = t.union([barC, bazC]);
-export type FooU = t.TypeOf<FooCU>;
+export type FooU = Bar | Baz;
+export const FooCU: FooCU = t.union([barC, bazC]) satisfies t.Type<FooU, unknown>;
 
 export type FooMap<A> = { [K in FooName]: A };
 """.trim

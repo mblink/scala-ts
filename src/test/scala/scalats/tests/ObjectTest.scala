@@ -35,12 +35,16 @@ export type FooC = t.TypeC<{
   int: t.LiteralC<1>,
   str: t.LiteralC<`test`>
 }>;
+export type Foo = {
+  _tag: `Foo`,
+  int: 1,
+  str: `test`
+};
 export const fooC: FooC = t.type({
   _tag: t.literal(`Foo`),
   int: t.literal(1),
   str: t.literal(`test`)
-});
-export type Foo = t.TypeOf<FooC>;
+}) satisfies t.Type<Foo, unknown>;
 """.trim
 
   val fooFile = "foo.ts"

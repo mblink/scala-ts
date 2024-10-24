@@ -44,7 +44,7 @@ export const barC: BarC = pipe(barTaggedC, c => new t.Type<Bar, BarTagged>(
   (u: unknown): u is Bar => E.isRight(c.decode(u)),
   (u: unknown): E.Either<t.Errors, Bar> => pipe(c.decode(u), E.map(x => ({ ...x, ...bar }))),
   (x: Bar): BarTagged => ({ ...x, _tag: `Bar`}),
-));
+)) satisfies t.Type<Bar, unknown>;
 
 
 export type BazC<A1 extends t.Mixed> = t.TypeC<{
@@ -52,20 +52,25 @@ export type BazC<A1 extends t.Mixed> = t.TypeC<{
   int: t.NumberC,
   data: A1
 }>;
+export type Baz<A1> = {
+  _tag: `Baz`,
+  int: number,
+  data: A1
+};
 export const bazC = <A1 extends t.Mixed>(A1: A1): BazC<A1> => t.type({
   _tag: t.literal(`Baz`),
   int: t.number,
   data: A1
-});
-export type Baz<A1> = t.TypeOf<BazC<t.Type<A1>>>;
+}) satisfies t.Type<Baz<t.TypeOf<A1>>, unknown>;
+
 
 export const allFooC = <A1 extends t.Mixed>(A1: A1) => [barC, bazC(A1)] as const;
 export const allFooNames = [`Bar`, `Baz`] as const;
 export type FooName = (typeof allFooNames)[number];
 
 export type FooCU<A1 extends t.Mixed> = t.UnionC<[BarC, BazC<A1>]>;
-export const FooCU = <A1 extends t.Mixed>(A1: A1): FooCU<A1> => t.union([barC, bazC(A1)]);
-export type FooU<A1> = t.TypeOf<FooCU<t.Type<A1>>>;
+export type FooU<A1> = Bar | Baz<A1>;
+export const FooCU = <A1 extends t.Mixed>(A1: A1): FooCU<A1> => t.union([barC, bazC(A1)]) satisfies t.Type<FooU<t.TypeOf<A1>>, unknown>;
 """.trim
 
   val fooFile = "foo.ts"

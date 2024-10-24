@@ -49,7 +49,7 @@ export const barC: BarC = pipe(barTaggedC, c => new t.Type<Bar, BarTagged>(
   (u: unknown): u is Bar => E.isRight(c.decode(u)),
   (u: unknown): E.Either<t.Errors, Bar> => pipe(c.decode(u), E.map(x => ({ ...x, ...bar }))),
   (x: Bar): BarTagged => ({ ...x, _tag: `Bar`}),
-));
+)) satisfies t.Type<Bar, unknown>;
 
 
 export const baz = {
@@ -72,7 +72,7 @@ export const bazC: BazC = pipe(bazTaggedC, c => new t.Type<Baz, BazTagged>(
   (u: unknown): u is Baz => E.isRight(c.decode(u)),
   (u: unknown): E.Either<t.Errors, Baz> => pipe(c.decode(u), E.map(x => ({ ...x, ...baz }))),
   (x: Baz): BazTagged => ({ ...x, _tag: `Baz`}),
-));
+)) satisfies t.Type<Baz, unknown>;
 
 
 export const allFooC = [barC, bazC] as const;
@@ -80,8 +80,8 @@ export const allFooNames = [`Bar`, `Baz`] as const;
 export type FooName = (typeof allFooNames)[number];
 
 export type FooCU = t.UnionC<[BarC, BazC]>;
-export const FooCU: FooCU = t.union([barC, bazC]);
-export type FooU = t.TypeOf<FooCU>;
+export type FooU = Bar | Baz;
+export const FooCU: FooCU = t.union([barC, bazC]) satisfies t.Type<FooU, unknown>;
 
 export const fooOrd: Ord.Ord<FooU> = pipe(stringOrd, Ord.contramap(x => x._tag));
 export const allFoo = [bar, baz] as const;
