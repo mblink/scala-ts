@@ -804,7 +804,14 @@ final class TsGenerator(
         )(
           "export type " |+| valueType |+| tpArgsPlain |+| " = " |+| generateValueType(model) |+| ";\n"
         )(
-          "export const " |+| codecName |+| " = " |+| tpArgsIots |+| fnArgs |+| codec |+| ";\n"
+          "export const " |+| codecName |+| " = " |+| tpArgsIots |+| fnArgs |+| codec |+| " satisfies " |+|
+          imports.iotsTypeType(
+            valueType |+| "<" |+|
+              model.typeArgs.intercalateMap(imports.lift(", "))(t => imports.iotsTypeOf(generateValueType(t))) |+|
+            ">",
+            imports.unknownType
+          ) |+|
+          ";\n"
         )
       )), model)
     } else
@@ -814,7 +821,9 @@ final class TsGenerator(
         )(
           "export type " |+| valueType |+| " = " |+| generateValueType(model) |+| ";\n"
         )(
-          "export const " |+| codecName |+| ": " |+| codecType |+| " = " |+| codec |+| ";\n"
+          "export const " |+| codecName |+| ": " |+| codecType |+| " = " |+| codec |+| " satisfies " |+|
+          imports.iotsTypeType(valueType, imports.unknownType) |+|
+          ";\n"
         )
       )), model)
   }
