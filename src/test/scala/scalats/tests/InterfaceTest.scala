@@ -19,24 +19,36 @@ object InterfaceTest {
   val expectedFooCode = """
 import * as t from "io-ts";
 
-export const fooC = t.type({
+export type FooC = t.TypeC<{
+  int: t.NumberC,
+  str: t.StringC
+}>;
+export type Foo = {
+  int: number,
+  str: string
+};
+export const fooC: FooC = t.type({
   int: t.number,
   str: t.string
-});
-export type FooC = typeof fooC;
-export type Foo = t.TypeOf<FooC>;
+}) satisfies t.Type<Foo, unknown>;
 """.trim
 
   val expectedBarCode = """
-import { fooC as imported0_fooC } from "./foo";
+import { FooC as imported0_FooC, Foo as imported0_Foo, fooC as imported0_fooC } from "./foo";
 import * as t from "io-ts";
 
-export const barC = t.type({
+export type BarC = t.TypeC<{
+  foo: imported0_FooC,
+  bool: t.BooleanC
+}>;
+export type Bar = {
+  foo: imported0_Foo,
+  bool: boolean
+};
+export const barC: BarC = t.type({
   foo: imported0_fooC,
   bool: t.boolean
-});
-export type BarC = typeof barC;
-export type Bar = t.TypeOf<BarC>;
+}) satisfies t.Type<Bar, unknown>;
 """.trim
 
   val fooFile = "foo.ts"
