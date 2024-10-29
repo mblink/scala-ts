@@ -228,8 +228,6 @@ object TsImports {
     def tpe(tsImports: TsImports, name: String): CallableImport = CallableImport(tsImports, name, "<", ">")
   }
 
-  case class ConfiguredImport[ValueTpe[_]](valueType: ValueTpe[Generated], codecType: Generated, codecValue: Generated)
-
   type Never[A] = None.type
 
   /**
@@ -252,49 +250,49 @@ object TsImports {
     fptsThese: String = "fp-ts/lib/These",
     fptsPipe: (String, String) = ("pipe", "fp-ts/lib/function"),
     iots: String = "io-ts",
-    iotsDateTime: ConfiguredImport[Id] = ConfiguredImport(
-      Generated.lift("Date"),
-      namedImport("io-ts-types/lib/DateFromISOString", "DateFromISOStringC"),
-      namedImport("io-ts-types/lib/DateFromISOString", "DateFromISOString"),
+    iotsDateTime: ReferenceCode[Id] = ReferenceCode(
+      valueType = Generated.lift("Date"),
+      codecType = namedImport("io-ts-types/lib/DateFromISOString", "DateFromISOStringC"),
+      codecValue = namedImport("io-ts-types/lib/DateFromISOString", "DateFromISOString"),
     ),
-    iotsReadonlyMapFromEntries: ConfiguredImport[Never] = ConfiguredImport(
-      None,
-      namedImport("io-ts-types/lib/readonlyMapFromEntries", "ReadonlyMapFromEntriesC"),
-      namedImport("io-ts-types/lib/readonlyMapFromEntries", "readonlyMapFromEntries"),
+    iotsReadonlyMapFromEntries: ReferenceCode[Never] = ReferenceCode(
+      valueType = None,
+      codecType = namedImport("io-ts-types/lib/readonlyMapFromEntries", "ReadonlyMapFromEntriesC"),
+      codecValue = namedImport("io-ts-types/lib/readonlyMapFromEntries", "readonlyMapFromEntries"),
     ),
-    iotsReadonlyNonEmptyArray: ConfiguredImport[Never] = ConfiguredImport(
-      None,
-      namedImport("io-ts-types/lib/readonlyNonEmptyArray", "ReadonlyNonEmptyArrayC"),
-      namedImport("io-ts-types/lib/readonlyNonEmptyArray", "readonlyNonEmptyArray"),
+    iotsReadonlyNonEmptyArray: ReferenceCode[Never] = ReferenceCode(
+      valueType = None,
+      codecType = namedImport("io-ts-types/lib/readonlyNonEmptyArray", "ReadonlyNonEmptyArrayC"),
+      codecValue = namedImport("io-ts-types/lib/readonlyNonEmptyArray", "readonlyNonEmptyArray"),
     ),
-    iotsReadonlySetFromArray: ConfiguredImport[Never] = ConfiguredImport(
-      None,
-      namedImport("io-ts-types/lib/readonlySetFromArray", "ReadonlySetFromArrayC"),
-      namedImport("io-ts-types/lib/readonlySetFromArray", "readonlySetFromArray"),
+    iotsReadonlySetFromArray: ReferenceCode[Never] = ReferenceCode(
+      valueType = None,
+      codecType = namedImport("io-ts-types/lib/readonlySetFromArray", "ReadonlySetFromArrayC"),
+      codecValue = namedImport("io-ts-types/lib/readonlySetFromArray", "readonlySetFromArray"),
     ),
-    iotsNumberFromString: ConfiguredImport[Never] = ConfiguredImport(
-      None,
-      namedImport("io-ts-types/lib/NumberFromString", "NumberFromStringC"),
-      namedImport("io-ts-types/lib/NumberFromString", "NumberFromString"),
+    iotsNumberFromString: ReferenceCode[Never] = ReferenceCode(
+      valueType = None,
+      codecType = namedImport("io-ts-types/lib/NumberFromString", "NumberFromStringC"),
+      codecValue = namedImport("io-ts-types/lib/NumberFromString", "NumberFromString"),
     ),
-    iotsOption: ConfiguredImport[Never] = ConfiguredImport(
-      None,
-      namedImport("io-ts-types/lib/optionFromNullable", "OptionFromNullableC"),
-      namedImport("io-ts-types/lib/optionFromNullable", "optionFromNullable"),
+    iotsOption: ReferenceCode[Never] = ReferenceCode(
+      valueType = None,
+      codecType = namedImport("io-ts-types/lib/optionFromNullable", "OptionFromNullableC"),
+      codecValue = namedImport("io-ts-types/lib/optionFromNullable", "optionFromNullable"),
     ),
-    iotsUUID: ConfiguredImport[Id] = ConfiguredImport(
-      namedImport("io-ts-types/lib/UUID", "UUID"),
-      Generated(names("io-ts-types/lib/UUID", "UUID"), "typeof UUID"),
-      namedImport("io-ts-types/lib/UUID", "UUID"),
+    iotsUUID: ReferenceCode[Id] = ReferenceCode(
+      valueType = namedImport("io-ts-types/lib/UUID", "UUID"),
+      codecType = Generated(names("io-ts-types/lib/UUID", "UUID"), "typeof UUID"),
+      codecValue = namedImport("io-ts-types/lib/UUID", "UUID"),
     ),
-    iotsEither: ConfiguredImport[Never] = ConfiguredImport(
-      None,
-      namedImport("io-ts-types/lib/either", "EitherC"),
-      namedImport("io-ts-types/lib/either", "either"),
+    iotsEither: ReferenceCode[Never] = ReferenceCode(
+      valueType = None,
+      codecType = namedImport("io-ts-types/lib/either", "EitherC"),
+      codecValue = namedImport("io-ts-types/lib/either", "either"),
     ),
-    iotsBigNumber: Option[ConfiguredImport[Id]] = None,
-    iotsLocalDate: Option[ConfiguredImport[Id]] = None,
-    iotsThese: Option[ConfiguredImport[Never]] = None
+    iotsBigNumber: Option[ReferenceCode[Id]] = None,
+    iotsLocalDate: Option[ReferenceCode[Id]] = None,
+    iotsThese: Option[ReferenceCode[Never]] = None
   )
 
   /** A set of TypeScript imports available to use during code generation */

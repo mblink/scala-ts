@@ -1,5 +1,6 @@
 package scalats
 
+import cats.Id
 import cats.syntax.foldable.*
 import java.io.{File, PrintStream}
 import scala.quoted.*
@@ -108,7 +109,11 @@ def referenceCode(model: TsModel)(
   using customType: TsCustomType,
   customOrd: TsCustomOrd,
   imports: TsImports.Available,
-): Generated = {
+): ReferenceCode[Id] = {
   val generator = new TsGenerator(customType, customOrd, imports)
-  generator.generateCodecValue(generator.State(false, generator.WrapCodec.id), model).foldMap(_._2)
+  ReferenceCode[Id](
+    valueType = generator.generateValueType(model),
+    codecType = generator.generateCodecType(model),
+    codecValue = generator.generateCodecValue(generator.State(false, generator.WrapCodec.id), model).foldMap(_._2),
+  )
 }
