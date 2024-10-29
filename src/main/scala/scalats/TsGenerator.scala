@@ -17,7 +17,7 @@ extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
  * [[scalats.TsGenerator.generateTopLevel]] produces TypeScript code with an `io-ts` codec defined as a const and
  * a type definition to match.
  *
- * [[scalats.TsGenerator.generate]] just produces the code of the `io-ts` codec and  determines what to do with it
+ * [[scalats.TsGenerator.generateCodecValue]] just produces the code of the `io-ts` codec and  determines what to do with it
  * based on the given [[scalats.TsGenerator.State]]. When the state's `top` value is `true`, it calls `state.wrapCodec`
  * with the codec's code. When `top` is `false`, is just returns the codec code.
  *
@@ -37,10 +37,10 @@ extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
  * export const testC: TestC = t.number satisfies t.Type<Test, unknown>;
  * ```
  *
- * ### Using generate with top = true
+ * ### Using generateCodecValue with top = true
  *
  * ```scala
- * generate(
+ * generateCodecValue(
  *   State(true, WrapCodec(codec => _ => "export const codec = " |+| codec |+| ";")),
  *   TsModel.Number(TypeName("Test"))
  * )
@@ -52,10 +52,10 @@ extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
  * export const codec = t.number;
  * ```
  *
- * ### Using generate with top = false
+ * ### Using generateCodecValue with top = false
  *
  * ```scala
- * generate(
+ * generateCodecValue(
  *   State(false, g.WrapCodec(codec => _ => codec)),
  *   TsModel.Number(TypeName("Test"))
  * )
@@ -136,7 +136,7 @@ final class TsGenerator(
   private def typeArgsMixed(state: State, typeArgs: List[TsModel]): Generated =
     if (typeArgs.isEmpty) Generated.empty
     else "<" |+| typeArgs.intercalateMap(imports.lift(", "))(
-      generate(state, _).foldMap(_._2) |+| " extends " |+| imports.iotsMixed
+      generateCodecValue(state, _).foldMap(_._2) |+| " extends " |+| imports.iotsMixed
     ) |+| ">"
 
   /**
@@ -146,7 +146,7 @@ final class TsGenerator(
   private def typeArgsFnParams(state: State, typeArgs: List[TsModel], retType: Option[Generated]): Generated =
     if (typeArgs.isEmpty) Generated.empty
     else "(" |+| typeArgs.intercalateMap(imports.lift(", "))(
-      generate(state, _).foldMap(_._2).pipe(x => x |+| ": " |+| x)
+      generateCodecValue(state, _).foldMap(_._2).pipe(x => x |+| ": " |+| x)
     ) |+| ")" |+| retType.fold(Generated.empty)(t => ": " |+| t) |+| " => "
 
   /**
@@ -171,14 +171,14 @@ final class TsGenerator(
    *
    * Produces a TypeScript `Record` when the keys are `string`s and a `ReadonlyMap` otherwise
    */
-  private def recordValue(state: State, keyTpe: TsModel, valTpe: TsModel): Generated =
+  private def recordCodecValue(state: State, keyTpe: TsModel, valTpe: TsModel): Generated =
     keyTpe match {
-      case TsModel.String(_) => imports.iotsRecord(imports.iotsString, generate(state, valTpe).foldMap(_._2))
+      case TsModel.String(_) => imports.iotsRecord(imports.iotsString, generateCodecValue(state, valTpe).foldMap(_._2))
       case _ =>
         imports.iotsReadonlyMapFromEntriesValue(
-          generate(state, keyTpe).foldMap(_._2),
+          generateCodecValue(state, keyTpe).foldMap(_._2),
           ordInstance(keyTpe),
-          generate(state, valTpe).foldMap(_._2),
+          generateCodecValue(state, valTpe).foldMap(_._2),
         )
     }
 
@@ -305,14 +305,14 @@ final class TsGenerator(
     )
 
   /** Produces code that refers to a given value, represented by its `typeName` and `typeArgs` */
-  private def generateValueRef(state: State, typeName: TypeName, typeArgs: List[TsModel], isUnion: Boolean): List[(Option[TypeName], Generated)] =
+  private def generateCodecValueRef(state: State, typeName: TypeName, typeArgs: List[TsModel], isUnion: Boolean): List[(Option[TypeName], Generated)] =
     maybeWrapCodec(
       state,
       typeName,
       customType.value(typeName.raw).getOrElse(
         imports.custom(typeName, mkCodecName(typeName, isUnion)) |+|
         (if (typeArgs.isEmpty) Generated.empty
-        else "(" |+| typeArgs.intercalateMap(imports.lift(", "))(generate(state.copy(top = false), _).foldMap(_._2)) |+| ")")
+        else "(" |+| typeArgs.intercalateMap(imports.lift(", "))(genNotTop(state, _)) |+| ")")
       ),
     )
 
@@ -339,7 +339,7 @@ final class TsGenerator(
     generateFields0(identity, fields, generateValueType)
 
   /** Produces value code for a type with a given set of fields */
-  private def generateFieldsCodec(state: State, fields: List[TsModel.Field]): Generated =
+  private def generateFieldsCodecValue(state: State, fields: List[TsModel.Field]): Generated =
     generateFields0(imports.iotsTypeFunction(_), fields, genNotTop(state, _))
 
   private def objectFields(obj: TsModel.Object): (List[TsModel.ObjectField], List[TsModel.ObjectField]) =
@@ -360,7 +360,7 @@ final class TsGenerator(
   private def generateObjectValueType(obj: TsModel.Object): Generated = generateFieldsValueType(objectFields(obj)._2)
 
   /** Produces value code for a scala `object` definition, represented as a `const` in TypeScript */
-  private def generateObjectValue(state: State, obj: TsModel.Object): List[(Option[TypeName], Generated)] = {
+  private def generateObjectCodecValue(state: State, obj: TsModel.Object): List[(Option[TypeName], Generated)] = {
     val name = obj.typeName.base
     val constName = maybeDecap(name)
     val valueType = cap(constName)
@@ -370,7 +370,7 @@ final class TsGenerator(
     
     debugLog("object", name, None)
 
-    lazy val fullCodec: Generated = state.wrapCodec(generateFieldsCodec(state, literalFields))
+    lazy val fullCodec: Generated = state.wrapCodec(generateFieldsCodecValue(state, literalFields))
 
     lazy val minimalTaggedFields = List(tagField(name))
 
@@ -379,7 +379,7 @@ final class TsGenerator(
       "export type " |+| cap(taggedCodecName) |+| " = " |+| generateFieldsCodecType(minimalTaggedFields) |+| ";\n" |+|
       // Codec with only `_tag` value
       "export const " |+| taggedCodecName |+| ": " |+| cap(taggedCodecName) |+| " = " |+|
-      generateFieldsCodec(state, minimalTaggedFields) |+|
+      generateFieldsCodecValue(state, minimalTaggedFields) |+|
       ";\n" |+|
       // Tagged value type
       "export type " |+| taggedValueType |+| " = " |+| imports.iotsTypeOf(cap(taggedCodecName)) |+| ";\n" |+|
@@ -425,10 +425,10 @@ final class TsGenerator(
     generateFieldsValueType(interfaceFields(iface))
 
   /** Produces value code for a scala `case class` definition */
-  private def generateInterfaceValue(state: State, iface: TsModel.Interface): List[(Option[TypeName], Generated)] = {
+  private def generateInterfaceCodecValue(state: State, iface: TsModel.Interface): List[(Option[TypeName], Generated)] = {
     debugLog("interface", iface.typeName.base, None)
 
-    List((Some(iface.typeName), state.wrapCodec(generateFieldsCodec(state, interfaceFields(iface)))))
+    List((Some(iface.typeName), state.wrapCodec(generateFieldsCodecValue(state, interfaceFields(iface)))))
   }
 
   private def unionPossibilityRefs(union: TsModel.Union): List[TsModel.InterfaceRef | TsModel.ObjectRef] =
@@ -454,7 +454,7 @@ final class TsGenerator(
     }
 
   /** Produces value code for a scala `enum`/`sealed trait`/`sealed class` */
-  private def generateUnionValue(state: State, union: TsModel.Union): List[(Option[TypeName], Generated)] = {
+  private def generateUnionCodecValue(state: State, union: TsModel.Union): List[(Option[TypeName], Generated)] = {
     val TsModel.Union(typeName, typeArgs, possibilities) = union
     val valueType = typeName.base
 
@@ -482,7 +482,7 @@ final class TsGenerator(
       val mtas = memberTypeArgs(idx)
       val tas = typeArgs.filter(mtas.contains)
       if (tas.isEmpty) imports.lift(name)
-      else name |+| "(" |+| tas.intercalateMap(imports.lift(", "))(generate(state.copy(top = false), _).foldMap(_._2)) |+| ")"
+      else name |+| "(" |+| tas.intercalateMap(imports.lift(", "))(genNotTop(state, _)) |+| ")"
     }
 
     debugLog("union", union.typeName.base, Some(memberCodecNames.map( name => f"\n  member ${name}").mkString))
@@ -682,7 +682,8 @@ final class TsGenerator(
         generateValueTypeRef(typeName, typeArgs, false)
     }
 
-  private def genNotTop(state: State, model: TsModel): Generated = generate(state.copy(top = false), model).foldMap(_._2)
+  private def genNotTop(state: State, model: TsModel): Generated =
+    generateCodecValue(state.copy(top = false), model).foldMap(_._2)
 
   /**
    * Produces TypeScript code for a given type
@@ -694,7 +695,7 @@ final class TsGenerator(
    * @param model The [[scalats.TsModel]] to generate TypeScript code for
    * @return A `List` of the [[scalats.TypeName]]s and [[scalats.Generated]] code produced
    */
-  def generate(state: State, model: TsModel): List[(Option[TypeName], Generated)] =
+  def generateCodecValue(state: State, model: TsModel): List[(Option[TypeName], Generated)] =
     model match {
       case t @ TsModel.TypeParam(name) =>
         maybeWrapCodec(state, t.typeName, name)
@@ -727,7 +728,7 @@ final class TsGenerator(
         maybeWrapCodec(state, typeName, imports.iotsUUIDValue)
 
       case TsModel.Eval(_, tpe) =>
-        generate(state, tpe)
+        generateCodecValue(state, tpe)
 
       case TsModel.Array(typeName, tpe, _) =>
         maybeWrapCodec(state, typeName, imports.iotsReadonlyArray(genNotTop(state, tpe)))
@@ -748,7 +749,7 @@ final class TsGenerator(
         maybeWrapCodec(state, typeName, imports.iotsTheseValue(genNotTop(state, left), genNotTop(state, right)))
 
       case TsModel.Map(typeName, key, value) =>
-        maybeWrapCodec(state, typeName, recordValue(state.copy(top = false), key, value))
+        maybeWrapCodec(state, typeName, recordCodecValue(state.copy(top = false), key, value))
 
       case TsModel.Tuple(typeName, tpes) =>
         maybeWrapCodec(state, typeName, imports.iotsTuple("[" |+|
@@ -756,25 +757,25 @@ final class TsGenerator(
         "]"))
 
       case i: TsModel.Interface =>
-        if (state.top) generateInterfaceValue(state, i) else generateValueRef(state, i.typeName, i.typeArgs, false)
+        if (state.top) generateInterfaceCodecValue(state, i) else generateCodecValueRef(state, i.typeName, i.typeArgs, false)
 
       case TsModel.InterfaceRef(typeName, typeArgs) =>
-        generateValueRef(state, typeName, typeArgs, false)
+        generateCodecValueRef(state, typeName, typeArgs, false)
 
       case o: TsModel.Object =>
-        if (state.top) generateObjectValue(state, o) else generateValueRef(state, o.typeName, Nil, false)
+        if (state.top) generateObjectCodecValue(state, o) else generateCodecValueRef(state, o.typeName, Nil, false)
 
       case TsModel.ObjectRef(typeName) =>
-        generateValueRef(state, typeName, Nil, false)
+        generateCodecValueRef(state, typeName, Nil, false)
 
       case u: TsModel.Union =>
-        if (state.top) generateUnionValue(state, u) else generateValueRef(state, u.typeName, u.typeArgs, true)
+        if (state.top) generateUnionCodecValue(state, u) else generateCodecValueRef(state, u.typeName, u.typeArgs, true)
 
       case TsModel.UnionRef(typeName, typeArgs, _) =>
-        generateValueRef(state, typeName, typeArgs, true)
+        generateCodecValueRef(state, typeName, typeArgs, true)
 
       case TsModel.Unknown(typeName, typeArgs) =>
-        generateValueRef(state, typeName, typeArgs, false)
+        generateCodecValueRef(state, typeName, typeArgs, false)
     }
 
   /**
@@ -801,7 +802,7 @@ final class TsGenerator(
       val tpArgsPlain = "<" |+| model.typeArgs.intercalateMap(imports.lift(", "))(genNotTop(updState, _)) |+| ">"
       val tpArgsIots = typeArgsMixed(updState, model.typeArgs)
       val fnArgs = typeArgsFnParams(updState, model.typeArgs, Some(codecType |+| tpArgsPlain))
-      generate(State(true, WrapCodec(codec => f =>
+      generateCodecValue(State(true, WrapCodec(codec => f =>
         f(
           "export type " |+| codecType |+| tpArgsIots |+| " = " |+| generateCodecType(model) |+| ";\n"
         )(
@@ -818,7 +819,7 @@ final class TsGenerator(
         )
       )), model)
     } else
-      generate(State(true, WrapCodec(codec => f =>
+      generateCodecValue(State(true, WrapCodec(codec => f =>
         f(
           "export type " |+| codecType |+| " = " |+| generateCodecType(model) |+| ";\n"
         )(
