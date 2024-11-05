@@ -14,13 +14,18 @@ object InterfaceWithTypeParamTest {
   val expectedFooCode = """
 import * as t from "io-ts";
 
-export class fooCC<A1 extends t.Mixed>{ codec = (A1: A1) => t.type({
+export type FooC<A1 extends t.Mixed> = t.TypeC<{
+  int: t.NumberC,
+  data: A1
+}>;
+export type Foo<A1> = {
+  int: number,
+  data: A1
+};
+export const fooC = <A1 extends t.Mixed>(A1: A1): FooC<A1> => t.type({
   int: t.number,
   data: A1
-})}
-export const fooC = <A1 extends t.Mixed>(A1: A1) => new fooCC<A1>().codec(A1);
-export type FooC<A1 extends t.Mixed> = ReturnType<fooCC<A1>["codec"]>;
-export type Foo<A1> = t.TypeOf<FooC<t.Type<A1>>>;
+}) satisfies t.Type<Foo<t.TypeOf<A1>>, unknown>;
 """.trim
 
   val fooFile = "foo.ts"
