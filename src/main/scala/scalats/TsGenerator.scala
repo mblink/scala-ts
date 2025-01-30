@@ -7,7 +7,7 @@ import scala.util.chaining.*
 import org.slf4j.LoggerFactory
 
 extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
-  private final def intercalateMap[B](glue: B)(f: A => B)(implicit B: Monoid[B]): B =
+  private def intercalateMap[B](glue: B)(f: A => B)(implicit B: Monoid[B]): B =
     B.intercalate(glue).combineAllOption(F.toIterable(fa).map(f)).getOrElse(B.empty)
 }
 
@@ -67,7 +67,7 @@ extension [F[_], A](fa: F[A])(using F: Foldable[F]) {
  * t.number
  * ```
  */
-final class TsGenerator(
+class TsGenerator(
   customType: TsCustomType,
   customOrd: TsCustomOrd,
   imports: TsImports.Available,
@@ -79,15 +79,14 @@ final class TsGenerator(
     if(logMsg.containsSlice(debugFilter)) logger.info(logMsg)
   }
   private def debugLog(ttype: String, name: String, extra: Option[String]): Unit = {
-    if (this.debug) {
-      filteredLog(s"Generating ${ttype} for ${name} => ${name}C" + extra.getOrElse(""))
-    }
+    if (this.debug)
+      filteredLog(s"Generating $ttype for $name => ${name}C" + extra.getOrElse(""))
   }
 
   private def cap(s: String): String = s.take(1).toUpperCase + s.drop(1)
   private def decap(s: String): String = s.take(1).toLowerCase + s.drop(1)
   private val allCapsRx = """^[A-Z0-9_]+$""".r
-  private def maybeDecap(s: String): String =
+  protected def maybeDecap(s: String): String =
     s match {
       case allCapsRx() => s
       case _ => decap(s)
@@ -104,7 +103,7 @@ final class TsGenerator(
 
   case class State(top: Boolean, wrapCodec: WrapCodec)
 
-  private implicit def liftString(s: String): Generated = imports.lift(s)
+  protected implicit def liftString(s: String): Generated = imports.lift(s)
 
   /**
    * Method to generate the name of the generated codec `const`.
@@ -183,7 +182,7 @@ final class TsGenerator(
     }
 
   /** Converts a scala `value` to a TypeScript value. Used when generating objects with known values */
-  private def tsValue(tpe: TsModel, value: Any): Generated =
+  protected def tsValue(tpe: TsModel, value: Any): Generated =
     tpe match {
       case TsModel.TypeParam(_) => sys.error(s"Encountered unexpected type parameter in `tsValue`, value: $value")
       case TsModel.Literal(tpe, value) => tsValue(tpe, value)
@@ -297,7 +296,7 @@ final class TsGenerator(
     )
 
   /** Produces code that refers to a given codec type, represented by its `typeName` and `typeArgs` */
-  private def generateValueTypeRef(typeName: TypeName, typeArgs: List[TsModel], isUnion: Boolean): Generated =
+  protected def generateValueTypeRef(typeName: TypeName, typeArgs: List[TsModel], isUnion: Boolean): Generated =
     customType.valueType(typeName.raw).getOrElse(
       imports.custom(typeName, cap(mkValueName(typeName, isUnion))) |+|
       (if (typeArgs.isEmpty) Generated.empty
@@ -316,7 +315,7 @@ final class TsGenerator(
       ),
     )
 
-  private def tagField(tag: String): TsModel.ObjectField =
+  protected def tagField(tag: String): TsModel.ObjectField =
     TsModel.ObjectField("_tag", TsModel.Literal(TsModel.String(TypeName("String")), tag), tag)
 
   private def generateFields0(
