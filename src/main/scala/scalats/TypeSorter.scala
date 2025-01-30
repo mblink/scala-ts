@@ -9,7 +9,7 @@ import scala.util.matching.Regex
 object TypeSorter {
   private case class GeneratedWithIndex(gen: Generated, index: Int)
 
-  private val constRx = """(?:const ([^\s]+))""".r
+  private val constRx = """(?:const ([^\s:]+))""".r
   private val functionRx = """(?:function ([^\s<\(]+))""".r
   private val typeRx = """(?:type ([^\s<]+))""".r
 
