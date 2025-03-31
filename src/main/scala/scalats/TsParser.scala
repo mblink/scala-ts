@@ -134,11 +134,20 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
 
   /** Parse an `enum` definiton into its [[scalats.TsModel]] representation */
   private def parseEnum[A: Type](mirror: Mirror): Expr[TsModel] = {
+    def getTypeConstructor(t: TypeRepr): TypeRepr = t match {
+      case AppliedType(t, _) => t
+      case _ => t
+    }
+
     val typeRepr = TypeRepr.of[A]
+    val tycon = getTypeConstructor(typeRepr)
 
     def parseMembers(m: Mirror): List[Expr[TsModel.Object | TsModel.Interface]] = {
       m.mirrorType match {
-        case MirrorType.Sum => m.types.toList.filter(_ <:< typeRepr).flatMap(Mirror(_).fold(Nil)(parseMembers))
+        case MirrorType.Sum =>
+          m.types.toList
+            .filter(t => getTypeConstructor(t.baseType(tycon.typeSymbol)) =:= tycon)
+            .flatMap(Mirror(_).fold(Nil)(parseMembers))
         case MirrorType.Product => List(m.mirroredType.asType match { case '[t] => parseCaseClass[t](m, Some(typeRepr)) })
         case MirrorType.Singleton => List(m.mirroredType.asType match { case '[t] => parseObject[t](Some(typeRepr)) })
       }
