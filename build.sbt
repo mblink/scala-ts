@@ -32,7 +32,7 @@ lazy val root = project.in(file("."))
   .settings(
     name := "scala-ts",
     organization := "bondlink",
-    version := "0.17.1",
+    version := "0.18.0",
     scalaVersion := scalaV,
 
     Compile / doc / scalacOptions += "-skip-by-regex:^scalats\\.BuildInfo\\$$",
