@@ -86,11 +86,10 @@ class TsImports private (private val m: Map[TsImport.Location, TsImport]) {
    */
   final def resolve(
     currFile: String,
-    allTypes: Map[String, Set[TypeName]],
+    typeToFile: Map[String, File],
     code: String,
   ): (Map[TsImport.Resolved, TsImport], String) = {
     val currFileParent = new File(currFile).getParent
-    val typeToFile = allTypes.flatMap { case (file, typeNames) => typeNames.map(t => (t.full, file)) }
     m.foldLeft((Map.empty[TsImport.Resolved, TsImport], code)) {
       case ((accImports, accCode), (TsImport.Resolved(loc), i)) =>
         loc match {
@@ -102,7 +101,7 @@ class TsImports private (private val m: Map[TsImport.Location, TsImport]) {
         }
 
       case ((accImports, accCode), (TsImport.Unresolved(t), i)) =>
-        val file = typeToFile.getOrElse(t.full, throw new UnresolvedTsImportException(currFile, t))
+        val file = typeToFile.getOrElse(t.full, throw new UnresolvedTsImportException(currFile, t)).toString
 
         if (file == currFile) {
           (accImports, i match {
