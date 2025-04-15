@@ -2,6 +2,7 @@ package scalats
 
 import scala.annotation.tailrec
 import scala.quoted.*
+import scala.util.chaining.*
 
 trait ReflectionUtils {
   implicit val ctx: Quotes
@@ -32,9 +33,9 @@ trait ReflectionUtils {
   case class Mirror(
     mirroredType: TypeRepr,
     monoType: TypeRepr,
-    types: Seq[TypeRepr],
+    types: List[TypeRepr],
     label: String,
-    labels: Seq[String],
+    labels: List[String],
     mirrorType: MirrorType
   )
 
@@ -45,11 +46,11 @@ trait ReflectionUtils {
       for {
         mt   <- findMemberType(mirrorTpe, "MirroredType")
         mmt  <- findMemberType(mirrorTpe, "MirroredMonoType")
-        mets <- findMemberType(mirrorTpe, "MirroredElemTypes").map(tupleTypeElements(_)).orElse(Some(Seq.empty))
+        mets <- findMemberType(mirrorTpe, "MirroredElemTypes").map(tupleTypeElements(_)).orElse(Some(Nil))
         ml   <- findMemberType(mirrorTpe, "MirroredLabel")
         mels <- findMemberType(mirrorTpe, "MirroredElemLabels").map { mels =>
             tupleTypeElements(mels).map { case ConstantType(StringConstant(l)) => l }
-          }.orElse(Some(Seq.empty))
+          }.orElse(Some(Nil))
       } yield {
         val ConstantType(StringConstant(ml0)) = ml: @unchecked
         Mirror(mt, mmt, mets, ml0, mels, MirrorType.from(mirror))
@@ -79,5 +80,40 @@ trait ReflectionUtils {
     case Refinement(parent, _, _) => findMemberType(parent, name)
     case AndType(left, right) => findMemberType(left, name).orElse(findMemberType(right, name))
     case _ => None
+  }
+}
+
+object HListRecordType {
+  private class ConcreteLabelled[K, V]
+
+  def unapply[A](tpe: Type[A])(using ctx: Quotes): Option[(List[(String, ctx.reflect.TypeRepr)])] = {
+    import ctx.reflect.*
+    import formless.hlist.{::, HNil}
+    import formless.record.->>
+
+    val typeRepr = tpe.pipe(implicit t => TypeRepr.of[A])
+    val labelled = TypeRepr.of[->>]
+    val labelledSym = labelled.typeSymbol
+    val concreteLabelled = TypeRepr.of[ConcreteLabelled]
+    val concreteLabelledSym = concreteLabelled.typeSymbol
+
+    def concrete(t: TypeRepr): TypeRepr = t.substituteTypes(List(labelledSym), List(concreteLabelled))
+    def unConcrete(t: TypeRepr): TypeRepr = t.substituteTypes(List(concreteLabelledSym), List(labelled))
+
+    @tailrec def fieldTypes(t: TypeRepr, acc: List[(String, TypeRepr)]): Option[List[(String, TypeRepr)]] =
+      t.asType match {
+        case '[HNil] => Some(acc.reverse)
+        case '[ConcreteLabelled[k, v] :: t] =>
+          TypeRepr.of[k] match {
+            case ConstantType(StringConstant(k)) =>
+              fieldTypes(TypeRepr.of[t], (k, unConcrete(TypeRepr.of[v])) :: acc)
+            case _ =>
+              None
+          }
+        case _ =>
+          None
+      }
+
+    fieldTypes(concrete(typeRepr), Nil).orElse(fieldTypes(concrete(typeRepr.dealias), Nil))
   }
 }

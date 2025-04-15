@@ -17,6 +17,8 @@ abstract class CodecTest[DecodeEncodeType: Arbitrary: Decoder: Encoder](
   decodeEncodeCodecValue: String,
   decodeEncodeCodecFile: String,
 ) extends ScalaCheckSuite {
+  val customType: TsCustomType = TsCustomType.none
+
   private val types = typesAndExpected.map { case (f, (ts, _)) => (outputDir / f) -> ts }
   private val expected = typesAndExpected.map { case (f, (_, s)) => (outputDir / f).toString -> s }
   private val decodeEncodeScript = outputDir / "decode-encode.ts"
@@ -27,6 +29,7 @@ abstract class CodecTest[DecodeEncodeType: Arbitrary: Decoder: Encoder](
     def apply() = ref.get
 
     override def beforeAll() = {
+      given ct: TsCustomType = customType
       writeAll(types)
       writeDecodeEncodeScript(decodeEncodeScript, decodeEncodeCodecName, decodeEncodeCodecValue, outputDir / decodeEncodeCodecFile)
       ref.set(types.map { case (f, _) => f.toString -> f.read.trim })

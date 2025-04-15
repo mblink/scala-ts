@@ -6,17 +6,17 @@ import java.io.{File, PrintStream}
 import scala.quoted.*
 import scala.util.Using
 
-private def parseImpl[A: Type](using Quotes): Expr[TsModel] =
-  new TsParser().parseTopLevel[A]
+private def parseImpl[A: Type](ignoreOpaque: Expr[TsIgnoreOpaque])(using Quotes): Expr[TsModel] =
+  new TsParser(ignoreOpaque).parseTopLevel[A]
 
 /** Parse `A` into a [[scalats.TsModel]]` under the assumption that we want to define `A` */
-inline def parse[A]: TsModel = ${ parseImpl[A] }
+inline def parse[A](using inline ignoreOpaque: TsIgnoreOpaque): TsModel = ${ parseImpl[A]('ignoreOpaque) }
 
-private def parseReferenceImpl[A: Type](using Quotes): Expr[TsModel] =
-  new TsParser().parse[A](false)
+private def parseReferenceImpl[A: Type](ignoreOpaque: Expr[TsIgnoreOpaque])(using Quotes): Expr[TsModel] =
+  new TsParser(ignoreOpaque).parse[A](false)
 
 /** Parse `A` into a [[scalats.TsModel]]` under the assumption we only want to refer to `A`, not define it */
-inline def parseReference[A]: TsModel = ${ parseReferenceImpl[A] }
+inline def parseReference[A](using inline ignoreOpaque: TsIgnoreOpaque): TsModel = ${ parseReferenceImpl[A]('ignoreOpaque) }
 
 /**
  * Generate code for the given types

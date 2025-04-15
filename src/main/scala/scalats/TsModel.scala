@@ -15,6 +15,36 @@ package scalats
 sealed trait TsModel {
   val typeName: TypeName
   val typeArgs: List[TsModel]
+
+  final def withTypeEls(typeName: TypeName, typeArgs: List[TsModel]): TsModel =
+    this match {
+      case x: TsModel.TypeParam => x
+      case x: TsModel.Literal => x
+      case x: TsModel.Json => x.copy(typeName = typeName)
+      case x: TsModel.Number => x.copy(typeName = typeName)
+      case x: TsModel.BigNumber => x.copy(typeName = typeName)
+      case x: TsModel.Boolean => x.copy(typeName = typeName)
+      case x: TsModel.String => x.copy(typeName = typeName)
+      case x: TsModel.LocalDate => x.copy(typeName = typeName)
+      case x: TsModel.DateTime => x.copy(typeName = typeName)
+      case x: TsModel.UUID => x.copy(typeName = typeName)
+      case x: TsModel.Eval => x.copy(typeName = typeName)
+      case x: TsModel.Array => x.copy(typeName = typeName)
+      case x: TsModel.Set => x.copy(typeName = typeName)
+      case x: TsModel.NonEmptyArray => x.copy(typeName = typeName)
+      case x: TsModel.Option => x.copy(typeName = typeName)
+      case x: TsModel.Either => x.copy(typeName = typeName)
+      case x: TsModel.Ior => x.copy(typeName = typeName)
+      case x: TsModel.Map => x.copy(typeName = typeName)
+      case x: TsModel.Tuple => x.copy(typeName = typeName)
+      case x: TsModel.Interface => x.copy(typeName = typeName, typeArgs = typeArgs)
+      case x: TsModel.InterfaceRef => x.copy(typeName = typeName, typeArgs = typeArgs)
+      case x: TsModel.Object => x.copy(typeName = typeName)
+      case x: TsModel.ObjectRef => x.copy(typeName = typeName)
+      case x: TsModel.Union => x.copy(typeName = typeName, typeArgs = typeArgs)
+      case x: TsModel.UnionRef => x.copy(typeName = typeName, typeArgs = typeArgs)
+      case x: TsModel.Unknown => x.copy(typeName = typeName)
+    }
 }
 
 object TsModel {

@@ -22,6 +22,7 @@ ThisBuild / githubWorkflowPublishTargetBranches := Seq()
 
 lazy val cats = "org.typelevel" %% "cats-core" % "2.13.0"
 def circe(proj: String) = "io.circe" %% s"circe-$proj" % "0.14.10"
+lazy val formless = "com.bondlink" %% "formless" % "0.5.1"
 lazy val joda = "joda-time" % "joda-time" % "2.13.0"
 def munit(proj: String = "") = "org.scalameta" %% s"munit${if (proj == "") "" else s"-$proj"}" % "1.1.0" % Test
 lazy val scalacheck = "org.scalacheck" %% "scalacheck" % "1.18.1" % Test
@@ -37,10 +38,12 @@ lazy val root = project.in(file("."))
 
     Compile / doc / scalacOptions += "-skip-by-regex:^scalats\\.BuildInfo\\$$",
 
+    resolvers += "bondlink-maven-repo" at "https://raw.githubusercontent.com/mblink/maven-repo/main",
     libraryDependencies ++= Seq(
       cats,
       // Optional dependencies to provide more scala => TS type support
       circe("core") % Optional,
+      formless % Optional,
       joda % Optional,
       scalaz % Optional,
       // Test dependencies

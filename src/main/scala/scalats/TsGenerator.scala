@@ -289,30 +289,30 @@ class TsGenerator(
 
   /** Produces code that refers to a given codec type, represented by its `typeName` and `typeArgs` */
   private def generateCodecTypeRef(typeName: TypeName, typeArgs: List[TsModel], isUnion: Boolean): Generated =
-    customType.codecType(typeName.raw).getOrElse(
+    customType(typeName.raw).fold(
       imports.custom(typeName, cap(mkCodecName(typeName, isUnion))) |+|
       (if (typeArgs.isEmpty) Generated.empty
       else "<" |+| typeArgs.intercalateMap(imports.lift(", "))(generateCodecType) |+| ">")
-    )
+    )(_.codecType)
 
   /** Produces code that refers to a given codec type, represented by its `typeName` and `typeArgs` */
   protected def generateValueTypeRef(typeName: TypeName, typeArgs: List[TsModel], isUnion: Boolean): Generated =
-    customType.valueType(typeName.raw).getOrElse(
+    customType(typeName.raw).fold(
       imports.custom(typeName, cap(mkValueName(typeName, isUnion))) |+|
       (if (typeArgs.isEmpty) Generated.empty
       else "<" |+| typeArgs.intercalateMap(imports.lift(", "))(generateValueType) |+| ">")
-    )
+    )(_.valueType)
 
   /** Produces code that refers to a given value, represented by its `typeName` and `typeArgs` */
   private def generateCodecValueRef(state: State, typeName: TypeName, typeArgs: List[TsModel], isUnion: Boolean): List[(Option[TypeName], Generated)] =
     maybeWrapCodec(
       state,
       typeName,
-      customType.value(typeName.raw).getOrElse(
+      customType(typeName.raw).fold(
         imports.custom(typeName, mkCodecName(typeName, isUnion)) |+|
         (if (typeArgs.isEmpty) Generated.empty
         else "(" |+| typeArgs.intercalateMap(imports.lift(", "))(genNotTop(state, _)) |+| ")")
-      ),
+      )(_.codecValue),
     )
 
   protected def tagField(tag: String): TsModel.ObjectField =

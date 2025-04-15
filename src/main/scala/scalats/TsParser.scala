@@ -9,8 +9,11 @@ import scala.util.chaining.*
  * [[scalats.TsParser.parseTopLevel]] takes a type `A` and replaces its type parameters
  * with references to [[scalats.TypeParam]], while [[scalats.TsParser.parse]] treats types as is.
  */
-final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
+final class TsParser(ignoreOpaqueExpr: Expr[TsIgnoreOpaque])(using override val ctx: Quotes) extends ReflectionUtils {
   import ctx.reflect.*
+
+  private val ignoreOpaque = ignoreOpaqueExpr.valueOrAbort
+  private val ignoreFormlessLabelled = "formless.record.->>["
 
   /** A predefined set of [[scalats.TypeParam]] instances to use as references in parameterized types */
   private val typeParamTypes = IndexedSeq(
@@ -65,7 +68,9 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
    */
   def parse[A: Type](top: Boolean): Expr[TsModel] = {
     val typeRepr = TypeRepr.of[A]
-    val typeName = mkTypeName(typeRepr)
+    lazy val typeReprShown = typeRepr.show
+    lazy val typeSym = typeRepr.typeSymbol
+    lazy val typeName = mkTypeName(typeRepr)
 
     typeRepr.asType match {
       case '[Nothing] => '{ TsModel.Unknown($typeName, Nil) }
@@ -102,6 +107,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
       }
       case '[Map[k, v]] => '{ TsModel.Map($typeName, ${ parse[k](false) }, ${ parse[v](false) }) }
       case '[EmptyTuple] => '{ TsModel.Tuple($typeName, Nil) }
+      case HListRecordType(fields) => if (top) parseInterface[A](fields, None) else parseInterfaceRef[A]
       case '[*:[h, t]] =>
         def unroll[T <: Tuple: Type]: List[Expr[TsModel]] =
           Type.of[T] match {
@@ -111,12 +117,16 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
         '{ TsModel.Tuple($typeName, ${ Expr.ofList(unroll[h *: t]) }) }
       case '[t] if typeRepr <:< TypeRepr.of[Tuple] =>
         '{ TsModel.Tuple($typeName, ${ mkTypeArgs(TypeRepr.of[t]) }) }
+      case _ if typeSym.typeRef.isOpaqueAlias && !ignoreOpaque.contains(typeReprShown) && !typeReprShown.startsWith(ignoreFormlessLabelled) =>
+        val trueType = typeSym.typeRef.translucentSuperType
+        val typeArgs = mkTypeArgs(trueType)
+        trueType.asType match { case '[t] => '{ ${ parse[t](top) }.withTypeEls($typeName, $typeArgs) } }
       case '[t] =>
         Mirror(typeRepr) match {
           case Some(m) =>
             m.mirrorType match {
               case MirrorType.Sum => if (top) parseEnum[t](m) else parseEnumRef[t](m)
-              case MirrorType.Product => if (top) parseCaseClass[t](m, None) else parseCaseClassRef[t]
+              case MirrorType.Product => if (top) parseCaseClass[t](m, None) else parseInterfaceRef[t]
               case MirrorType.Singleton => if (top) parseObject[t](None) else parseObjectRef[t]
             }
 
@@ -181,12 +191,12 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
     }
   }
 
-  /** Parse a `case class` definiton into its [[scalats.TsModel]] representation */
-  private def parseCaseClass[A: Type](mirror: Mirror, parent: Option[TypeRepr]): Expr[TsModel.Interface] = {
+  /** Parse a set of fields into its [[scalats.TsModel.Interface]] representation */
+  private def parseInterface[A: Type](fieldTypes: List[(String, TypeRepr)], parent: Option[TypeRepr]): Expr[TsModel.Interface] = {
     val typeRepr = TypeRepr.of[A]
-    val fields = mirror.types.toList.zip(mirror.labels).map { case (tpe, name) =>
-      tpe.asType match { case '[t] => '{ TsModel.InterfaceField(${ Expr(name) }, ${ parse[t](false) }) } }
-    }
+    val fields = fieldTypes.map((name, value) =>
+      value.asType match { case '[t] => '{ TsModel.InterfaceField(${ Expr(name) }, ${ parse[t](false) }) } },
+    )
     '{
       TsModel.Interface(
         ${ mkTypeName(typeRepr) },
@@ -197,7 +207,11 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
     }
   }
 
-  private def parseCaseClassRef[A: Type]: Expr[TsModel.InterfaceRef] = {
+  /** Parse a `case class` definiton into its [[scalats.TsModel]] representation */
+  private def parseCaseClass[A: Type](mirror: Mirror, parent: Option[TypeRepr]): Expr[TsModel.Interface] =
+    parseInterface[A](mirror.labels.zip(mirror.types), parent)
+
+  private def parseInterfaceRef[A: Type]: Expr[TsModel.InterfaceRef] = {
     val typeRepr = TypeRepr.of[A]
     '{ TsModel.InterfaceRef(${ mkTypeName(typeRepr) }, ${ mkTypeArgs(typeRepr) }) }
   }
