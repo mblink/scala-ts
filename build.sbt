@@ -57,7 +57,7 @@ lazy val root = project.in(file("."))
     // Publish settings
     publishMavenStyle := true,
     Test / publishArtifact := false,
-    gitPublishDir := file("/src/maven-repo"),
+    publishTo := Some("BondLink S3".at("s3://bondlink-maven-repo")),
     licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
   )
   .enablePlugins(BuildInfoPlugin)
