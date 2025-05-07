@@ -12,7 +12,7 @@ extension(file: File) {
   final def read: String = Using.resource(Source.fromFile(file))(_.mkString)
 }
 
-val outputDir = BuildInfo.testsDir / "output"
+val outputDir = testsDir / "output"
 
 given customType: TsCustomType = TsCustomType.none
 given customOrd: TsCustomOrd = TsCustomOrd.none

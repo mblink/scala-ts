@@ -53,7 +53,7 @@ abstract class CodecTest[DecodeEncodeType: Arbitrary: Decoder: Encoder](
     var err = List.empty[String]
     val code = Process(
       Seq("yarn", "--silent", "ts-node", decodeEncodeScript.toString, in.asJson.noSpaces),
-      BuildInfo.testsDir,
+      testsDir,
     ) ! ProcessLogger(s => out = out :+ s, s => err = err :+ s)
     ((code == 0) :| err.mkString("\n")) && (out match {
       case json :: Nil =>

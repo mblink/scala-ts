@@ -35,8 +35,6 @@ lazy val root = project.in(file("."))
     version := "0.19.0",
     scalaVersion := scalaV,
 
-    Compile / doc / scalacOptions += "-skip-by-regex:^scalats\\.BuildInfo\\$$",
-
     libraryDependencies ++= Seq(
       cats,
       // Optional dependencies to provide more scala => TS type support
@@ -51,8 +49,11 @@ lazy val root = project.in(file("."))
       slf4j,
     ),
 
-    buildInfoPackage := "scalats",
-    buildInfoKeys := Seq(BuildInfoKey.action("testsDir")(baseDirectory.value / "tests")),
+    Test / sourceGenerators += Def.task {
+      val file = (Test / sourceManaged).value / "BuildInfo.scala"
+      IO.write(file, s"""package scalats.tests\nval testsDir = new java.io.File("${baseDirectory.value / "tests"}")""")
+      Seq(file)
+    },
 
     // Publish settings
     publishMavenStyle := true,
@@ -60,4 +61,3 @@ lazy val root = project.in(file("."))
     publishTo := Some("BondLink S3".at("s3://bondlink-maven-repo")),
     licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
   )
-  .enablePlugins(BuildInfoPlugin)
