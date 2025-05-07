@@ -2,10 +2,11 @@ package scalats
 package tests
 
 import io.circe.{Decoder, Encoder}
-import scalats.tests.arbitrary.given
+import org.scalacheck.Arbitrary
+import scalats.tests.arbitrary.*
 
 object UnionWithTypeParamTest {
-  sealed trait Foo[A] {
+  sealed trait Foo[A] derives Arbitrary {
     val int: Int
     val data: A
   }

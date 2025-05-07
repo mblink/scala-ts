@@ -3,7 +3,7 @@ package tests
 
 import io.circe.{Decoder, Encoder, JsonObject}
 import io.circe.syntax.*
-import scalats.tests.arbitrary.given
+import org.scalacheck.{Arbitrary, Gen}
 
 object ObjectTest {
   case object Foo {
@@ -19,6 +19,8 @@ object ObjectTest {
 
     given encoder: Encoder[Foo.type] =
       Encoder.AsObject.instance(foo => JsonObject("_tag" := "Foo", "int" := foo.int, "str" := foo.str))
+
+    given arb: Arbitrary[Foo.type] = Arbitrary(Gen.const(Foo))
   }
 
   val expectedFooCode = """

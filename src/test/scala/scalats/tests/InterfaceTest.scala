@@ -1,20 +1,13 @@
 package scalats
 package tests
 
-import io.circe.{Decoder, Encoder}
-import scalats.tests.arbitrary.given
+import io.circe.derivation.{ConfiguredDecoder, ConfiguredEncoder}
+import org.scalacheck.Arbitrary
+import scalats.tests.arbitrary.*
 
 object InterfaceTest {
-  case class Foo(int: Int, str: String)
-  object Foo {
-    given decoder: Decoder[Foo] = Decoder.derivedConfigured
-    given encoder: Encoder[Foo] = Encoder.AsObject.derivedConfigured
-  }
-  case class Bar(foo: Foo, bool: Boolean)
-  object Bar {
-    given decoder: Decoder[Bar] = Decoder.derivedConfigured
-    given encoder: Encoder[Bar] = Encoder.AsObject.derivedConfigured
-  }
+  case class Foo(int: Int, str: String) derives Arbitrary, ConfiguredDecoder, ConfiguredEncoder
+  case class Bar(foo: Foo, bool: Boolean) derives Arbitrary, ConfiguredDecoder, ConfiguredEncoder
 
   val expectedFooCode = """
 import * as t from "io-ts";
