@@ -1,17 +1,14 @@
 package scalats
 package tests
 
-import io.circe.{Decoder, Encoder}
-import scalats.tests.arbitrary.given
+import io.circe.derivation.{ConfiguredDecoder, ConfiguredEncoder}
+import org.scalacheck.Arbitrary
+import scalats.tests.arbitrary.*
 
 object UnionWithObjectsTest {
-  sealed trait Foo {
+  sealed trait Foo derives Arbitrary, ConfiguredDecoder, ConfiguredEncoder {
     val int: Int
     val str: String
-  }
-  object Foo {
-    given decoder: Decoder[Foo] = Decoder.derivedConfigured
-    given encoder: Encoder[Foo] = Encoder.AsObject.derivedConfigured
   }
   case object Bar extends Foo {
     val int = 1

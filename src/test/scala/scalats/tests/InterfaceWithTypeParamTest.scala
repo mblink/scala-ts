@@ -2,10 +2,11 @@ package scalats
 package tests
 
 import io.circe.{Decoder, Encoder}
-import scalats.tests.arbitrary.given
+import org.scalacheck.Arbitrary
+import scalats.tests.arbitrary.*
 
 object InterfaceWithTypeParamTest {
-  case class Foo[A](int: Int, data: A)
+  case class Foo[A](int: Int, data: A) derives Arbitrary
   object Foo {
     given decoder[A: Decoder]: Decoder[Foo[A]] = Decoder.derivedConfigured
     given encoder[A: Encoder]: Encoder[Foo[A]] = Encoder.AsObject.derivedConfigured

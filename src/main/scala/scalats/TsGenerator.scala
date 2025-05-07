@@ -226,6 +226,7 @@ class TsGenerator(
         | _: TsModel.ObjectRef
         | _: TsModel.Union
         | _: TsModel.UnionRef
+        | _: TsModel.UnionTypeRef
         | _: TsModel.Unknown
       ) =>
         value match {
@@ -282,6 +283,7 @@ class TsGenerator(
         | TsModel.InterfaceRef(_, _)
         | TsModel.Object(_, _, _)
         | TsModel.ObjectRef(_)
+        | TsModel.UnionTypeRef(_, _, _)
         | TsModel.Unknown(_, _)
       ) => err
     })
@@ -430,27 +432,38 @@ class TsGenerator(
     List((Some(iface.typeName), state.wrapCodec(generateFieldsCodecValue(state, interfaceFields(iface)))))
   }
 
-  private def unionPossibilityRefs(union: TsModel.Union): List[TsModel.InterfaceRef | TsModel.ObjectRef] =
-    union.possibilities.map {
+  private def withUnionPossibilityRefs[A](union: TsModel.Union | TsModel.UnionTypeRef)(
+    onOne: TsModel => A,
+    onMany: List[TsModel] => A
+  ): A = {
+    val (typeName, possibilities) = union match {
+      case u: TsModel.Union => (u.typeName, u.possibilities)
+      case u: TsModel.UnionTypeRef => (u.typeName, u.possibilities)
+    }
+    possibilities.map {
       case TsModel.Interface(typeName, _, typeArgs, _) => TsModel.InterfaceRef(typeName, typeArgs)
       case TsModel.Object(typeName, _, _) => TsModel.ObjectRef(typeName)
+      case m => m
+    } match {
+      case Nil => sys.error(s"Can't generate TS code for union `$typeName` with 0 members")
+      case h :: Nil => onOne(h)
+      case l @ (_ :: _) => onMany(l)
     }
+  }
 
   /** Produces codec type code for a scala `enum`/`sealed trait`/`sealed class` */
-  private def generateUnionCodecType(union: TsModel.Union): Generated =
-    unionPossibilityRefs(union) match {
-      case Nil => sys.error(s"Can't generate TS code for union `${union.typeName}` with 0 members")
-      case h :: Nil => generateCodecType(h)
-      case l @ (_ :: _) => imports.iotsUnionC("[" |+| l.toList.intercalateMap(imports.lift(", "))(generateCodecType) |+| "]")
-    }
+  private def generateUnionCodecType(union: TsModel.Union | TsModel.UnionTypeRef): Generated =
+    withUnionPossibilityRefs(union)(
+      generateCodecType,
+      l => imports.iotsUnionC("[" |+| l.intercalateMap(imports.lift(", "))(generateCodecType) |+| "]")
+    )
 
   /** Produces value type code for a scala `enum`/`sealed trait`/`sealed class` */
-  private def generateUnionValueType(union: TsModel.Union): Generated =
-    unionPossibilityRefs(union) match {
-      case Nil => sys.error(s"Can't generate TS code for union `${union.typeName}` with 0 members")
-      case h :: Nil => generateValueType(h)
-      case l @ (_ :: _) => l.toList.intercalateMap(imports.lift(" | "))(generateValueType)
-    }
+  private def generateUnionValueType(union: TsModel.Union | TsModel.UnionTypeRef): Generated =
+    withUnionPossibilityRefs(union)(
+      generateValueType,
+      _.toList.intercalateMap(imports.lift(" | "))(generateValueType)
+    )
 
   /** Produces value code for a scala `enum`/`sealed trait`/`sealed class` */
   private def generateUnionCodecValue(state: State, union: TsModel.Union): List[(Option[TypeName], Generated)] = {
@@ -484,7 +497,7 @@ class TsGenerator(
       else name |+| "(" |+| tas.intercalateMap(imports.lift(", "))(genNotTop(state, _)) |+| ")"
     }
 
-    debugLog("union", union.typeName.base, Some(memberCodecNames.map( name => f"\n  member ${name}").mkString))
+    debugLog("union", typeName.base, Some(memberCodecNames.map( name => f"\n  member ${name}").mkString))
 
     val allMemberCodecsArr = "[" |+| allMemberCodecs.intercalate(imports.lift(", ")) |+| "]"
     val allNamesConstName = "all" |+| valueType |+| "Names"
@@ -518,6 +531,12 @@ class TsGenerator(
       )
     )))
   }
+
+  private def generateUnionTypeRefCodecValue(state: State, union: TsModel.UnionTypeRef): Generated =
+    withUnionPossibilityRefs(union)(
+      genNotTop(state, _),
+      l => imports.iotsUnion("[" |+| l.intercalateMap(imports.lift(", "))(genNotTop(state, _)) |+| "]")
+    )
 
   def generateCodecType(model: TsModel): Generated =
     model match {
@@ -595,6 +614,9 @@ class TsGenerator(
 
       case TsModel.UnionRef(typeName, typeArgs, _) =>
         generateCodecTypeRef(typeName, typeArgs, true)
+
+      case u: TsModel.UnionTypeRef =>
+        generateUnionCodecType(u)
 
       case TsModel.Unknown(typeName, typeArgs) =>
         generateCodecTypeRef(typeName, typeArgs, false)
@@ -676,6 +698,9 @@ class TsGenerator(
 
       case TsModel.UnionRef(typeName, typeArgs, _) =>
         generateValueTypeRef(typeName, typeArgs, true)
+
+      case u: TsModel.UnionTypeRef =>
+        generateUnionValueType(u)
 
       case TsModel.Unknown(typeName, typeArgs) =>
         generateValueTypeRef(typeName, typeArgs, false)
@@ -772,6 +797,9 @@ class TsGenerator(
 
       case TsModel.UnionRef(typeName, typeArgs, _) =>
         generateCodecValueRef(state, typeName, typeArgs, true)
+
+      case u: TsModel.UnionTypeRef =>
+        List((None, generateUnionTypeRefCodecValue(state, u)))
 
       case TsModel.Unknown(typeName, typeArgs) =>
         generateCodecValueRef(state, typeName, typeArgs, false)

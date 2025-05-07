@@ -112,7 +112,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
       case '[t] if typeRepr <:< TypeRepr.of[Tuple] =>
         '{ TsModel.Tuple($typeName, ${ mkTypeArgs(TypeRepr.of[t]) }) }
       case '[t] =>
-        Mirror(typeRepr) match {
+        parseUnionType(top, typeRepr).getOrElse(Mirror(typeRepr) match {
           case Some(m) =>
             m.mirrorType match {
               case MirrorType.Sum => if (top) parseEnum[t](m) else parseEnumRef[t](m)
@@ -122,7 +122,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
 
           case None =>
             '{ TsModel.Unknown($typeName, ${ mkTypeArgs(typeRepr) }) }
-        }
+        })
     }
   }
 
@@ -178,6 +178,36 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
         ${ mkTypeArgs(typeRepr) },
         ${ Expr(allObjects(mirror)) },
       )
+    }
+  }
+
+  private def parseUnionType(top: Boolean, typeRepr: TypeRepr): Option[Expr[TsModel.UnionTypeRef]] = {
+    @annotation.tailrec
+    def unroll(toCheck: List[TypeRepr], acc: List[TypeRepr]): List[TypeRepr] =
+      toCheck match {
+        case t :: rest =>
+          (t, t.dealias) match {
+            case (OrType(l, r), _) => unroll(l :: r :: rest, acc)
+            case (_, OrType(l, r)) => unroll(l :: r :: rest, acc)
+            case _ => unroll(rest, t :: acc)
+          }
+        case Nil => acc.reverse
+      }
+
+    unroll(List(typeRepr), Nil) match {
+      case Nil => sys.error(s"Unexpected union type with no possibilities: ${typeRepr.show}")
+      case t :: Nil if t =:= typeRepr => None
+      case ts =>
+        if (top)
+          report.errorAndAbort("Union types are only supported as references")
+        else
+          Some('{
+            TsModel.UnionTypeRef(
+              ${ mkTypeName(typeRepr) },
+              ${ mkTypeArgs(typeRepr) },
+              ${ Expr.ofList(ts.map(_.asType match { case '[t] => parse[t](false) })) }
+            )
+          })
     }
   }
 
