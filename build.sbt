@@ -6,7 +6,7 @@ ThisBuild / scalaVersion := scalaV
 ThisBuild / crossScalaVersions := Seq(scalaV)
 
 // GitHub Actions config
-val javaVersions = Seq(8, 11, 17, 21).map(v => JavaSpec.temurin(v.toString))
+val javaVersions = Seq(8, 11, 17, 21, 25).map(v => JavaSpec.temurin(v.toString))
 
 ThisBuild / githubWorkflowJavaVersions := javaVersions
 ThisBuild / githubWorkflowArtifactUpload := false
