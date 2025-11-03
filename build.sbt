@@ -22,7 +22,7 @@ ThisBuild / githubWorkflowPublishTargetBranches := Seq()
 
 lazy val cats = "org.typelevel" %% "cats-core" % "2.13.0"
 def circe(proj: String) = "io.circe" %% s"circe-$proj" % "0.14.15"
-lazy val joda = "joda-time" % "joda-time" % "2.13.0"
+lazy val joda = "joda-time" % "joda-time" % "2.13.1"
 def munit(proj: String = "") = "org.scalameta" %% s"munit${if (proj == "") "" else s"-$proj"}" % "1.2.0" % Test
 lazy val scalacheck = "org.scalacheck" %% "scalacheck" % "1.18.1" % Test
 lazy val scalaz = "org.scalaz" %% "scalaz-core" % "7.3.8"
