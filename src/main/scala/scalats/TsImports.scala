@@ -5,6 +5,7 @@ import cats.syntax.foldable.*
 import cats.syntax.semigroup.*
 import java.io.File
 import java.nio.file.Paths
+import scala.collection.concurrent.TrieMap
 
 /**
  * A single TypeScript import without a location specified yet.
@@ -483,7 +484,7 @@ object TsImports {
     /** Helper to build a Record type */
     final lazy val recordType = CallableImport.tpe(TsImports.empty, "Record")
 
-    private var incr = Map.empty[String, Int]
+    private val incr = TrieMap.empty[String, Int]
 
     /**
      * Import a custom type
@@ -492,11 +493,11 @@ object TsImports {
      * @param valueName The name of the value to import
      */
     final def custom(typeName: TypeName, valueName: String): Generated = {
-      incr = incr.updatedWith(valueName) {
+      val i = incr.updateWith(valueName) {
         case Some(i) => Some(i + 1)
         case None => Some(0)
-      }
-      namedImport(typeName, valueName, Some(s"imported${incr(valueName)}_$valueName"))
+      }.get
+      namedImport(typeName, valueName, Some(s"imported${i}_$valueName"))
     }
   }
 }
