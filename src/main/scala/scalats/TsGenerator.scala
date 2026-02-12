@@ -227,6 +227,7 @@ class TsGenerator(
         | _: TsModel.Union
         | _: TsModel.UnionRef
         | _: TsModel.UnionTypeRef
+        | _: TsModel.TypeAlias
         | _: TsModel.Unknown
       ) =>
         value match {
@@ -284,6 +285,7 @@ class TsGenerator(
         | TsModel.Object(_, _, _)
         | TsModel.ObjectRef(_)
         | TsModel.UnionTypeRef(_, _, _)
+        | TsModel.TypeAlias(_, _)
         | TsModel.Unknown(_, _)
       ) => err
     })
@@ -618,6 +620,9 @@ class TsGenerator(
       case u: TsModel.UnionTypeRef =>
         generateUnionCodecType(u)
 
+      case TsModel.TypeAlias(_, dealiased) =>
+        generateCodecType(dealiased)
+
       case TsModel.Unknown(typeName, typeArgs) =>
         generateCodecTypeRef(typeName, typeArgs, false)
     }
@@ -701,6 +706,9 @@ class TsGenerator(
 
       case u: TsModel.UnionTypeRef =>
         generateUnionValueType(u)
+
+      case TsModel.TypeAlias(_, dealiased) =>
+        generateValueType(dealiased)
 
       case TsModel.Unknown(typeName, typeArgs) =>
         generateValueTypeRef(typeName, typeArgs, false)
@@ -800,6 +808,9 @@ class TsGenerator(
 
       case u: TsModel.UnionTypeRef =>
         List((None, generateUnionTypeRefCodecValue(state, u)))
+
+      case TsModel.TypeAlias(typeName, dealiased) =>
+        maybeWrapCodec(state, typeName, genNotTop(state, dealiased))
 
       case TsModel.Unknown(typeName, typeArgs) =>
         generateCodecValueRef(state, typeName, typeArgs, false)
