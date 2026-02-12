@@ -95,5 +95,8 @@ object TsModel {
   case class Union(typeName: TypeName, typeArgs: List[TsModel], possibilities: List[Object | Interface]) extends TsModel
   case class UnionRef(typeName: TypeName, typeArgs: List[TsModel], allObjects: scala.Boolean) extends TsModel
   case class UnionTypeRef(typeName: TypeName, typeArgs: List[TsModel], possibilities: List[TsModel]) extends TsModel
+  case class TypeAlias(typeName: TypeName, dealiased: TsModel) extends TsModel {
+    val typeArgs = Nil
+  }
   case class Unknown(typeName: TypeName, typeArgs: List[TsModel]) extends TsModel
 }

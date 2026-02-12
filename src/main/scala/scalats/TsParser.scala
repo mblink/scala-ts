@@ -51,7 +51,9 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
         AppliedType(tpe, params.zipWithIndex.map { case (_, i) => typeParamTypes(i) }).asType match {
           case '[t] => parse[t](true)
         }
-      case _ =>
+      case t if t.typeSymbol.isAliasType && t.typeArgs.isEmpty =>
+        '{ TsModel.TypeAlias(${ mkTypeName(t) }, ${ parse[A](false) }) }
+      case t =>
         parse[A](true)
     }
 
