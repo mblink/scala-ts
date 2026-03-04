@@ -33,7 +33,7 @@ lazy val root = project.in(file("."))
   .settings(
     name := "scala-ts",
     organization := "bondlink",
-    version := "0.20.0",
+    version := "0.21.0",
     scalaVersion := scalaV,
 
     libraryDependencies ++= Seq(
