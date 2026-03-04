@@ -114,8 +114,9 @@ def referenceCode(model: TsModel)(
 ): ReferenceCode[Id] = {
   val generator = new TsGenerator(customType, customOrd, imports)
   ReferenceCode[Id](
-    valueType = generator.generateValueType(model),
     codecType = generator.generateCodecType(model),
-    codecValue = generator.generateCodecValue(generator.State(false, generator.WrapCodec.id), model).foldMap(_._2),
+    codecInstance = generator.generateCodecInstance(generator.State(false, generator.WrapCodec.id), model).foldMap(_._2),
+    valueType = generator.generateValueType(model),
+    valueInstance = generator.generateValueInstance(model, _),
   )
 }

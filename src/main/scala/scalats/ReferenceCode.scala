@@ -1,7 +1,8 @@
 package scalats
 
-case class ReferenceCode[ValueType[_]](
-  valueType: ValueType[Generated],
+case class ReferenceCode[Value[_]](
   codecType: Generated,
-  codecValue: Generated,
+  codecInstance: Generated,
+  valueType: Value[Generated],
+  valueInstance: Value[Any => Generated],
 )
