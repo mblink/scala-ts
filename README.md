@@ -2,10 +2,6 @@
 
 A Scala 3 macro library that generates TypeScript types and [`io-ts`](https://github.com/gcanti/io-ts) codecs from Scala types. The Scala types are the source of truth for an API's I/O types; the generated TypeScript hardens the contract between the frontend and the backend.
 
-## Status
-
-`scala-ts` is tested and used in production by [BondLink](https://bondlink.com). It is not, to our knowledge, used outside of BondLink. Because the generated code is fed back through the TypeScript compiler, any drift between the Scala source of truth and the generated output is caught downstream as a TypeScript type error, which adds an additional layer of verification beyond the library's own test suite.
-
 ## Installation
 
 ```scala
@@ -77,7 +73,7 @@ The recommended setup is to define your types in one sbt subproject and your gen
 
 The output generated from the [quickstart](#quickstart) example looks like this:
 
-<details><summary>expand `generated/role.ts`</summary>
+<details><summary>expand <code>generated/role.ts</code></summary>
 
 ```ts
 import * as t from "io-ts";
@@ -164,7 +160,9 @@ export type RoleMap<A> = { [K in RoleName]: A };
 
 </details>
 
-<details><summary>expand `generated/user.ts`</summary>
+<details><summary>expand <code>generated/user.ts</code>
+
+</summary>
 
 ```ts
 import * as t from "io-ts";
