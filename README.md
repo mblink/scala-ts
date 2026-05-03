@@ -2,6 +2,29 @@
 
 A Scala 3 macro library that generates TypeScript types and [`io-ts`](https://github.com/gcanti/io-ts) codecs from Scala types. The Scala types are the source of truth for an API's I/O types; the generated TypeScript hardens the contract between the frontend and the backend.
 
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Installation](#installation)
+- [Quickstart](#quickstart)
+- [Output](#output)
+- [Configuration](#configuration)
+  - [Customizing import locations](#customizing-import-locations)
+  - [Customizing types via `TsCustomType`](#customizing-types-via-tscustomtype)
+  - [Providing `Ord` instances via `TsCustomOrd`](#providing-ord-instances-via-tscustomord)
+- [Optional dependencies](#optional-dependencies)
+  - [circe](#circe)
+  - [joda-time](#joda-time)
+  - [scalaz](#scalaz)
+- [Codec target](#codec-target)
+- [Public API](#public-api)
+  - [Macros](#macros)
+  - [Generation](#generation)
+- [Code structure](#code-structure)
+- [License](#license)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 ## Installation
 
 ```scala
