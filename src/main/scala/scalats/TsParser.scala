@@ -50,7 +50,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
       case AppliedType(tpe, params) if params.nonEmpty =>
         AppliedType(tpe, params.zipWithIndex.map { case (_, i) => typeParamTypes(i) }).asType match {
           case '[t] => parse[t](true)
-        }
+        }: @annotation.nowarn("msg=match may not be exhaustive")
       case t if t.typeSymbol.isAliasType && t.typeArgs.isEmpty =>
         '{ TsModel.TypeAlias(${ mkTypeName(t) }, ${ parse[A](false) }) }
       case t =>
@@ -109,7 +109,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
           Type.of[T] match {
             case '[*:[h, t]] => parse[h](false) :: unroll[t]
             case '[EmptyTuple] => Nil
-          }
+          }: @annotation.nowarn("msg=match may not be exhaustive")
         '{ TsModel.Tuple($typeName, ${ Expr.ofList(unroll[h *: t]) }) }
       case '[t] if typeRepr <:< TypeRepr.of[Tuple] =>
         '{ TsModel.Tuple($typeName, ${ mkTypeArgs(TypeRepr.of[t]) }) }
@@ -125,14 +125,16 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
           case None =>
             '{ TsModel.Unknown($typeName, ${ mkTypeArgs(typeRepr) }) }
         })
-    }
+    }: @annotation.nowarn("msg=match may not be exhaustive")
   }
 
   private def mkTypeName(typeRepr: TypeRepr): Expr[TypeName] =
     '{ T(${ Expr(typeRepr.show) }) }
 
   private def mkTypeArgs(typeRepr: TypeRepr): Expr[List[TsModel]] =
-    Expr.ofList(typeRepr.typeArgs.map(_.asType match { case '[a] => parse[a](false) }))
+    Expr.ofList(typeRepr.typeArgs.map(_.asType match {
+      case '[a] => parse[a](false)
+    }: @annotation.nowarn("msg=match may not be exhaustive")))
 
   /** Parse an `enum` definiton into its [[scalats.TsModel]] representation */
   private def parseEnum[A: Type](mirror: Mirror): Expr[TsModel] = {
@@ -150,8 +152,12 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
           m.types.toList
             .filter(t => getTypeConstructor(t.baseType(tycon.typeSymbol)) =:= tycon)
             .flatMap(Mirror(_).fold(Nil)(parseMembers))
-        case MirrorType.Product => List(m.mirroredType.asType match { case '[t] => parseCaseClass[t](m, Some(typeRepr)) })
-        case MirrorType.Singleton => List(m.mirroredType.asType match { case '[t] => parseObject[t](Some(typeRepr)) })
+        case MirrorType.Product => List(m.mirroredType.asType match {
+          case '[t] => parseCaseClass[t](m, Some(typeRepr))
+        }: @annotation.nowarn("msg=match may not be exhaustive"))
+        case MirrorType.Singleton => List(m.mirroredType.asType match {
+          case '[t] => parseObject[t](Some(typeRepr))
+        }: @annotation.nowarn("msg=match may not be exhaustive"))
       }
     }
 
@@ -207,7 +213,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
             TsModel.UnionTypeRef(
               ${ mkTypeName(typeRepr) },
               ${ mkTypeArgs(typeRepr) },
-              ${ Expr.ofList(ts.map(_.asType match { case '[t] => parse[t](false) })) }
+              ${ Expr.ofList(ts.map(_.asType match { case '[t] => parse[t](false) }: @annotation.nowarn("msg=match may not be exhaustive"))) }
             )
           })
     }
@@ -217,7 +223,9 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
   private def parseCaseClass[A: Type](mirror: Mirror, parent: Option[TypeRepr]): Expr[TsModel.Interface] = {
     val typeRepr = TypeRepr.of[A]
     val fields = mirror.types.toList.zip(mirror.labels).map { case (tpe, name) =>
-      tpe.asType match { case '[t] => '{ TsModel.InterfaceField(${ Expr(name) }, ${ parse[t](false) }) } }
+      tpe.asType match {
+        case '[t] => '{ TsModel.InterfaceField(${ Expr(name) }, ${ parse[t](false) }) }
+      }: @annotation.nowarn("msg=match may not be exhaustive")
     }
     '{
       TsModel.Interface(
@@ -269,7 +277,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
     val members = valMembers(typeRepr)
     val fields = Expr.ofList(members.map(s => valDefType(typeRepr, s).asType match {
       case '[a] => '{ TsModel.ObjectField(${ Expr(s.name) }, ${ parse[a](false) }, ${ Select('{ $value.value }.asTerm, s).asExpr }) }
-    }))
+    }: @annotation.nowarn("msg=match may not be exhaustive")))
     '{
       TsModel.Object(
         ${ mkTypeName(typeRepr) },

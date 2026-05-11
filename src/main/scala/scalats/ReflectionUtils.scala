@@ -22,7 +22,7 @@ trait ReflectionUtils {
         case '{ ${_}: scala.deriving.Mirror.Singleton } => MirrorType.Singleton
         case '{ ${_}: scala.deriving.Mirror.Product } => MirrorType.Product
         case '{ ${_}: scala.deriving.Mirror.Sum } => MirrorType.Sum
-      }
+      }: @annotation.nowarn("msg=match may not be exhaustive")
   }
 
   /**
@@ -48,8 +48,8 @@ trait ReflectionUtils {
         mets <- findMemberType(mirrorTpe, "MirroredElemTypes").map(tupleTypeElements(_)).orElse(Some(Seq.empty))
         ml   <- findMemberType(mirrorTpe, "MirroredLabel")
         mels <- findMemberType(mirrorTpe, "MirroredElemLabels").map { mels =>
-            tupleTypeElements(mels).map { case ConstantType(StringConstant(l)) => l }
-          }.orElse(Some(Seq.empty))
+          tupleTypeElements(mels).map { case ConstantType(StringConstant(l)) => l }: @annotation.nowarn("msg=match may not be exhaustive")
+        }.orElse(Some(Seq.empty))
       } yield {
         val ConstantType(StringConstant(ml0)) = ml: @unchecked
         Mirror(mt, mmt, mets, ml0, mels, MirrorType.from(mirror))
@@ -58,7 +58,9 @@ trait ReflectionUtils {
 
     /** Parse a [[scalats.ReflectionUtils.Mirror]] from a `scala.quoted.Quotes.TypeRepr` */
     def apply(tpe: TypeRepr): Option[Mirror] =
-      tpe.asType match { case '[t] => Expr.summon[scala.deriving.Mirror.Of[t]].flatMap(Mirror(_)) }
+      tpe.asType match {
+        case '[t] => Expr.summon[scala.deriving.Mirror.Of[t]].flatMap(Mirror(_))
+      }: @annotation.nowarn("msg=match may not be exhaustive")
   }
 
   private def tupleTypeElements(tp: TypeRepr): List[TypeRepr] = {
