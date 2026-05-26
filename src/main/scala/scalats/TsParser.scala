@@ -53,7 +53,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
         }: @annotation.nowarn("msg=match may not be exhaustive")
       case t if t.typeSymbol.isAliasType && t.typeArgs.isEmpty =>
         '{ TsModel.TypeAlias(${ mkTypeName(t) }, ${ parse[A](false) }) }
-      case t =>
+      case _ =>
         parse[A](true)
     }
 

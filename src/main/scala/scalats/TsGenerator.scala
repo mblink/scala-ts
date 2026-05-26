@@ -542,10 +542,10 @@ class TsGenerator(
 
   def generateCodecType(model: TsModel): Generated =
     model match {
-      case t @ TsModel.TypeParam(name) =>
+      case TsModel.TypeParam(name) =>
         name
 
-      case t @ TsModel.Literal(tpe, value) =>
+      case TsModel.Literal(tpe, value) =>
         imports.iotsLiteralC(generateValueInstance(tpe, value))
 
       case TsModel.Json(_) =>
@@ -629,10 +629,10 @@ class TsGenerator(
 
   def generateValueType(model: TsModel): Generated =
     model match {
-      case t @ TsModel.TypeParam(name) =>
+      case TsModel.TypeParam(name) =>
         name
 
-      case t @ TsModel.Literal(tpe, value) =>
+      case TsModel.Literal(tpe, value) =>
         generateValueInstance(tpe, value)
 
       case TsModel.Json(_) =>
