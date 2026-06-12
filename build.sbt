@@ -26,7 +26,7 @@ lazy val joda = "joda-time" % "joda-time" % "2.14.2"
 lazy val munit = "org.scalameta" %% "munit" % "1.3.3" % Test
 lazy val munitScalacheck = "org.scalameta" %% "munit-scalacheck" % "1.3.0" % Test
 lazy val scalacheck = "org.scalacheck" %% "scalacheck" % "1.19.0" % Test
-lazy val scalaz = "org.scalaz" %% "scalaz-core" % "7.3.8"
+lazy val scalaz = "org.scalaz" %% "scalaz-core" % "7.3.9"
 lazy val slf4j = "org.slf4j" % "slf4j-api" % "2.0.18"
 
 lazy val root = project.in(file("."))
