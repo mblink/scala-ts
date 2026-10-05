@@ -375,6 +375,10 @@ object TsImports {
     final lazy val iotsReadonlyArray = CallableImport(iotsImport, "t.readonlyArray")
     /** Reference to the `iots.ReadonlyArrayC` type */
     final lazy val iotsReadonlyArrayC = CallableImport.tpe(iotsImport, "t.ReadonlyArrayC")
+    /** Helper to call the `iots.readonly` function */
+    final lazy val iotsReadonly = CallableImport(iotsImport, "t.readonly")
+    /** Reference to the `iots.ReadonlyC` type */
+    final lazy val iotsReadonlyC = CallableImport.tpe(iotsImport, "t.ReadonlyC")
     /** Reference to the `iots.RecordC` type */
     final lazy val iotsRecordC = CallableImport.tpe(iotsImport, "t.RecordC")
     /** Helper to call the `iots.record` function */
@@ -407,6 +411,10 @@ object TsImports {
     final lazy val iotsUnknown = Generated(iotsImport, "t.unknown")
     /** Reference to the `iots.UnknownC` type */
     final lazy val iotsUnknownC = Generated(iotsImport, "t.UnknownC")
+    /** Reference to `iots.UnknownRecord` */
+    final lazy val iotsUnknownRecord = Generated(iotsImport, "t.UnknownRecord")
+    /** Reference to the `iots.UnknownRecordC` type */
+    final lazy val iotsUnknownRecordC = Generated(iotsImport, "t.UnknownRecordC")
 
     /** Reference to the configured `iotsDateTime` codec type */
     final lazy val iotsDateTimeType = tsi.iotsDateTime.codecType
@@ -491,6 +499,8 @@ object TsImports {
     final lazy val uuidType = tsi.iotsUUID.valueType
     /** Helper to build a Record type */
     final lazy val recordType = CallableImport.tpe(TsImports.empty, "Record")
+    /** Helper to build a Readonly type */
+    final lazy val readonlyType = CallableImport.tpe(TsImports.empty, "Readonly")
 
     private val incr = TrieMap.empty[String, Int]
 
