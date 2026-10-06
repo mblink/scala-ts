@@ -434,14 +434,14 @@ class TsGenerator(
   /** Produces codec type code for a scala `case class` definition */
   private def generateInterfaceCodecType(iface: TsModel.Interface): Generated =
     interfaceShape(iface) match {
-      case InterfaceShape.UnknownRecord => imports.iotsReadonlyC(imports.iotsUnknownRecordC)
+      case InterfaceShape.UnknownRecord => imports.iotsUnknownRecordC
       case InterfaceShape.Fields(fields) => generateFieldsCodecType(fields)
     }
 
   /** Produces value type code for a scala `case class` definition */
   private def generateInterfaceValueType(iface: TsModel.Interface): Generated =
     interfaceShape(iface) match {
-      case InterfaceShape.UnknownRecord => imports.readonlyType(imports.recordType(imports.stringType, imports.unknownType))
+      case InterfaceShape.UnknownRecord => imports.recordType(imports.stringType, imports.unknownType)
       case InterfaceShape.Fields(fields) => generateFieldsValueType(fields)
     }
 
@@ -450,7 +450,7 @@ class TsGenerator(
     debugLog("interface", iface.typeName.base, None)
 
     List((Some(iface.typeName), state.wrapCodec(interfaceShape(iface) match {
-      case InterfaceShape.UnknownRecord => imports.iotsReadonly(imports.iotsUnknownRecord)
+      case InterfaceShape.UnknownRecord => imports.iotsUnknownRecord
       case InterfaceShape.Fields(fields) => generateFieldsCodecInstance(state, fields)
     })))
   }

@@ -29,7 +29,7 @@ The codecs decode what circe encodes with a `_tag` discriminator (BondLink's glo
 
 ## Rules for generated output
 
-- Types must not resolve to `{}`, `object` or `any`; `unknown` only where the Scala side is genuinely untyped (`io.circe.Json`, and the open record a field-less case class decodes: `t.readonly(t.UnknownRecord)`, which accepts any non-array object just as `t.type({})` would, without typing it as `{}`).
+- Types must not resolve to `{}`, `object` or `any`; `unknown` only where the Scala side is genuinely untyped (`io.circe.Json`, and the open record a field-less case class decodes: `t.UnknownRecord`, which accepts any non-array object just as `t.type({})` would, without typing it as `{}`).
 - Immutable values get readonly types: `ReadonlyArray`, `ReadonlySet`, `ReadonlyMap`, `ReadonlyNonEmptyArray`, `t.readonly(...)`.
 - Every reference goes through `TsImports.Available` so its import is emitted; never hard-code `t.` / `E.` / `O.` text without the matching import.
 - A codec change that alters what decodes is a breaking change for consumers' runtime data, not only their types — check the round-trip tests and say so in the PR.

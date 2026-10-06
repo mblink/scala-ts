@@ -12,9 +12,9 @@ object EmptyInterfaceTest {
   val expectedEmptyCode = """
 import * as t from "io-ts";
 
-export type EmptyC = t.ReadonlyC<t.UnknownRecordC>;
-export type Empty = Readonly<Record<string, unknown>>;
-export const emptyC: EmptyC = t.readonly(t.UnknownRecord) satisfies t.Type<Empty, unknown>;
+export type EmptyC = t.UnknownRecordC;
+export type Empty = Record<string, unknown>;
+export const emptyC: EmptyC = t.UnknownRecord satisfies t.Type<Empty, unknown>;
 """.trim
 
   val expectedHasEmptyCode = """
