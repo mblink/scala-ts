@@ -90,9 +90,12 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
       case '[Seq[a]] => '{ TsModel.Array($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[Seq[Any]].toList) }
       case '[Set[a]] => '{ TsModel.Set($typeName, ${ parse[a](false) }) }
       case '[collection.immutable.SortedSet[a]] => '{ TsModel.Set($typeName, ${ parse[a](false) }) }
-      case '[cats.data.NonEmptyChain[a]] => '{ TsModel.NonEmptyArray($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[cats.data.NonEmptyChain[Any]].toNonEmptyList) }
+      case _ if typeRepr <:< TypeRepr.of[cats.data.NonEmptyChain[Any]] =>
+        typeRepr.typeArgs.head.asType match {
+          case '[a] => '{ TsModel.NonEmptyArray($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[cats.data.NonEmptyChain[Any]].toNonEmptyList) }
+        }
       case '[cats.data.NonEmptyList[a]] => '{ TsModel.NonEmptyArray($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[cats.data.NonEmptyList[Any]]) }
-      case '[cats.data.NonEmptyVector[a]] => '{ TsModel.NonEmptyArray($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[cats.data.NonEmptyChain[Any]].toNonEmptyList) }
+      case '[cats.data.NonEmptyVector[a]] => '{ TsModel.NonEmptyArray($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[cats.data.NonEmptyVector[Any]].pipe(v => cats.data.NonEmptyList(v.head, v.tail.toList))) }
       case '[scalaz.NonEmptyList[a]] => '{ TsModel.NonEmptyArray($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[scalaz.NonEmptyList[Any]].pipe(l => cats.data.NonEmptyList(l.head, l.tail.toList))) }
       case '[Option[a]] => '{ TsModel.Option($typeName, ${ parse[a](false) }) }
       case '[Either[l, r]] => '{ TsModel.Either($typeName, ${ parse[l](false) }, ${ parse[r](false) }, (_: Any).asInstanceOf[Either[Any, Any]]) }
