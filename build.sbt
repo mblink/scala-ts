@@ -1,6 +1,6 @@
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
-val scalaV = "3.3.8"
+val scalaV = "3.9.0"
 
 ThisBuild / scalaVersion := scalaV
 ThisBuild / crossScalaVersions := Seq(scalaV)
