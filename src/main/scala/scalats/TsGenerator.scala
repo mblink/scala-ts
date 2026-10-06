@@ -419,19 +419,40 @@ class TsGenerator(
   private def interfaceFields(iface: TsModel.Interface): List[TsModel.Field] =
     iface.parent.fold(Nil)(_ => List(tagField(iface.typeName.base))) ++ iface.fields
 
+  private enum InterfaceShape {
+    case UnknownRecord
+    case Fields(fields: List[TsModel.Field])
+  }
+
+  private def interfaceShape(iface: TsModel.Interface): InterfaceShape =
+    (iface.typeArgs, interfaceFields(iface)) match {
+      case (Nil, Nil) => InterfaceShape.UnknownRecord
+      case (Nil, fields @ (_ :: _)) => InterfaceShape.Fields(fields)
+      case (_ :: _, fields) => InterfaceShape.Fields(fields)
+    }
+
   /** Produces codec type code for a scala `case class` definition */
   private def generateInterfaceCodecType(iface: TsModel.Interface): Generated =
-    generateFieldsCodecType(interfaceFields(iface))
+    interfaceShape(iface) match {
+      case InterfaceShape.UnknownRecord => imports.iotsUnknownRecordC
+      case InterfaceShape.Fields(fields) => generateFieldsCodecType(fields)
+    }
 
   /** Produces value type code for a scala `case class` definition */
   private def generateInterfaceValueType(iface: TsModel.Interface): Generated =
-    generateFieldsValueType(interfaceFields(iface))
+    interfaceShape(iface) match {
+      case InterfaceShape.UnknownRecord => imports.recordType(imports.stringType, imports.unknownType)
+      case InterfaceShape.Fields(fields) => generateFieldsValueType(fields)
+    }
 
   /** Produces value code for a scala `case class` definition */
   private def generateInterfaceCodecInstance(state: State, iface: TsModel.Interface): List[(Option[TypeName], Generated)] = {
     debugLog("interface", iface.typeName.base, None)
 
-    List((Some(iface.typeName), state.wrapCodec(generateFieldsCodecInstance(state, interfaceFields(iface)))))
+    List((Some(iface.typeName), state.wrapCodec(interfaceShape(iface) match {
+      case InterfaceShape.UnknownRecord => imports.iotsUnknownRecord
+      case InterfaceShape.Fields(fields) => generateFieldsCodecInstance(state, fields)
+    })))
   }
 
   private def withUnionPossibilityRefs[A](union: TsModel.Union | TsModel.UnionTypeRef)(

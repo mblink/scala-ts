@@ -407,6 +407,10 @@ object TsImports {
     final lazy val iotsUnknown = Generated(iotsImport, "t.unknown")
     /** Reference to the `iots.UnknownC` type */
     final lazy val iotsUnknownC = Generated(iotsImport, "t.UnknownC")
+    /** Reference to `iots.UnknownRecord` */
+    final lazy val iotsUnknownRecord = Generated(iotsImport, "t.UnknownRecord")
+    /** Reference to the `iots.UnknownRecordC` type */
+    final lazy val iotsUnknownRecordC = Generated(iotsImport, "t.UnknownRecordC")
 
     /** Reference to the configured `iotsDateTime` codec type */
     final lazy val iotsDateTimeType = tsi.iotsDateTime.codecType

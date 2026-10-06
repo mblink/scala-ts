@@ -37,6 +37,7 @@ One owner per fact: a shape is written once, in Scala, and generated into TypeSc
 | tuple | `Tuple` | `t.tuple([...])` | `[A, B]` |
 | Scala 3 union `A \| B` (reference only) | `UnionTypeRef` | `t.union([...])` | `A \| B` |
 | `case class` | `Interface` | `t.type({...})` | `{ ... }` |
+| field-less, non-generic `case class` outside a union | `Interface` | `t.UnknownRecord` | `Record<string, unknown>` |
 | `object` | `Object` | `t.type` of literal fields, plus a `const` of values | literal fields |
 | sealed trait / `enum` | `Union` | `t.union([...])` | `A \| B` |
 | type alias (non-generic) | `TypeAlias` | as the dealiased type, under the alias's name | |
