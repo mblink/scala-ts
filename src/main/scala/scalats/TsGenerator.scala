@@ -211,11 +211,11 @@ class TsGenerator(
           r => "right(" |+| generateValueInstance(right, r) |+| ")",
           (l, r) => "both(" |+| generateValueInstance(left, l) |+| ", " |+| generateValueInstance(right, r) |+| ")",
         ))
-      case TsModel.Map(_, key, value) =>
+      case TsModel.Map(_, keyTpe, valueTpe) =>
         val m = value.asInstanceOf[Map[?, ?]]
         if (m.isEmpty) imports.lift("{}")
         else "{" |+| m.toList.intercalateMap(imports.lift(", ")) { case (k, v) =>
-          generateValueInstance(key, k) |+| ": " |+| generateValueInstance(value, v)
+          "[" |+| generateValueInstance(keyTpe, k) |+| "]: " |+| generateValueInstance(valueTpe, v)
         } |+| "}"
       case TsModel.Tuple(_, tpes) =>
         "[" |+| tpes.zip(value.asInstanceOf[Product].productIterator).intercalateMap(imports.lift(", "))(generateValueInstance.tupled) |+| "]"
@@ -345,9 +345,55 @@ class TsGenerator(
   private def generateFieldsCodecInstance(state: State, fields: List[TsModel.Field]): Generated =
     generateFields0(imports.iotsTypeFunction(_), fields, genNotTop(state, _))
 
+  private enum ConstantShape {
+    case Scalar, Structural
+  }
+
+  private def constantShape(tpe: TsModel): ConstantShape =
+    tpe match {
+      case TsModel.Literal(tpe, _) => constantShape(tpe)
+      case TsModel.Eval(_, tpe) => constantShape(tpe)
+      case (
+        _: TsModel.Number
+        | _: TsModel.BigNumber
+        | _: TsModel.Boolean
+        | _: TsModel.String
+        | _: TsModel.LocalDate
+        | _: TsModel.DateTime
+        | _: TsModel.UUID
+      ) => ConstantShape.Scalar
+      case (
+        _: TsModel.TypeParam
+        | _: TsModel.Json
+        | _: TsModel.Array
+        | _: TsModel.Set
+        | _: TsModel.NonEmptyArray
+        | _: TsModel.Option
+        | _: TsModel.Either
+        | _: TsModel.Ior
+        | _: TsModel.Map
+        | _: TsModel.Tuple
+        | _: TsModel.Interface
+        | _: TsModel.InterfaceRef
+        | _: TsModel.Object
+        | _: TsModel.ObjectRef
+        | _: TsModel.Union
+        | _: TsModel.UnionRef
+        | _: TsModel.UnionTypeRef
+        | _: TsModel.TypeAlias
+        | _: TsModel.Unknown
+      ) => ConstantShape.Structural
+    }
+
+  private def objectFieldType(field: TsModel.ObjectField): TsModel =
+    constantShape(field.tpe) match {
+      case ConstantShape.Scalar => TsModel.Literal(field.tpe, field.value)
+      case ConstantShape.Structural => field.tpe
+    }
+
   private def objectFields(obj: TsModel.Object): (List[TsModel.ObjectField], List[TsModel.ObjectField]) =
     (tagField(obj.typeName.base) :: obj.fields).pipe(fs =>
-      (fs, fs.map(f => TsModel.ObjectField(f.name, TsModel.Literal(f.tpe, f.value), f.value)))
+      (fs, fs.map(f => TsModel.ObjectField(f.name, objectFieldType(f), f.value)))
     )
 
   /** Produces type code for a scala `object` definition, represented as a `const` in TypeScript */

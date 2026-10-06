@@ -49,7 +49,9 @@ export const fooC: FooC = t.type({
 """.trim
 
   val expectedBarCode = """
+import { ReadonlyNonEmptyArrayC, readonlyNonEmptyArray } from "io-ts-types/lib/readonlyNonEmptyArray";
 import * as t from "io-ts";
+import * as RNEA from "fp-ts/lib/ReadonlyNonEmptyArray";
 
 export const bar = {
   _tag: `Bar`,
@@ -60,21 +62,21 @@ export const bar = {
 
 export type BarC = t.TypeC<{
   _tag: t.LiteralC<`Bar`>,
-  chain: t.LiteralC<[1, 2]>,
-  list: t.LiteralC<[1, 2]>,
-  vector: t.LiteralC<[1, 2]>
+  chain: ReadonlyNonEmptyArrayC<t.NumberC>,
+  list: ReadonlyNonEmptyArrayC<t.NumberC>,
+  vector: ReadonlyNonEmptyArrayC<t.NumberC>
 }>;
 export type Bar = {
   _tag: `Bar`,
-  chain: [1, 2],
-  list: [1, 2],
-  vector: [1, 2]
+  chain: RNEA.ReadonlyNonEmptyArray<number>,
+  list: RNEA.ReadonlyNonEmptyArray<number>,
+  vector: RNEA.ReadonlyNonEmptyArray<number>
 };
 export const barC: BarC = t.type({
   _tag: t.literal(`Bar`),
-  chain: t.literal([1, 2]),
-  list: t.literal([1, 2]),
-  vector: t.literal([1, 2])
+  chain: readonlyNonEmptyArray(t.number),
+  list: readonlyNonEmptyArray(t.number),
+  vector: readonlyNonEmptyArray(t.number)
 }) satisfies t.Type<Bar, unknown>;
 """.trim
 
