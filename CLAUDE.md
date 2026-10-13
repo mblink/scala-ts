@@ -90,7 +90,7 @@ BondLink's `build.sbt` swaps the published artifact for `RootProject(file("$HOME
 - Conventional commit subjects (`fix(generator): …`, `chore(claude): …`); a body only when the subject can't carry it — two or three bullets.
 - PR description: one or two sentences plus a handful of bullets, present tense, describing the end state of the diff. No history of how you got there, no alternatives considered, and no list of the verification you ran. Keep each paragraph and bullet on a single line.
 - When a change alters generated output, say so and show the before/after TypeScript, since every consumer's generated files change on upgrade.
-- No AI attribution of any kind in commits, PRs, code or files.
+- No AI attribution of any kind in commits, PRs, code or files. The one exception is a `Claude-Session:` trailer on a commit message, which is allowed.
 
 ## Skills
 
