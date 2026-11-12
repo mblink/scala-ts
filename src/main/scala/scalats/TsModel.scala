@@ -11,6 +11,9 @@ package scalats
  * This is done to prevent unnecessary parsing in [[scalats.TsParser]].
  * The full type definition is only needed when parsing the type itself,
  * we only need a reference to the type when parsing a type that refers to it.
+ *
+ * The exception is a `case class` used where an `Ord` is needed (a `Set` element or a non-`String` `Map` key):
+ * its [[scalats.TsModel.InterfaceRef]] carries the class's fields in `ordFields` so an `Ord` can be derived from them.
  */
 sealed trait TsModel {
   val typeName: TypeName
@@ -85,7 +88,7 @@ object TsModel {
     val typeArgs = tpes
   }
   case class Interface(typeName: TypeName, parent: scala.Option[TypeName], typeArgs: List[TsModel], fields: List[TsModel.InterfaceField]) extends TsModel
-  case class InterfaceRef(typeName: TypeName, typeArgs: List[TsModel]) extends TsModel
+  case class InterfaceRef(typeName: TypeName, typeArgs: List[TsModel])(val ordFields: scala.Option[List[TsModel.InterfaceField]]) extends TsModel
   case class Object(typeName: TypeName, parent: scala.Option[TypeName], fields: List[TsModel.ObjectField]) extends TsModel {
     val typeArgs = Nil
   }

@@ -250,6 +250,16 @@ class TsGenerator(
       case u: TsModel.UnionRef => u.typeArgs.isEmpty && u.allObjects
     }
 
+  private def interfaceOrd(typeName: TypeName, typeArgs: List[TsModel], fields: List[TsModel.InterfaceField]): Generated =
+    imports.fptsPipe(
+      imports.fptsOrd("tuple(" |+| fields.intercalateMap(imports.lift(", "))(f => ordInstance(f.tpe)) |+| ")") |+| ", " |+|
+      imports.fptsOrd(
+        "contramap((x: " |+| generateValueTypeRef(typeName, typeArgs, false) |+| ") => [" |+|
+        fields.intercalateMap(imports.lift(", "))(f => imports.lift("x." ++ f.name)) |+|
+        "] as const)"
+      )
+    )
+
   /** Produces code that refers to an `fp-ts` `Ord` instance for a given type */
   private def ordInstance(tpe: TsModel): Generated = {
     lazy val err = sys.error(s"`Ord` instance requested for ${tpe.typeName.full} but not found")
@@ -261,11 +271,13 @@ class TsGenerator(
       case TsModel.Number(_) => imports.fptsNumber("Ord", Some("numberOrd"))
       case TsModel.Eval(_, tpe) => ordInstance(tpe)
       case TsModel.Array(_, tpe, _) => imports.fptsReadonlyArray("getOrd(" |+| ordInstance(tpe) |+| ")")
-      case TsModel.Option(_, tpe) => imports.fptsOption("Ord(" |+| ordInstance(tpe) |+| ")")
+      case TsModel.Option(_, tpe) => imports.fptsOption("getOrd(" |+| ordInstance(tpe) |+| ")")
       case u @ TsModel.Union(typeName, _, _) =>
         if (unionHasOrd(u)) imports.custom(typeName, unionOrdName(typeName.base)) else err
       case u @ TsModel.UnionRef(typeName, _, _) =>
         if (unionHasOrd(u)) imports.custom(typeName, unionOrdName(typeName.base)) else err
+      case TsModel.Interface(typeName, _, typeArgs, fields) => interfaceOrd(typeName, typeArgs, fields)
+      case r @ TsModel.InterfaceRef(typeName, typeArgs) => r.ordFields.fold(err)(interfaceOrd(typeName, typeArgs, _))
 
       case (
         TsModel.TypeParam(_)
@@ -280,8 +292,6 @@ class TsGenerator(
         | TsModel.Ior(_, _, _, _)
         | TsModel.Map(_, _, _)
         | TsModel.Tuple(_, _)
-        | TsModel.Interface(_, _, _, _)
-        | TsModel.InterfaceRef(_, _)
         | TsModel.Object(_, _, _)
         | TsModel.ObjectRef(_)
         | TsModel.UnionTypeRef(_, _, _)
@@ -510,7 +520,7 @@ class TsGenerator(
       case u: TsModel.UnionTypeRef => (u.typeName, u.possibilities)
     }
     possibilities.map {
-      case TsModel.Interface(typeName, _, typeArgs, _) => TsModel.InterfaceRef(typeName, typeArgs)
+      case TsModel.Interface(typeName, _, typeArgs, fields) => TsModel.InterfaceRef(typeName, typeArgs)(Some(fields))
       case TsModel.Object(typeName, _, _) => TsModel.ObjectRef(typeName)
       case m => m
     } match {

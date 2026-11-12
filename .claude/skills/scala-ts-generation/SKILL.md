@@ -43,7 +43,7 @@ One owner per fact: a shape is written once, in Scala, and generated into TypeSc
 | type alias (non-generic) | `TypeAlias` | as the dealiased type, under the alias's name | |
 | anything else | `Unknown` | an import of `<name>C` the consumer must provide | |
 
-`Set` and non-`String`-keyed `Map` need an `Ord` for the element/key: built in for `string`/`number`/`boolean`, `Option`/array of those, and all-object unions (`xOrd`); otherwise supply one through `TsCustomOrd`, or generation fails with "`Ord` instance requested for … but not found".
+`Set` and non-`String`-keyed `Map` need an `Ord` for the element/key: built in for `string`/`number`/`boolean`, `Option`/array of those, all-object unions (`xOrd`), and case classes whose fields all have one (an inline `pipe(Ord.tuple(...), Ord.contramap(...))` over the fields in declaration order; a self-recursive case class has none); otherwise supply one through `TsCustomOrd`, or generation fails with "`Ord` instance requested for … but not found".
 
 ## Naming
 
