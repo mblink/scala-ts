@@ -11,7 +11,7 @@ object SetOfInterfaceTest {
   case object Removed extends Change
 
   case class Pos(line: Int) derives Arbitrary, ConfiguredDecoder, ConfiguredEncoder
-  case class Diff(change: Change, target: String, at: Option[Pos]) derives Arbitrary, ConfiguredDecoder, ConfiguredEncoder
+  case class Diff(change: Change, target: String, start: Pos, end: Option[Pos]) derives Arbitrary, ConfiguredDecoder, ConfiguredEncoder
   case class Diffs(changes: Set[Diff]) derives Arbitrary, ConfiguredDecoder, ConfiguredEncoder
 
   val expectedChangeCode = """
@@ -77,10 +77,14 @@ export type ChangeMap<A> = { [K in ChangeName]: A };
 """.trim
 
   val expectedDiffCode = """
-import * as O from "fp-ts/lib/Option";
 import * as t from "io-ts";
-import { ChangeCU as imported1_ChangeCU, ChangeU as imported0_ChangeU, ChangeCU as imported0_ChangeCU } from "./change";
+import { Ord as stringOrd } from "fp-ts/lib/string";
+import * as O from "fp-ts/lib/Option";
+import { pipe } from "fp-ts/lib/function";
+import * as Ord from "fp-ts/lib/Ord";
 import { OptionFromNullableC, optionFromNullable } from "io-ts-types/lib/optionFromNullable";
+import { ChangeCU as imported1_ChangeCU, ChangeU as imported0_ChangeU, ChangeCU as imported0_ChangeCU, changeOrd as imported0_changeOrd } from "./change";
+import { Ord as numberOrd } from "fp-ts/lib/number";
 
 export type PosC = t.TypeC<{
   line: t.NumberC
@@ -91,44 +95,43 @@ export type Pos = {
 export const posC: PosC = t.type({
   line: t.number
 }) satisfies t.Type<Pos, unknown>;
+export const posOrd: Ord.Ord<Pos> = pipe(Ord.tuple(numberOrd), Ord.contramap((x: Pos) => [x.line] as const));
 
 
 export type DiffC = t.TypeC<{
   change: imported1_ChangeCU,
   target: t.StringC,
-  at: OptionFromNullableC<PosC>
+  start: PosC,
+  end: OptionFromNullableC<PosC>
 }>;
 export type Diff = {
   change: imported0_ChangeU,
   target: string,
-  at: O.Option<Pos>
+  start: Pos,
+  end: O.Option<Pos>
 };
 export const diffC: DiffC = t.type({
   change: imported0_ChangeCU,
   target: t.string,
-  at: optionFromNullable(posC)
+  start: posC,
+  end: optionFromNullable(posC)
 }) satisfies t.Type<Diff, unknown>;
+export const diffOrd: Ord.Ord<Diff> = pipe(Ord.tuple(imported0_changeOrd, stringOrd, posOrd, O.getOrd(posOrd)), Ord.contramap((x: Diff) => [x.change, x.target, x.start, x.end] as const));
 """.trim
 
   val expectedDiffsCode = """
-import * as t from "io-ts";
-import { Ord as stringOrd } from "fp-ts/lib/string";
-import * as O from "fp-ts/lib/Option";
-import { diffC as imported0_diffC, Pos as imported1_Pos, DiffC as imported0_DiffC, Diff as imported1_Diff, Diff as imported0_Diff } from "./diff";
-import { pipe } from "fp-ts/lib/function";
-import * as Ord from "fp-ts/lib/Ord";
 import { ReadonlySetFromArrayC, readonlySetFromArray } from "io-ts-types/lib/readonlySetFromArray";
-import { changeOrd as imported0_changeOrd } from "./change";
-import { Ord as numberOrd } from "fp-ts/lib/number";
+import { DiffC as imported0_DiffC, Diff as imported0_Diff, diffC as imported0_diffC, diffOrd as imported0_diffOrd } from "./diff";
+import * as t from "io-ts";
 
 export type DiffsC = t.TypeC<{
   changes: ReadonlySetFromArrayC<imported0_DiffC>
 }>;
 export type Diffs = {
-  changes: ReadonlySet<imported1_Diff>
+  changes: ReadonlySet<imported0_Diff>
 };
 export const diffsC: DiffsC = t.type({
-  changes: readonlySetFromArray(imported0_diffC, pipe(Ord.tuple(imported0_changeOrd, stringOrd, O.getOrd(pipe(Ord.tuple(numberOrd), Ord.contramap((x: imported1_Pos) => [x.line] as const)))), Ord.contramap((x: imported0_Diff) => [x.change, x.target, x.at] as const)))
+  changes: readonlySetFromArray(imported0_diffC, imported0_diffOrd)
 }) satisfies t.Type<Diffs, unknown>;
 """.trim
 
@@ -151,25 +154,120 @@ class SetOfInterfaceTest extends CodecTest[SetOfInterfaceTest.Diffs](
   SetOfInterfaceTest.diffsFile,
 )
 
-object SetOfInterfaceMissingOrdTest {
+object InterfaceOrdTest {
+  case class Key(id: Int, name: String)
+  case class ByKey(values: Map[Key, String])
+
   case class WithUuid(id: java.util.UUID)
-  case class Node(label: String, next: Option[Node])
+  case class WithUuids(ids: Set[WithUuid])
+
+  case class SetTree(label: String, children: Set[SetTree])
+
+  case class ListTree(label: String, children: List[ListTree])
+  case class ListForest(trees: Set[ListTree])
+
+  case class Left(rights: Set[Right])
+  case class Right(lefts: Set[Left])
+
+  case class Custom(value: String)
+  case class Customs(customs: Set[Custom])
+
+  val expectedByKeyCode = """
+import * as t from "io-ts";
+import { Ord as stringOrd } from "fp-ts/lib/string";
+import { pipe } from "fp-ts/lib/function";
+import * as Ord from "fp-ts/lib/Ord";
+import { ReadonlyMapFromEntriesC, readonlyMapFromEntries } from "io-ts-types/lib/readonlyMapFromEntries";
+import { Ord as numberOrd } from "fp-ts/lib/number";
+
+export type KeyC = t.TypeC<{
+  id: t.NumberC,
+  name: t.StringC
+}>;
+export type Key = {
+  id: number,
+  name: string
+};
+export const keyC: KeyC = t.type({
+  id: t.number,
+  name: t.string
+}) satisfies t.Type<Key, unknown>;
+export const keyOrd: Ord.Ord<Key> = pipe(Ord.tuple(numberOrd, stringOrd), Ord.contramap((x: Key) => [x.id, x.name] as const));
+
+
+export type ByKeyC = t.TypeC<{
+  values: ReadonlyMapFromEntriesC<KeyC, t.StringC>
+}>;
+export type ByKey = {
+  values: ReadonlyMap<Key, string>
+};
+export const byKeyC: ByKeyC = t.type({
+  values: readonlyMapFromEntries(keyC, keyOrd, t.string)
+}) satisfies t.Type<ByKey, unknown>;
+""".trim
 }
 
-class SetOfInterfaceMissingOrdTest extends munit.FunSuite {
-  import SetOfInterfaceMissingOrdTest.*
+class InterfaceOrdTest extends munit.FunSuite {
+  import InterfaceOrdTest.*
 
-  private def ordError(model: TsModel): String =
-    intercept[RuntimeException](referenceCode(model)).getMessage
+  private val file = outputDir / "interfaceOrd" / "types.ts"
 
-  test("a case class field without an Ord fails generation") {
-    assertEquals(ordError(parseReference[Set[WithUuid]]), "`Ord` instance requested for java.util.UUID but not found")
+  private def generate(models: List[TsModel])(using TsCustomType): String = {
+    writeAll(Map(file -> models))
+    val code = file.read.trim
+    file.delete
+    code
   }
 
-  test("a recursive case class fails generation") {
+  private def ordError(models: List[TsModel])(using TsCustomType): String =
+    intercept[RuntimeException](generate(models)).getMessage
+
+  test("a case class used as a Map key gets a named Ord") {
+    assertEquals(generate(List(parse[Key], parse[ByKey])), expectedByKeyCode)
+  }
+
+  test("a case class field without an Ord fails generation") {
     assertEquals(
-      ordError(parseReference[Set[Node]]),
-      "`Ord` instance requested for scalats.tests.SetOfInterfaceMissingOrdTest.Node but not found",
+      ordError(List(parse[WithUuid], parse[WithUuids])),
+      "`Ord` instance requested for java.util.UUID but not found",
+    )
+  }
+
+  test("a case class that contains a Set of itself fails generation") {
+    assertEquals(
+      ordError(List(parse[SetTree])),
+      "`Ord` instance requested for scala.collection.immutable.Set but not found",
+    )
+  }
+
+  test("a recursive case class in a Set fails generation") {
+    assertEquals(
+      ordError(List(parse[ListTree], parse[ListForest])),
+      "`Ord` instance requested for scalats.tests.InterfaceOrdTest.ListTree but not found",
+    )
+  }
+
+  test("mutually recursive case classes through Sets fail generation") {
+    assertEquals(
+      ordError(List(parse[Left], parse[Right])),
+      "`Ord` instance requested for scala.collection.immutable.Set but not found",
+    )
+  }
+
+  test("a custom type without a custom Ord fails generation") {
+    val customC = ReferenceCode[Option](
+      codecType = imports.lift("CustomC"),
+      codecInstance = imports.lift("customC"),
+      valueType = None,
+      valueInstance = None,
+    )
+    given TsCustomType = new TsCustomType {
+      def apply(name: String): Option[ReferenceCode[Option]] =
+        Option.when(name == "scalats.tests.InterfaceOrdTest.Custom")(customC)
+    }
+    assertEquals(
+      ordError(List(parse[Customs])),
+      "`Ord` instance requested for scalats.tests.InterfaceOrdTest.Custom but not found",
     )
   }
 }

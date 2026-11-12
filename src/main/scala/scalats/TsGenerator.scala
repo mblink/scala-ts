@@ -1,7 +1,8 @@
 package scalats
 
-import cats.{Foldable, Monoid}
+import cats.{Eval, Foldable, Monoid}
 import cats.syntax.foldable.*
+import cats.syntax.traverse.*
 import scala.language.implicitConversions
 import scala.util.chaining.*
 import org.slf4j.LoggerFactory
@@ -71,6 +72,7 @@ class TsGenerator(
   customType: TsCustomType,
   customOrd: TsCustomOrd,
   imports: TsImports.Available,
+  ordPlan: TsGenerator.OrdPlan,
   debug: Boolean = true,
   debugFilter: String = "",
 ) {
@@ -236,7 +238,7 @@ class TsGenerator(
         })
     }
 
-  private def unionOrdName(s: String): String = decap(s) ++ "Ord"
+  private def ordName(s: String): String = decap(s) ++ "Ord"
 
   private def isObject(m: TsModel.Object | TsModel.ObjectRef | TsModel.Interface | TsModel.InterfaceRef): Boolean =
     m match {
@@ -250,34 +252,33 @@ class TsGenerator(
       case u: TsModel.UnionRef => u.typeArgs.isEmpty && u.allObjects
     }
 
-  private def interfaceOrd(typeName: TypeName, typeArgs: List[TsModel], fields: List[TsModel.InterfaceField]): Generated =
-    imports.fptsPipe(
-      imports.fptsOrd("tuple(" |+| fields.intercalateMap(imports.lift(", "))(f => ordInstance(f.tpe)) |+| ")") |+| ", " |+|
-      imports.fptsOrd(
-        "contramap((x: " |+| generateValueTypeRef(typeName, typeArgs, false) |+| ") => [" |+|
-        fields.intercalateMap(imports.lift(", "))(f => imports.lift("x." ++ f.name)) |+|
-        "] as const)"
+  private def interfaceFieldOrds(typeName: TypeName, typeArgs: List[TsModel], seen: Set[String]): Either[TypeName, List[Eval[Generated]]] =
+    if (seen.contains(typeName.full) || typeArgs.nonEmpty || customType(typeName.raw).isDefined || !ordPlan.needed.contains(typeName.full))
+      Left(typeName)
+    else
+      ordPlan.interfaces.get(typeName.full).toRight(typeName).flatMap(iface =>
+        if (iface.typeArgs.nonEmpty) Left(typeName)
+        else iface.fields.traverse(f => ordFor(f.tpe, seen + typeName.full))
       )
-    )
 
-  /** Produces code that refers to an `fp-ts` `Ord` instance for a given type */
-  private def ordInstance(tpe: TsModel): Generated = {
-    lazy val err = sys.error(s"`Ord` instance requested for ${tpe.typeName.full} but not found")
+  private def interfaceOrdRef(typeName: TypeName, typeArgs: List[TsModel], seen: Set[String]): Either[TypeName, Eval[Generated]] =
+    interfaceFieldOrds(typeName, typeArgs, seen).map(_ => Eval.later(imports.custom(typeName, ordName(typeName.base))))
 
-    customOrd(tpe.typeName).getOrElse(tpe match {
-      case TsModel.Literal(tpe, _) => ordInstance(tpe)
-      case TsModel.String(_) => imports.fptsString("Ord", Some("stringOrd"))
-      case TsModel.Boolean(_) => imports.fptsBoolean("Ord", Some("boolOrd"))
-      case TsModel.Number(_) => imports.fptsNumber("Ord", Some("numberOrd"))
-      case TsModel.Eval(_, tpe) => ordInstance(tpe)
-      case TsModel.Array(_, tpe, _) => imports.fptsReadonlyArray("getOrd(" |+| ordInstance(tpe) |+| ")")
-      case TsModel.Option(_, tpe) => imports.fptsOption("getOrd(" |+| ordInstance(tpe) |+| ")")
+  private def ordFor(tpe: TsModel, seen: Set[String]): Either[TypeName, Eval[Generated]] =
+    customOrd(tpe.typeName).fold(tpe match {
+      case TsModel.Literal(tpe, _) => ordFor(tpe, seen)
+      case TsModel.String(_) => Right(Eval.later(imports.fptsString("Ord", Some("stringOrd"))))
+      case TsModel.Boolean(_) => Right(Eval.later(imports.fptsBoolean("Ord", Some("boolOrd"))))
+      case TsModel.Number(_) => Right(Eval.later(imports.fptsNumber("Ord", Some("numberOrd"))))
+      case TsModel.Eval(_, tpe) => ordFor(tpe, seen)
+      case TsModel.Array(_, tpe, _) => ordFor(tpe, seen).map(_.map(o => imports.fptsReadonlyArray("getOrd(" |+| o |+| ")")))
+      case TsModel.Option(_, tpe) => ordFor(tpe, seen).map(_.map(o => imports.fptsOption("getOrd(" |+| o |+| ")")))
       case u @ TsModel.Union(typeName, _, _) =>
-        if (unionHasOrd(u)) imports.custom(typeName, unionOrdName(typeName.base)) else err
+        Either.cond(unionHasOrd(u), Eval.later(imports.custom(typeName, ordName(typeName.base))), typeName)
       case u @ TsModel.UnionRef(typeName, _, _) =>
-        if (unionHasOrd(u)) imports.custom(typeName, unionOrdName(typeName.base)) else err
-      case TsModel.Interface(typeName, _, typeArgs, fields) => interfaceOrd(typeName, typeArgs, fields)
-      case r @ TsModel.InterfaceRef(typeName, typeArgs) => r.ordFields.fold(err)(interfaceOrd(typeName, typeArgs, _))
+        Either.cond(unionHasOrd(u), Eval.later(imports.custom(typeName, ordName(typeName.base))), typeName)
+      case TsModel.Interface(typeName, _, typeArgs, _) => interfaceOrdRef(typeName, typeArgs, seen)
+      case TsModel.InterfaceRef(typeName, typeArgs) => interfaceOrdRef(typeName, typeArgs, seen)
 
       case (
         TsModel.TypeParam(_)
@@ -297,9 +298,15 @@ class TsGenerator(
         | TsModel.UnionTypeRef(_, _, _)
         | TsModel.TypeAlias(_, _)
         | TsModel.Unknown(_, _)
-      ) => err
-    })
-  }
+      ) => Left(tpe.typeName)
+    })(o => Right(Eval.now(o)))
+
+  /** Produces code that refers to an `fp-ts` `Ord` instance for a given type */
+  private def ordInstance(tpe: TsModel): Generated =
+    ordFor(tpe, Set.empty).fold(
+      typeName => sys.error(s"`Ord` instance requested for ${typeName.full} but not found"),
+      _.value,
+    )
 
   /** Produces code that refers to a given codec type, represented by its `typeName` and `typeArgs` */
   private def generateCodecTypeRef(typeName: TypeName, typeArgs: List[TsModel], isUnion: Boolean): Generated =
@@ -501,6 +508,24 @@ class TsGenerator(
       case InterfaceShape.Fields(fields) => generateFieldsValueType(fields)
     }
 
+  private def generateInterfaceOrd(iface: TsModel.Interface): Generated =
+    interfaceFieldOrds(iface.typeName, iface.typeArgs, Set.empty).fold(
+      _ => Generated.empty,
+      ords => {
+        val valueType = mkValueName(iface.typeName, false)
+        "export const " |+| ordName(iface.typeName.base) |+| ": " |+| imports.fptsOrd("Ord<" |+| valueType |+| "> = ") |+|
+        imports.fptsPipe(
+          imports.fptsOrd("tuple(" |+| ords.intercalateMap(imports.lift(", "))(_.value) |+| ")") |+| ", " |+|
+          imports.fptsOrd(
+            "contramap((x: " |+| valueType |+| ") => [" |+|
+            iface.fields.intercalateMap(imports.lift(", "))(f => imports.lift("x." ++ f.name)) |+|
+            "] as const)"
+          )
+        ) |+|
+        ";\n"
+      },
+    )
+
   /** Produces value code for a scala `case class` definition */
   private def generateInterfaceCodecInstance(state: State, iface: TsModel.Interface): List[(Option[TypeName], Generated)] = {
     debugLog("interface", iface.typeName.base, None)
@@ -508,7 +533,7 @@ class TsGenerator(
     List((Some(iface.typeName), state.wrapCodec(interfaceShape(iface) match {
       case InterfaceShape.UnknownRecord => imports.iotsUnknownRecord
       case InterfaceShape.Fields(fields) => generateFieldsCodecInstance(state, fields)
-    })))
+    }) |+| generateInterfaceOrd(iface)))
   }
 
   private def withUnionPossibilityRefs[A](union: TsModel.Union | TsModel.UnionTypeRef)(
@@ -520,7 +545,7 @@ class TsGenerator(
       case u: TsModel.UnionTypeRef => (u.typeName, u.possibilities)
     }
     possibilities.map {
-      case TsModel.Interface(typeName, _, typeArgs, fields) => TsModel.InterfaceRef(typeName, typeArgs)(Some(fields))
+      case TsModel.Interface(typeName, _, typeArgs, _) => TsModel.InterfaceRef(typeName, typeArgs)
       case TsModel.Object(typeName, _, _) => TsModel.ObjectRef(typeName)
       case m => m
     } match {
@@ -581,7 +606,7 @@ class TsGenerator(
     val allMemberCodecsArr = "[" |+| allMemberCodecs.intercalate(imports.lift(", ")) |+| "]"
     val allNamesConstName = "all" |+| valueType |+| "Names"
     lazy val ordInst =
-      "export const " |+| unionOrdName(valueType) |+| ": " |+|
+      "export const " |+| ordName(valueType) |+| ": " |+|
       imports.fptsOrd("Ord<" |+| valueType |+| "U> = ") |+|
       imports.fptsPipe(imports.fptsString("Ord", Some("stringOrd")) |+| ", " |+| imports.fptsOrd("contramap(x => x._tag)")) |+|
       ";\n"
@@ -945,5 +970,175 @@ class TsGenerator(
           ";\n"
         )
       )), model)
+  }
+}
+
+object TsGenerator {
+  /**
+   * The `case class`es that need an `Ord` instance, because they are (or are nested in) a `Set` element or a non-`String` `Map` key
+   *
+   * A `case class` in the plan gets an `Ord` generated next to its codec when every one of its fields has an `Ord`.
+   */
+  final class OrdPlan private (
+    private[scalats] val interfaces: Map[String, TsModel.Interface],
+    private[scalats] val needed: Set[String],
+  )
+
+  object OrdPlan {
+    /** A plan in which no `case class` gets an `Ord` instance */
+    val empty: OrdPlan = new OrdPlan(Map.empty, Set.empty)
+
+    private def children(model: TsModel): List[TsModel] =
+      model match {
+        case (
+          _: TsModel.TypeParam
+          | _: TsModel.Json
+          | _: TsModel.Number
+          | _: TsModel.BigNumber
+          | _: TsModel.Boolean
+          | _: TsModel.String
+          | _: TsModel.LocalDate
+          | _: TsModel.DateTime
+          | _: TsModel.UUID
+          | _: TsModel.ObjectRef
+        ) => Nil
+        case TsModel.Literal(tpe, _) => List(tpe)
+        case TsModel.Eval(_, tpe) => List(tpe)
+        case TsModel.Array(_, tpe, _) => List(tpe)
+        case TsModel.Set(_, tpe) => List(tpe)
+        case TsModel.NonEmptyArray(_, tpe, _) => List(tpe)
+        case TsModel.Option(_, tpe) => List(tpe)
+        case TsModel.Either(_, left, right, _) => List(left, right)
+        case TsModel.Ior(_, left, right, _) => List(left, right)
+        case TsModel.Map(_, key, value) => List(key, value)
+        case TsModel.Tuple(_, tpes) => tpes
+        case TsModel.Interface(_, _, typeArgs, fields) => typeArgs ++ fields.map(_.tpe)
+        case TsModel.InterfaceRef(_, typeArgs) => typeArgs
+        case TsModel.Object(_, _, fields) => fields.map(_.tpe)
+        case TsModel.Union(_, typeArgs, possibilities) => typeArgs ++ possibilities
+        case TsModel.UnionRef(_, typeArgs, _) => typeArgs
+        case TsModel.UnionTypeRef(_, typeArgs, possibilities) => typeArgs ++ possibilities
+        case TsModel.TypeAlias(_, dealiased) => List(dealiased)
+        case TsModel.Unknown(_, typeArgs) => typeArgs
+      }
+
+    private def descendants(model: TsModel): List[TsModel] = model :: children(model).flatMap(descendants)
+
+    private def ordRoots(model: TsModel): List[String] =
+      model match {
+        case TsModel.Literal(tpe, _) => ordRoots(tpe)
+        case TsModel.Eval(_, tpe) => ordRoots(tpe)
+        case TsModel.Array(_, tpe, _) => ordRoots(tpe)
+        case TsModel.Option(_, tpe) => ordRoots(tpe)
+        case TsModel.Interface(typeName, _, _, _) => List(typeName.full)
+        case TsModel.InterfaceRef(typeName, _) => List(typeName.full)
+        case (
+          _: TsModel.TypeParam
+          | _: TsModel.Json
+          | _: TsModel.Number
+          | _: TsModel.BigNumber
+          | _: TsModel.Boolean
+          | _: TsModel.String
+          | _: TsModel.LocalDate
+          | _: TsModel.DateTime
+          | _: TsModel.UUID
+          | _: TsModel.Set
+          | _: TsModel.NonEmptyArray
+          | _: TsModel.Either
+          | _: TsModel.Ior
+          | _: TsModel.Map
+          | _: TsModel.Tuple
+          | _: TsModel.Object
+          | _: TsModel.ObjectRef
+          | _: TsModel.Union
+          | _: TsModel.UnionRef
+          | _: TsModel.UnionTypeRef
+          | _: TsModel.TypeAlias
+          | _: TsModel.Unknown
+        ) => Nil
+      }
+
+    private def ordRequests(model: TsModel): List[String] =
+      model match {
+        case TsModel.Set(_, tpe) => ordRoots(tpe)
+        case TsModel.Map(_, TsModel.String(_), _) => Nil
+        case TsModel.Map(_, key, _) => ordRoots(key)
+        case (
+          _: TsModel.TypeParam
+          | _: TsModel.Literal
+          | _: TsModel.Json
+          | _: TsModel.Number
+          | _: TsModel.BigNumber
+          | _: TsModel.Boolean
+          | _: TsModel.String
+          | _: TsModel.LocalDate
+          | _: TsModel.DateTime
+          | _: TsModel.UUID
+          | _: TsModel.Eval
+          | _: TsModel.Array
+          | _: TsModel.NonEmptyArray
+          | _: TsModel.Option
+          | _: TsModel.Either
+          | _: TsModel.Ior
+          | _: TsModel.Tuple
+          | _: TsModel.Interface
+          | _: TsModel.InterfaceRef
+          | _: TsModel.Object
+          | _: TsModel.ObjectRef
+          | _: TsModel.Union
+          | _: TsModel.UnionRef
+          | _: TsModel.UnionTypeRef
+          | _: TsModel.TypeAlias
+          | _: TsModel.Unknown
+        ) => Nil
+      }
+
+    /** Plans the `Ord` instances needed by the given models, which should be every model generated together */
+    def apply(models: List[TsModel]): OrdPlan = {
+      val all = models.flatMap(descendants)
+      val interfaces = all.flatMap {
+        case i: TsModel.Interface => List(i.typeName.full -> i)
+        case (
+          _: TsModel.TypeParam
+          | _: TsModel.Literal
+          | _: TsModel.Json
+          | _: TsModel.Number
+          | _: TsModel.BigNumber
+          | _: TsModel.Boolean
+          | _: TsModel.String
+          | _: TsModel.LocalDate
+          | _: TsModel.DateTime
+          | _: TsModel.UUID
+          | _: TsModel.Eval
+          | _: TsModel.Array
+          | _: TsModel.Set
+          | _: TsModel.NonEmptyArray
+          | _: TsModel.Option
+          | _: TsModel.Either
+          | _: TsModel.Ior
+          | _: TsModel.Map
+          | _: TsModel.Tuple
+          | _: TsModel.InterfaceRef
+          | _: TsModel.Object
+          | _: TsModel.ObjectRef
+          | _: TsModel.Union
+          | _: TsModel.UnionRef
+          | _: TsModel.UnionTypeRef
+          | _: TsModel.TypeAlias
+          | _: TsModel.Unknown
+        ) => Nil
+      }.toMap
+
+      @annotation.tailrec
+      def close(todo: List[String], acc: Set[String]): Set[String] =
+        todo match {
+          case Nil => acc
+          case name :: rest =>
+            if (acc.contains(name)) close(rest, acc)
+            else close(interfaces.get(name).fold(Nil)(_.fields.flatMap(f => ordRoots(f.tpe))) ++ rest, acc + name)
+        }
+
+      new OrdPlan(interfaces, close(all.flatMap(ordRequests), Set.empty))
+    }
   }
 }

@@ -65,14 +65,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
    * @param top Whether the type should be parsed as a top-level definition
    * @return The [[scalats.TsModel]] representation of `A`
    */
-  def parse[A: Type](top: Boolean): Expr[TsModel] = parse0[A](top, OrdCapture.Off)
-
-  private enum OrdCapture {
-    case Off
-    case On(seen: List[TypeRepr])
-  }
-
-  private def parse0[A: Type](top: Boolean, ord: OrdCapture): Expr[TsModel] = {
+  def parse[A: Type](top: Boolean): Expr[TsModel] = {
     val typeRepr = TypeRepr.of[A]
     val typeName = mkTypeName(typeRepr)
 
@@ -90,13 +83,13 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
       case '[java.time.LocalDate] | '[org.joda.time.LocalDate] => '{ TsModel.LocalDate($typeName) }
       case '[java.time.LocalDateTime] | '[java.time.ZonedDateTime] | '[java.time.Instant] | '[org.joda.time.DateTime] => '{ TsModel.DateTime($typeName) }
       case '[java.util.UUID] => '{ TsModel.UUID($typeName) }
-      case '[cats.Eval[a]] => '{ TsModel.Eval($typeName, ${ parse0[a](false, ord) }) }
-      case '[cats.data.Chain[a]] => '{ TsModel.Array($typeName, ${ parse0[a](false, ord) }, (_: Any).asInstanceOf[cats.data.Chain[Any]].toList) }
-      case '[List[a]] => '{ TsModel.Array($typeName, ${ parse0[a](false, ord) }, (_: Any).asInstanceOf[List[Any]]) }
-      case '[Vector[a]] => '{ TsModel.Array($typeName, ${ parse0[a](false, ord) }, (_: Any).asInstanceOf[Vector[Any]].toList) }
-      case '[Seq[a]] => '{ TsModel.Array($typeName, ${ parse0[a](false, ord) }, (_: Any).asInstanceOf[Seq[Any]].toList) }
-      case '[Set[a]] => '{ TsModel.Set($typeName, ${ parse0[a](false, OrdCapture.On(Nil)) }) }
-      case '[collection.immutable.SortedSet[a]] => '{ TsModel.Set($typeName, ${ parse0[a](false, OrdCapture.On(Nil)) }) }
+      case '[cats.Eval[a]] => '{ TsModel.Eval($typeName, ${ parse[a](false) }) }
+      case '[cats.data.Chain[a]] => '{ TsModel.Array($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[cats.data.Chain[Any]].toList) }
+      case '[List[a]] => '{ TsModel.Array($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[List[Any]]) }
+      case '[Vector[a]] => '{ TsModel.Array($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[Vector[Any]].toList) }
+      case '[Seq[a]] => '{ TsModel.Array($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[Seq[Any]].toList) }
+      case '[Set[a]] => '{ TsModel.Set($typeName, ${ parse[a](false) }) }
+      case '[collection.immutable.SortedSet[a]] => '{ TsModel.Set($typeName, ${ parse[a](false) }) }
       case _ if typeRepr <:< TypeRepr.of[cats.data.NonEmptyChain[Any]] =>
         typeRepr.typeArgs.head.asType match {
           case '[a] => '{ TsModel.NonEmptyArray($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[cats.data.NonEmptyChain[Any]].toNonEmptyList) }
@@ -104,7 +97,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
       case '[cats.data.NonEmptyList[a]] => '{ TsModel.NonEmptyArray($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[cats.data.NonEmptyList[Any]]) }
       case '[cats.data.NonEmptyVector[a]] => '{ TsModel.NonEmptyArray($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[cats.data.NonEmptyVector[Any]].pipe(v => cats.data.NonEmptyList(v.head, v.tail.toList))) }
       case '[scalaz.NonEmptyList[a]] => '{ TsModel.NonEmptyArray($typeName, ${ parse[a](false) }, (_: Any).asInstanceOf[scalaz.NonEmptyList[Any]].pipe(l => cats.data.NonEmptyList(l.head, l.tail.toList))) }
-      case '[Option[a]] => '{ TsModel.Option($typeName, ${ parse0[a](false, ord) }) }
+      case '[Option[a]] => '{ TsModel.Option($typeName, ${ parse[a](false) }) }
       case '[Either[l, r]] => '{ TsModel.Either($typeName, ${ parse[l](false) }, ${ parse[r](false) }, (_: Any).asInstanceOf[Either[Any, Any]]) }
       case '[scalaz.\/[l, r]] => '{ TsModel.Either($typeName, ${ parse[l](false) }, ${ parse[r](false) }, (_: Any).asInstanceOf[scalaz.\/[Any, Any]].toEither) }
       case '[cats.data.Ior[l, r]] => '{ TsModel.Ior($typeName, ${ parse[l](false) }, ${ parse[r](false) }, (_: Any).asInstanceOf[cats.data.Ior[Any, Any]]) }
@@ -112,7 +105,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
         TsModel.Ior($typeName, ${ parse[l](false) }, ${ parse[r](false) }, (_: Any).asInstanceOf[scalaz.\&/[Any, Any]]
           .fold(cats.data.Ior.Left(_), cats.data.Ior.Right(_), cats.data.Ior.Both(_, _)))
       }
-      case '[Map[k, v]] => '{ TsModel.Map($typeName, ${ parse0[k](false, OrdCapture.On(Nil)) }, ${ parse[v](false) }) }
+      case '[Map[k, v]] => '{ TsModel.Map($typeName, ${ parse[k](false) }, ${ parse[v](false) }) }
       case '[EmptyTuple] => '{ TsModel.Tuple($typeName, Nil) }
       case '[*:[h, t]] =>
         def unroll[T <: Tuple: Type]: List[Expr[TsModel]] =
@@ -128,7 +121,7 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
           case Some(m) =>
             m.mirrorType match {
               case MirrorType.Sum => if (top) parseEnum[t](m) else parseEnumRef[t](m)
-              case MirrorType.Product => if (top) parseCaseClass[t](m, None) else parseCaseClassRef[t](m, ord)
+              case MirrorType.Product => if (top) parseCaseClass[t](m, None) else parseCaseClassRef[t]
               case MirrorType.Singleton => if (top) parseObject[t](None) else parseObjectRef[t]
             }
 
@@ -229,35 +222,27 @@ final class TsParser()(using override val ctx: Quotes) extends ReflectionUtils {
     }
   }
 
-  private def caseClassFields(mirror: Mirror, ord: OrdCapture): Expr[List[TsModel.InterfaceField]] =
-    Expr.ofList(mirror.types.toList.zip(mirror.labels).map { case (tpe, name) =>
-      tpe.asType match {
-        case '[t] => '{ TsModel.InterfaceField(${ Expr(name) }, ${ parse0[t](false, ord) }) }
-      }: @annotation.nowarn("msg=match may not be exhaustive")
-    })
-
   /** Parse a `case class` definiton into its [[scalats.TsModel]] representation */
   private def parseCaseClass[A: Type](mirror: Mirror, parent: Option[TypeRepr]): Expr[TsModel.Interface] = {
     val typeRepr = TypeRepr.of[A]
+    val fields = mirror.types.toList.zip(mirror.labels).map { case (tpe, name) =>
+      tpe.asType match {
+        case '[t] => '{ TsModel.InterfaceField(${ Expr(name) }, ${ parse[t](false) }) }
+      }: @annotation.nowarn("msg=match may not be exhaustive")
+    }
     '{
       TsModel.Interface(
         ${ mkTypeName(typeRepr) },
         ${ Expr(parent.map(_.show)) }.map(T(_)),
         ${ mkTypeArgs(typeRepr) },
-        ${ caseClassFields(mirror, OrdCapture.Off) },
+        ${ Expr.ofList(fields) },
       )
     }
   }
 
-  private def parseCaseClassRef[A: Type](mirror: Mirror, ord: OrdCapture): Expr[TsModel.InterfaceRef] = {
+  private def parseCaseClassRef[A: Type]: Expr[TsModel.InterfaceRef] = {
     val typeRepr = TypeRepr.of[A]
-    val ordFields = ord match {
-      case OrdCapture.Off => '{ None }
-      case OrdCapture.On(seen) =>
-        if (seen.exists(_ =:= typeRepr)) '{ None }
-        else '{ Some(${ caseClassFields(mirror, OrdCapture.On(typeRepr :: seen)) }) }
-    }
-    '{ TsModel.InterfaceRef(${ mkTypeName(typeRepr) }, ${ mkTypeArgs(typeRepr) })($ordFields) }
+    '{ TsModel.InterfaceRef(${ mkTypeName(typeRepr) }, ${ mkTypeArgs(typeRepr) }) }
   }
 
   private def valMembers(typeRepr: TypeRepr): List[Symbol] = {

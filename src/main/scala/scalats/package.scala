@@ -36,7 +36,7 @@ def generateAll(all: Map[File, List[TsModel]], debug: Boolean = false, debugFilt
   customOrd: TsCustomOrd,
   imports: TsImports.Available,
 ): List[(File, List[(Option[TypeName], Generated)])] = {
-  val generator = new TsGenerator(customType, customOrd, imports, debug, debugFilter)
+  val generator = new TsGenerator(customType, customOrd, imports, TsGenerator.OrdPlan(all.values.toList.flatten), debug, debugFilter)
   all.toList.foldMap { case (file, models) =>
     Map(file.toString -> models.flatMap(generator.generateTopLevel))
   }.toList.map { case (file, types) => (new File(file), types.distinctBy(_._1.map(_.full))) }
@@ -112,7 +112,7 @@ def referenceCode(model: TsModel)(
   customOrd: TsCustomOrd,
   imports: TsImports.Available,
 ): ReferenceCode[Id] = {
-  val generator = new TsGenerator(customType, customOrd, imports)
+  val generator = new TsGenerator(customType, customOrd, imports, TsGenerator.OrdPlan(List(model)))
   ReferenceCode[Id](
     codecType = generator.generateCodecType(model),
     codecInstance = generator.generateCodecInstance(generator.State(false, generator.WrapCodec.id), model).foldMap(_._2),

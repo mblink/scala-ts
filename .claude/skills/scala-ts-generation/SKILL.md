@@ -43,12 +43,13 @@ One owner per fact: a shape is written once, in Scala, and generated into TypeSc
 | type alias (non-generic) | `TypeAlias` | as the dealiased type, under the alias's name | |
 | anything else | `Unknown` | an import of `<name>C` the consumer must provide | |
 
-`Set` and non-`String`-keyed `Map` need an `Ord` for the element/key: built in for `string`/`number`/`boolean`, `Option`/array of those, all-object unions (`xOrd`), and case classes whose fields all have one (an inline `pipe(Ord.tuple(...), Ord.contramap(...))` over the fields in declaration order; a self-recursive case class has none); otherwise supply one through `TsCustomOrd`, or generation fails with "`Ord` instance requested for … but not found".
+`Set` and non-`String`-keyed `Map` need an `Ord` for the element/key: built in for `string`/`number`/`boolean`, `Option`/array of those, all-object unions (`xOrd`), and non-generic case classes whose fields all have one (a named `xOrd` emitted next to the codec, lexicographic over the fields in declaration order, only for case classes that are, or are nested in, a `Set` element or `Map` key among the models passed to `generateAll`; a recursive case class has none); otherwise supply one through `TsCustomOrd`, or generation fails with "`Ord` instance requested for … but not found".
 
 ## Naming
 
 - Codec const: `decap(base) + "C"` (`Foo` → `fooC`; all-caps names keep their case). Codec type: `cap` of that (`FooC`). Value type: `Foo`.
 - Unions: codec and codec type `FooCU`, value type `FooU`; plus `allFooC`, `allFooNames`, `FooName`, `FooMap<A>` (non-generic unions), `allFoo` (all-object unions) and `fooOrd` (all-object, non-generic unions).
+- Case classes that need an `Ord`: `fooOrd`.
 - Cross-file imports are aliased `importedN_Name`; same-file references are rewritten back to the plain name during `resolve`.
 
 ## Consumer customization
